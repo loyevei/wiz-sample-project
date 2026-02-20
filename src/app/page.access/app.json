@@ -1,0 +1,11 @@
+{
+    "mode": "page",
+    "id": "page.access",
+    "title": "/access",
+    "namespace": "access",
+    "viewuri": "/access",
+    "category": "auth",
+    "controller": "base",
+    "layout": "layout.empty",
+    "template": "wiz-page-access()"
+}

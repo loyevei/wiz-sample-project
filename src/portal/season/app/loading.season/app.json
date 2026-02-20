@@ -1,0 +1,11 @@
+{
+    "type": "app",
+    "mode": "portal",
+    "title": "loading.season",
+    "id": "loading.season",
+    "namespace": "loading.season",
+    "viewuri": "",
+    "category": "",
+    "controller": "",
+    "template": "wiz-portal-season-loading-season([className]=\"\")"
+}

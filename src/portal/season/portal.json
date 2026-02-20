@@ -1,0 +1,13 @@
+{
+    "package": "season",
+    "title": "",
+    "version": "2.0.0",
+    "use_app": true,
+    "use_widget": false,
+    "use_route": true,
+    "use_libs": true,
+    "use_styles": false,
+    "use_assets": false,
+    "use_controller": true,
+    "use_model": true
+}

@@ -1,0 +1,11 @@
+{
+    "type": "app",
+    "mode": "portal",
+    "title": "pagination",
+    "id": "pagination",
+    "namespace": "pagination",
+    "viewuri": "",
+    "category": "",
+    "controller": "",
+    "template": "wiz-portal-season-pagination([current]=\"\", [start]=\"\", [end]=\"\", [maxlength]=\"\", (pageMove)=\"\")"
+}

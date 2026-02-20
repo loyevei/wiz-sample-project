@@ -1,0 +1,95 @@
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 100;
+    src: local('SUIT Thin'), url('/assets/font/SUIT/SUIT-Thin.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 200;
+    src: local('SUIT ExtraLight'), url('/assets/font/SUIT/SUIT-ExtraLight.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 300;
+    src: local('SUIT Light'), url('/assets/font/SUIT/SUIT-Light.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 400;
+    src: local('SUIT Regular'), url('/assets/font/SUIT/SUIT-Regular.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 500;
+    src: local('SUIT Medium'), url('/assets/font/SUIT/SUIT-Medium.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 600;
+    src: local('SUIT SemiBold'), url('/assets/font/SUIT/SUIT-SemiBold.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 700;
+    src: local('SUIT Bold'), url('/assets/font/SUIT/SUIT-Bold.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 800;
+    src: local('SUIT ExtraBold'), url('/assets/font/SUIT/SUIT-ExtraBold.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+@font-face {
+    font-family: 'SUIT';
+    font-weight: 900;
+    src: local('SUIT Heavy'), url('/assets/font/SUIT/SUIT-Heavy.woff2') format('woff2');
+    crossorigin: anonymous;
+}
+
+html,
+body,
+app-root {
+    font-family: SUIT;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: block;
+}
+
+app-root {
+    overflow: auto;
+}
+
+a,
+button {
+    cursor: pointer;
+}
+
+.text-orange-season {
+    color: #FF5934;
+}
+
+.ckeditor-h-480 {
+    .ck-content {
+        height: 480px;
+        min-height: 0 !important;
+    }
+}
+
+@import "portal/dizest/workflow";
+@import "portal/dizest/markdown";

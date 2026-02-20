@@ -1,0 +1,10 @@
+{
+    "mode": "component",
+    "id": "component.nav.sidebar",
+    "title": "nav.sidebar",
+    "namespace": "nav.sidebar",
+    "viewuri": "",
+    "category": "",
+    "controller": "base",
+    "template": "wiz-component-nav-sidebar()"
+}

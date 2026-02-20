@@ -1,0 +1,11 @@
+{
+    "type": "app",
+    "mode": "portal",
+    "title": "loading.default",
+    "id": "loading.default",
+    "namespace": "loading.default",
+    "viewuri": "",
+    "category": "",
+    "controller": "",
+    "template": "wiz-portal-season-loading-default()"
+}

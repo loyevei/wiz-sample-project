@@ -1,0 +1,11 @@
+{
+    "type": "app",
+    "mode": "portal",
+    "title": "tree",
+    "id": "tree",
+    "namespace": "tree",
+    "viewuri": "",
+    "category": "",
+    "controller": "",
+    "template": "wiz-portal-season-tree([config]=\"\")"
+}

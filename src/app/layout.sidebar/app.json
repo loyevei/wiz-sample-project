@@ -1,0 +1,10 @@
+{
+    "mode": "layout",
+    "id": "layout.sidebar",
+    "title": "sidebar",
+    "namespace": "sidebar",
+    "viewuri": "",
+    "category": "",
+    "controller": "base",
+    "template": "wiz-layout-sidebar()"
+}

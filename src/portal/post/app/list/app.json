@@ -1,0 +1,11 @@
+{
+    "id": "list",
+    "mode": "portal",
+    "title": "list",
+    "namespace": "list",
+    "category": "editor",
+    "viewuri": "",
+    "controller": "",
+    "template": "wiz-portal-post-list()",
+    "type": "app"
+}

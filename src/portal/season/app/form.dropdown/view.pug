@@ -1,0 +1,6 @@
+div(class="tw-dropdown")
+    div((click)="toggle(); $event.stopPropagation();")
+        ng-container([ngTemplateOutlet]="button")
+
+    div(class="tw-dropdown-menu absolute right-0 z-40 mt-4 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none", tabindex="-1", [class.show]="isOpen", [style]="menuStyle")
+        ng-container([ngTemplateOutlet]="menu")

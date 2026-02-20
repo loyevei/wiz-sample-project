@@ -1,0 +1,63 @@
+.tree-node {
+    width: 100%;
+    display: flex;
+    cursor: pointer;
+
+    i {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .tree-node-title {
+        flex: auto;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    .form-control {
+        height: 20px !important;
+        font-size: 12px;
+        border-radius: 4px;
+        text-align: left;
+    }
+
+    i.icon-action-always {
+        margin-left: 6px;
+    }
+
+    i.icon-action {
+        display: none;
+        margin-left: 6px;
+    }
+
+    &.active {
+    }
+
+    &:hover {
+        i.icon-action {
+            display: inline-block;
+
+            &:hover {
+            }
+        }
+    }
+}
+
+.tree-root {
+    padding-left: 16px;
+}
+
+.tree-icon {
+    width: 20px;
+    text-align: center;
+}
+
+.tree {
+    &.tree-dropzone {
+    }
+
+    .tree-root {
+        padding-left: 16px;
+    }
+}

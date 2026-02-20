@@ -1,0 +1,11 @@
+{
+    "type": "app",
+    "mode": "portal",
+    "title": "form.dropdown",
+    "id": "form.dropdown",
+    "namespace": "form.dropdown",
+    "viewuri": "",
+    "category": "",
+    "controller": "",
+    "template": "wiz-portal-season-form-dropdown([menuStyle]=\"\")"
+}

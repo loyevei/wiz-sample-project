@@ -1,0 +1,27 @@
+{
+    "assets": [
+        {
+            "glob": "**/*",
+            "input": "node_modules/monaco-editor/min/vs",
+            "output": "/lib/vs"
+        },
+        {
+            "glob": "**/*",
+            "input": "node_modules/monaco-editor/min-maps/vs",
+            "output": "/min-maps/vs"
+        }
+    ],
+    "styles": [
+        "tailwind.min.css",
+        "node_modules/@fortawesome/fontawesome-free/css/all.min.css",
+        "node_modules/@xterm/xterm/css/xterm.css",
+        "src/styles.scss"
+    ],
+    "scripts": [
+        "src/libs/portal/season/base/array.js",
+        "src/libs/portal/season/base/date.js",
+        "src/libs/portal/season/base/function.js",
+        "src/libs/portal/season/base/number.js",
+        "src/libs/portal/season/base/string.js"
+    ]
+}
