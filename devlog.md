@@ -20,3 +20,4 @@
 | 2026-02-27 | 003 | Embedding 프론트엔드 — 청킹 전략 선택 UI + 미리보기 패널 + 청크 타입 통계 (FN-0009/0010 검증, FN-0025~0032 보완) | [상세](devlog/2026-02-27/003-embedding-frontend-chunking-preview.md) |
 | 2026-02-27 | 004 | Embedding chunk_type_stats 배치 페이지네이션 적용 (BATCH_SIZE=16000, 대용량 컬렉션 대응) | [상세](devlog/2026-02-27/004-embedding-chunk-type-stats-batch.md) |
 | 2026-02-27 | 005 | Embedding 청킹 옵션 상시 표출 + 버튼 UI / AI Agent 의도 분류 뱃지 + 자동 페이지 이동 | [상세](devlog/2026-02-27/005-embedding-button-ui-agent-intent.md) |
+| 2026-02-27 | 006 | Embedding 페이지 글자 안 보이는 오류 수정 (view.ts 누락 메서드 복원) + 청킹 전략 카드형 버튼 UI 개선 | [상세](devlog/2026-02-27/006-embedding-fix-text-invisible-card-buttons.md) |

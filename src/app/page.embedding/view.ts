@@ -27,24 +27,23 @@ export class Component implements OnInit {
     public deletingCollection: string = '';
 
     // 청킹 옵션
-    public showAdvanced: boolean = false;
     public chunkSize: number = 500;
     public chunkOverlap: number = 100;
     public respectSentences: boolean = true;
+    public similarityThreshold: number = 0.5;
 
     // 청킹 전략
     public chunkStrategies: any[] = [];
     public selectedStrategy: string = 'semantic_section';
-    public similarityThreshold: number = 0.5;
+
+    // 미리보기
+    public previewData: any = null;
+    public previewLoading: boolean = false;
 
     // 청크 타입 통계
     public chunkTypeStats: any = {};
     public chunkTypeEntries: any[] = [];
     public chunkTypeStatsLoading: boolean = false;
-
-    // 미리보기
-    public previewData: any = null;
-    public previewLoading: boolean = false;
 
     // 통계
     public stats: any = {};
@@ -55,8 +54,8 @@ export class Component implements OnInit {
     public async ngOnInit() {
         await this.service.init();
         await this.loadModels();
-        await this.loadCollections();
         await this.loadChunkStrategies();
+        await this.loadCollections();
         await this.loadStats();
         await this.loadChunkTypeStats();
         await this.service.render();
@@ -118,6 +117,7 @@ export class Component implements OnInit {
                 if (!this.selectedCollection && this.collections.length > 0) {
                     this.selectedCollection = this.collections[0].name;
                 }
+                // 선택된 컬렉션이 삭제된 경우 초기화
                 if (this.selectedCollection && !this.collections.find(c => c.name === this.selectedCollection)) {
                     this.selectedCollection = this.collections.length > 0 ? this.collections[0].name : '';
                 }
@@ -134,6 +134,7 @@ export class Component implements OnInit {
         const name = this.newCollectionName.trim();
         if (!name) return;
 
+        // 프론트엔드 사전 유효성 검사
         if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
             this.addLog('⚠️ 컬렉션 이름은 영문 또는 밑줄로 시작하고, 영문/숫자/밑줄만 사용할 수 있습니다.', 'error');
             return;
@@ -172,7 +173,7 @@ export class Component implements OnInit {
     }
 
     public async deleteCollection(name: string) {
-        if (this.deletingCollection) return;
+        if (this.deletingCollection) return; // 이미 삭제 중이면 무시
 
         const collectionInfo = this.collections.find(c => c.name === name);
         const docCount = collectionInfo?.total_docs || 0;
@@ -288,141 +289,6 @@ export class Component implements OnInit {
     }
 
     // =========================================================================
-    // 청킹 전략
-    // =========================================================================
-    public async loadChunkStrategies() {
-        try {
-            const { code, data } = await wiz.call("chunk_strategies");
-            if (code === 200) {
-                this.chunkStrategies = data.strategies || [];
-            }
-        } catch (e) { }
-    }
-
-    public onStrategyChange() {
-        const strategy = this.chunkStrategies.find(s => s.name === this.selectedStrategy);
-        if (strategy) {
-            const params = strategy.params || [];
-            if (!params.includes('chunk_overlap')) this.chunkOverlap = 0;
-            if (!params.includes('respect_sentences')) this.respectSentences = true;
-            if (!params.includes('similarity_threshold')) this.similarityThreshold = 0.5;
-        }
-        this.previewData = null;
-    }
-
-    public getStrategyParams(): string[] {
-        const strategy = this.chunkStrategies.find(s => s.name === this.selectedStrategy);
-        return strategy?.params || ['chunk_size', 'chunk_overlap', 'respect_sentences'];
-    }
-
-    public getSelectedStrategyInfo(): any {
-        return this.chunkStrategies.find(s => s.name === this.selectedStrategy) || {};
-    }
-
-    // =========================================================================
-    // 청크 타입 통계
-    // =========================================================================
-    public async loadChunkTypeStats() {
-        if (!this.selectedCollection) return;
-        this.chunkTypeStatsLoading = true;
-        await this.service.render();
-        try {
-            const { code, data } = await wiz.call("chunk_type_stats", {
-                collection: this.selectedCollection
-            });
-            if (code === 200) {
-                this.chunkTypeStats = { stats: data.stats || {}, total: data.total || 0 };
-                this.chunkTypeEntries = this.buildChunkTypeEntries(data.stats || {}, data.total || 0);
-            }
-        } catch (e) { }
-        this.chunkTypeStatsLoading = false;
-        await this.service.render();
-    }
-
-    private buildChunkTypeEntries(stats: any, total: number): any[] {
-        const colors: any = {
-            text: 'bg-blue-500', figure: 'bg-emerald-500', table: 'bg-amber-500',
-            formula: 'bg-purple-500', header: 'bg-rose-500', mixed: 'bg-cyan-500'
-        };
-        const labels: any = {
-            text: '텍스트', figure: '그림/OCR', table: '표',
-            formula: '수식', header: '헤더', mixed: '혼합'
-        };
-        return Object.entries(stats).map(([key, count]: [string, any]) => ({
-            type: key,
-            count: count,
-            label: labels[key] || key,
-            percent: total > 0 ? Math.round((count / total) * 100) : 0,
-            barColor: colors[key] || 'bg-gray-400'
-        })).sort((a, b) => b.count - a.count);
-    }
-
-    // =========================================================================
-    // 미리보기
-    // =========================================================================
-    public async previewExtract() {
-        if (this.selectedFiles.length === 0) {
-            this.addLog('⚠️ 미리보기할 PDF 파일을 선택하세요.', 'error');
-            return;
-        }
-        this.previewLoading = true;
-        this.previewData = null;
-        await this.service.render();
-
-        try {
-            const file = this.selectedFiles[0];
-            const fd = new FormData();
-            fd.append('file', file);
-            fd.append('strategy', this.selectedStrategy);
-            fd.append('chunk_size', String(this.chunkSize));
-            fd.append('chunk_overlap', String(this.chunkOverlap));
-            fd.append('respect_sentences', String(this.respectSentences));
-            fd.append('similarity_threshold', String(this.similarityThreshold));
-
-            const { code, data } = await wiz.call("preview_extract", fd, {
-                contentType: false,
-                processData: false
-            });
-
-            if (code === 200) {
-                this.previewData = data;
-                this.addLog(`🔍 미리보기: ${data.total_pages}페이지, ${data.total_chunks}청크, 전략: ${data.strategy_used}`, 'success');
-            } else {
-                this.addLog(`❌ 미리보기 실패: ${data?.message || '알 수 없는 오류'}`, 'error');
-            }
-        } catch (e: any) {
-            this.addLog(`❌ 미리보기 오류: ${e.message || '네트워크 오류'}`, 'error');
-        }
-
-        this.previewLoading = false;
-        await this.service.render();
-    }
-
-    public getPreviewChunkTypeDist(): any[] {
-        if (!this.previewData?.chunk_type_distribution) return [];
-        return Object.entries(this.previewData.chunk_type_distribution).map(([key, count]) => ({
-            type: key, count: count
-        }));
-    }
-
-    public getChunkTypeColor(type: string): string {
-        const colors: any = {
-            text: 'bg-blue-100 text-blue-700', figure: 'bg-emerald-100 text-emerald-700',
-            table: 'bg-amber-100 text-amber-700', formula: 'bg-purple-100 text-purple-700',
-            header: 'bg-rose-100 text-rose-700', mixed: 'bg-cyan-100 text-cyan-700'
-        };
-        return colors[type] || 'bg-gray-100 text-gray-700';
-    }
-
-    public getChunkTypeLabel(type: string): string {
-        const labels: any = {
-            text: '텍스트', figure: '그림/OCR', table: '표',
-            formula: '수식', header: '헤더', mixed: '혼합'
-        };
-        return labels[type] || type;
-    }
-
-    // =========================================================================
     // 업로드
     // =========================================================================
     public async upload() {
@@ -490,7 +356,6 @@ export class Component implements OnInit {
         this.selectedFiles = [];
         this.processing = false;
         this.statusMessage = '';
-        this.previewData = null;
 
         let summary = `🏁 처리 완료: 성공 ${successCount}개`;
         if (failCount > 0) summary += `, 실패 ${failCount}개`;
@@ -524,11 +389,163 @@ export class Component implements OnInit {
 
     public async onCollectionChange() {
         await this.loadStats();
+        await this.loadChunkTypeStats();
+        // 컬렉션 변경 시 해당 컬렉션의 모델로 자동 전환
         const info = this.getSelectedCollectionInfo();
         if (info && info.model) {
             this.selectedModel = info.model;
         }
-        await this.loadChunkTypeStats();
         await this.service.render();
+    }
+
+    // =========================================================================
+    // 청킹 전략 관련
+    // =========================================================================
+    public async loadChunkStrategies() {
+        try {
+            const { code, data } = await wiz.call("chunk_strategies");
+            if (code === 200) {
+                this.chunkStrategies = data.strategies || [];
+                if (!this.selectedStrategy) {
+                    const def = this.chunkStrategies.find((s: any) => s.default);
+                    this.selectedStrategy = def ? def.name : 'semantic_section';
+                }
+            }
+        } catch (e) { }
+    }
+
+    public onStrategyChange() {
+        this.service.render();
+    }
+
+    public getStrategyParams(): string[] {
+        const s = this.chunkStrategies.find((x: any) => x.name === this.selectedStrategy);
+        return s ? s.params : ['chunk_size', 'chunk_overlap', 'respect_sentences'];
+    }
+
+    public getSelectedStrategyInfo(): any {
+        return this.chunkStrategies.find((s: any) => s.name === this.selectedStrategy) || {};
+    }
+
+    public getStrategyIcon(name: string): string {
+        const icons: any = {
+            'semantic_section': '🧠',
+            'fixed': '📐',
+            'sentence': '📝',
+            'paragraph': '📄',
+            'recursive': '🔄',
+            'semantic_embedding': '🎯'
+        };
+        return icons[name] || '📋';
+    }
+
+    // =========================================================================
+    // 미리보기
+    // =========================================================================
+    public async previewExtract() {
+        if (this.selectedFiles.length === 0) return;
+        this.previewLoading = true;
+        this.previewData = null;
+        await this.service.render();
+
+        try {
+            const fd = new FormData();
+            fd.append('file', this.selectedFiles[0]);
+            fd.append('strategy', this.selectedStrategy);
+            fd.append('chunk_size', String(this.chunkSize));
+            fd.append('chunk_overlap', String(this.chunkOverlap));
+            fd.append('respect_sentences', String(this.respectSentences));
+            fd.append('similarity_threshold', String(this.similarityThreshold));
+
+            const { code, data } = await wiz.call("preview_extract", fd, {
+                contentType: false,
+                processData: false
+            });
+
+            if (code === 200) {
+                this.previewData = data;
+                this.addLog(`🔍 미리보기: ${data.total_chunks}개 청크, ${data.total_pages}페이지 (${data.strategy_used})`, 'success');
+            } else {
+                this.addLog(`❌ 미리보기 실패: ${data?.message || '오류'}`, 'error');
+            }
+        } catch (e: any) {
+            this.addLog(`❌ 미리보기 오류: ${e.message || '네트워크 오류'}`, 'error');
+        }
+
+        this.previewLoading = false;
+        await this.service.render();
+    }
+
+    public getPreviewChunkTypeDist(): any[] {
+        if (!this.previewData?.chunk_type_distribution) return [];
+        const dist = this.previewData.chunk_type_distribution;
+        return Object.entries(dist).map(([type, count]) => ({ type, count }));
+    }
+
+    // =========================================================================
+    // 청크 타입 통계
+    // =========================================================================
+    public async loadChunkTypeStats() {
+        if (!this.selectedCollection) return;
+        this.chunkTypeStatsLoading = true;
+        await this.service.render();
+
+        try {
+            const { code, data } = await wiz.call("chunk_type_stats", {
+                collection: this.selectedCollection
+            });
+            if (code === 200) {
+                this.chunkTypeStats = data;
+                this.chunkTypeEntries = this.buildChunkTypeEntries(data.stats || {}, data.total || 0);
+            }
+        } catch (e) { }
+
+        this.chunkTypeStatsLoading = false;
+        await this.service.render();
+    }
+
+    private buildChunkTypeEntries(stats: any, total: number): any[] {
+        if (!stats || total === 0) return [];
+        const colorMap: any = {
+            text: { barColor: 'bg-blue-500', bgColor: 'bg-blue-50', textColor: 'text-blue-700' },
+            formula: { barColor: 'bg-amber-500', bgColor: 'bg-amber-50', textColor: 'text-amber-700' },
+            figure: { barColor: 'bg-emerald-500', bgColor: 'bg-emerald-50', textColor: 'text-emerald-700' },
+            table: { barColor: 'bg-rose-500', bgColor: 'bg-rose-50', textColor: 'text-rose-700' },
+            mixed: { barColor: 'bg-purple-500', bgColor: 'bg-purple-50', textColor: 'text-purple-700' }
+        };
+        const defaultColor = { barColor: 'bg-gray-500', bgColor: 'bg-gray-50', textColor: 'text-gray-700' };
+        return Object.entries(stats)
+            .sort(([, a]: any, [, b]: any) => b - a)
+            .map(([type, count]: any) => {
+                const colors = colorMap[type] || defaultColor;
+                return {
+                    type, count,
+                    label: this.getChunkTypeLabel(type),
+                    percent: Math.round((count / total) * 100),
+                    ...colors
+                };
+            });
+    }
+
+    public getChunkTypeColor(type: string): string {
+        const colors: any = {
+            text: 'bg-blue-100 text-blue-700',
+            formula: 'bg-amber-100 text-amber-700',
+            figure: 'bg-emerald-100 text-emerald-700',
+            table: 'bg-rose-100 text-rose-700',
+            mixed: 'bg-purple-100 text-purple-700'
+        };
+        return colors[type] || 'bg-gray-100 text-gray-700';
+    }
+
+    public getChunkTypeLabel(type: string): string {
+        const labels: any = {
+            text: '텍스트',
+            formula: '수식',
+            figure: '그림',
+            table: '표',
+            mixed: '복합'
+        };
+        return labels[type] || type;
     }
 }

@@ -92,30 +92,35 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                 p(class="mt-2 text-[11px] text-gray-500") 선택된 모델({{getSelectedModelInfo().short_name || ''}})의 {{getSelectedModelInfo().dim || 768}}차원 스키마로 생성됩니다.
 
             //- 청킹 옵션 (항상 표출)
-            div(class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4")
-                //- 청킹 전략 선택 (버튼 그룹)
+            div(class="p-5 bg-gray-50 rounded-xl border border-gray-200 space-y-5")
+                //- 청킹 전략 선택 (카드형 버튼)
                 div
-                    label(class="block text-[12px] font-medium text-gray-600 mb-2") 청킹 전략
-                    div(class="flex flex-wrap gap-2")
-                        button(*ngFor="let s of chunkStrategies", (click)="selectedStrategy = s.name; onStrategyChange()", class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border", [ngClass]="selectedStrategy === s.name ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-300 hover:text-indigo-600'")
-                            | {{s.label}}
-                    p(*ngIf="getSelectedStrategyInfo().description", class="mt-2 text-[11px] text-gray-500 leading-relaxed") {{getSelectedStrategyInfo().description}}
+                    label(class="block text-[13px] font-semibold text-gray-800 mb-3") 청킹 전략
+                    div(class="grid grid-cols-2 lg:grid-cols-3 gap-2")
+                        button(*ngFor="let s of chunkStrategies", (click)="selectedStrategy = s.name; onStrategyChange()", class="relative flex flex-col items-start p-3 rounded-xl text-left transition-all border-2 cursor-pointer group", [ngClass]="selectedStrategy === s.name ? 'bg-indigo-50 border-indigo-500 shadow-sm shadow-indigo-100' : 'bg-white border-gray-200 hover:border-indigo-300 hover:shadow-sm'")
+                            div(class="flex items-center gap-2 mb-1 w-full")
+                                span(class="text-base leading-none") {{getStrategyIcon(s.name)}}
+                                span(class="text-[12px] font-semibold truncate transition-colors", [ngClass]="selectedStrategy === s.name ? 'text-indigo-700' : 'text-gray-800 group-hover:text-indigo-600'") {{s.label}}
+                                div(class="ml-auto flex-shrink-0")
+                                    svg(*ngIf="selectedStrategy === s.name", xmlns="http://www.w3.org/2000/svg", viewBox="0 0 20 20", fill="currentColor", class="size-4 text-indigo-500")
+                                        path(fill-rule="evenodd", d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", clip-rule="evenodd")
+                            p(class="text-[11px] leading-snug line-clamp-2 transition-colors", [ngClass]="selectedStrategy === s.name ? 'text-indigo-600/70' : 'text-gray-400 group-hover:text-gray-500'") {{s.description}}
                 //- 전략별 파라미터
                 div(class="grid grid-cols-1 md:grid-cols-3 gap-4")
                     div(*ngIf="getStrategyParams().includes('chunk_size')")
-                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 청크 크기 (문자)
+                        label(class="block text-xs font-medium text-gray-700 mb-1") 청크 크기 (문자)
                         input(type="number", [(ngModel)]="chunkSize", min="100", max="2000", class="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
                     div(*ngIf="getStrategyParams().includes('chunk_overlap')")
-                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 오버랩 (문자)
+                        label(class="block text-xs font-medium text-gray-700 mb-1") 오버랩 (문자)
                         input(type="number", [(ngModel)]="chunkOverlap", min="0", max="500", class="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
                     div(*ngIf="getStrategyParams().includes('respect_sentences')")
-                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 문장 경계 존중
+                        label(class="block text-xs font-medium text-gray-700 mb-1") 문장 경계 존중
                         div(class="flex items-center gap-2 mt-1")
                             button((click)="respectSentences = !respectSentences", class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors", [ngClass]="respectSentences ? 'bg-indigo-600' : 'bg-gray-300'")
                                 span(class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform", [ngClass]="respectSentences ? 'translate-x-6' : 'translate-x-1'")
                             span(class="text-[12px] text-gray-600") {{respectSentences ? 'ON' : 'OFF'}}
                     div(*ngIf="getStrategyParams().includes('similarity_threshold')")
-                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 유사도 임계값
+                        label(class="block text-xs font-medium text-gray-700 mb-1") 유사도 임계값
                         input(type="number", [(ngModel)]="similarityThreshold", min="0", max="1", step="0.05", class="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
                         p(class="text-[11px] text-gray-400 mt-0.5") 0~1 사이 값 (낮을수록 세밀 분할)
 
