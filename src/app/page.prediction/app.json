@@ -1,0 +1,12 @@
+{
+    "id": "page.prediction",
+    "mode": "page",
+    "title": "\uacf5\uc815 \uc608\uce21 \ubaa8\ub378\ub9c1",
+    "namespace": "prediction",
+    "category": "prediction",
+    "viewuri": "/prediction",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-prediction()"
+}

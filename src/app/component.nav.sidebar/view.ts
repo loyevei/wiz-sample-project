@@ -14,6 +14,10 @@ export class Component implements OnInit {
         this.service.status.toggle('navbar', true);
     }
 
+    public isLoggedIn() {
+        return this.service.auth.check();
+    }
+
     public isActive(link: string) {
         return location.pathname.indexOf(link) === 0
     }

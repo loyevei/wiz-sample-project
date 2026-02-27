@@ -1,0 +1,442 @@
+div(class="page-theory-container")
+    //- ─────────────────────────────────────────────────
+    //- 헤더
+    //- ─────────────────────────────────────────────────
+    div(class="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white")
+        div(class="flex items-center gap-3")
+            div(class="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center")
+                i(class="fas fa-atom text-violet-600 text-base")
+            div
+                h1(class="text-lg font-semibold text-zinc-950") 플라즈마 이론 연구 지원
+                p(class="text-xs text-zinc-400 mt-0.5") 수식 검색 · 가정 검증 · 이론 그래프
+        //- 컬렉션 선택
+        div(class="flex items-center gap-2")
+            span(class="text-[13px] text-zinc-500") 컬렉션
+            select(class="text-[13px] border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-violet-500 focus:outline-none",
+                [(ngModel)]="selectedCollection",
+                (ngModelChange)="onCollectionChange()")
+                option(*ngFor="let col of collections", [value]="col.name")
+                    | {{col.name}} ({{col.short_name}}, {{col.total_docs}}docs)
+
+    //- ─────────────────────────────────────────────────
+    //- 탭 네비게이션
+    //- ─────────────────────────────────────────────────
+    div(class="flex gap-1 px-5 pt-3 bg-white border-b border-gray-200")
+        button(class="px-4 py-2 text-[13px] font-medium rounded-t-md transition-colors",
+            (click)="selectTab('equation')",
+            [class]="tab === 'equation' ? 'bg-violet-50 text-violet-700 border border-violet-200 border-b-transparent -mb-px' : 'text-zinc-500 hover:text-zinc-700 hover:bg-gray-50'")
+            i(class="fas fa-square-root-alt mr-1.5")
+            | 수식 검색
+        button(class="px-4 py-2 text-[13px] font-medium rounded-t-md transition-colors",
+            (click)="selectTab('assumption')",
+            [class]="tab === 'assumption' ? 'bg-violet-50 text-violet-700 border border-violet-200 border-b-transparent -mb-px' : 'text-zinc-500 hover:text-zinc-700 hover:bg-gray-50'")
+            i(class="fas fa-check-double mr-1.5")
+            | 가정 검증
+        button(class="px-4 py-2 text-[13px] font-medium rounded-t-md transition-colors",
+            (click)="selectTab('graph')",
+            [class]="tab === 'graph' ? 'bg-violet-50 text-violet-700 border border-violet-200 border-b-transparent -mb-px' : 'text-zinc-500 hover:text-zinc-700 hover:bg-gray-50'")
+            i(class="fas fa-project-diagram mr-1.5")
+            | 이론 그래프
+
+    //- ─────────────────────────────────────────────────
+    //- 컨텐츠 영역
+    //- ─────────────────────────────────────────────────
+    div(class="flex-1 min-h-0 overflow-auto bg-gray-50")
+        //- ================================================================
+        //- Tab 1: Equation-aware Retrieval
+        //- ================================================================
+        div(*ngIf="tab === 'equation'", class="p-5 space-y-5")
+            //- 통계 카드
+            div(*ngIf="equationStats", class="grid grid-cols-3 gap-4")
+                div(class="bg-white rounded-lg border border-gray-200 p-4 text-center")
+                    div(class="text-2xl font-bold text-violet-600") {{equationStats.total_equations}}
+                    div(class="text-xs text-zinc-500 mt-1") 추출된 수식
+                div(class="bg-white rounded-lg border border-gray-200 p-4 text-center")
+                    div(class="text-2xl font-bold text-indigo-600") {{equationStats.docs_with_equations}}
+                    div(class="text-xs text-zinc-500 mt-1") 수식 포함 문서
+                div(class="bg-white rounded-lg border border-gray-200 p-4 text-center")
+                    div(class="text-2xl font-bold text-zinc-600") {{equationStats.total_docs}}
+                    div(class="text-xs text-zinc-500 mt-1") 전체 문서
+
+            //- 수식 분류 분포
+            div(*ngIf="equationStats?.by_category?.length > 0", class="bg-white rounded-lg border border-gray-200 p-4")
+                div(class="text-[13px] font-semibold text-zinc-700 mb-3") 수식 유형 분포
+                div(class="flex flex-wrap gap-2")
+                    div(*ngFor="let cat of equationStats.by_category",
+                        class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium",
+                        [ngClass]="{'bg-indigo-50 text-indigo-700': cat.color === 'indigo', 'bg-violet-50 text-violet-700': cat.color === 'violet', 'bg-amber-50 text-amber-700': cat.color === 'amber', 'bg-emerald-50 text-emerald-700': cat.color === 'emerald', 'bg-gray-100 text-gray-700': cat.color === 'gray'}")
+                        | {{cat.label}} ({{cat.count}})
+
+            //- 알려진 수식 목록
+            div(*ngIf="equationStats?.known_equations?.length > 0", class="bg-white rounded-lg border border-gray-200 p-4")
+                div(class="text-[13px] font-semibold text-zinc-700 mb-3") 식별된 수식
+                div(class="flex flex-wrap gap-2")
+                    span(*ngFor="let eq of equationStats.known_equations",
+                        class="px-2.5 py-1 rounded-md bg-violet-50 text-violet-700 text-xs")
+                        | {{eq.name}}
+                        span(class="ml-1 text-violet-400") ×{{eq.count}}
+
+            //- 수식 검색
+            div(class="bg-white rounded-lg border border-gray-200 p-4")
+                div(class="text-[15px] font-semibold text-zinc-800 mb-3") 수식 기반 문서 검색
+                div(class="flex gap-2 mb-4")
+                    input(class="flex-1 text-[13px] border border-gray-200 rounded-md px-3 py-2 focus:ring-2 focus:ring-violet-500 focus:outline-none",
+                        [(ngModel)]="equationQuery",
+                        placeholder="수식 또는 관련 키워드를 입력하세요 (예: Boltzmann equation, ∇²φ = -ρ/ε₀)",
+                        (keydown.enter)="searchEquations()")
+                    button(class="px-4 py-2 bg-violet-600 text-white rounded-md text-[13px] font-medium hover:bg-violet-700 transition-colors",
+                        (click)="searchEquations()",
+                        [disabled]="equationSearching || !equationQuery.trim()")
+                        span(*ngIf="equationSearching")
+                            i(class="fas fa-spinner fa-spin mr-1")
+                            | 검색 중...
+                        span(*ngIf="!equationSearching")
+                            i(class="fas fa-search mr-1")
+                            | 검색
+
+                //- 쿼리 분류 결과
+                div(*ngIf="equationSearchClassification && equationSearchClassification.name", class="mb-4 p-3 rounded-md bg-violet-50 border border-violet-200")
+                    div(class="flex items-center gap-2")
+                        i(class="fas fa-tag text-violet-500")
+                        span(class="text-[13px] font-medium text-violet-700") 식별: {{equationSearchClassification.name}}
+                        span(class="text-xs text-violet-500 ml-2") ({{equationSearchClassification.category_label}})
+                    p(*ngIf="equationSearchClassification.description", class="text-xs text-violet-600 mt-1") {{equationSearchClassification.description}}
+
+                //- 검색 결과
+                div(*ngIf="equationSearchResults.length > 0", class="space-y-3")
+                    div(class="text-[13px] text-zinc-500 mb-2") {{equationSearchResults.length}}건의 관련 문서
+                    div(*ngFor="let doc of equationSearchResults; let i = index",
+                        class="border border-gray-100 rounded-lg p-3 hover:border-violet-200 transition-colors",
+                        [ngClass]="{'bg-violet-50/30': doc.has_equation}")
+                        div(class="flex items-start justify-between")
+                            div(class="flex-1")
+                                div(class="flex items-center gap-2 mb-1")
+                                    span(class="text-[13px] font-semibold text-zinc-700") {{doc.filename}}
+                                    span(*ngIf="doc.has_equation", class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-100 text-violet-700") 수식 포함
+                                    span(class="text-xs text-zinc-400") 유사도 {{(doc.score * 100).toFixed(1)}}%
+                                p(class="text-xs text-zinc-500 mt-1 line-clamp-2") {{doc.snippet}}
+                                //- 문서 내 수식
+                                div(*ngIf="doc.equations?.length > 0", class="mt-2 flex flex-wrap gap-1.5")
+                                    span(*ngFor="let eq of doc.equations.slice(0, 5)",
+                                        class="px-2 py-0.5 rounded bg-gray-100 text-[10px] text-zinc-600 font-mono truncate max-w-[200px]",
+                                        [title]="eq.latex") {{eq.latex}}
+
+            //- 추출 버튼
+            div(class="flex gap-2")
+                button(class="px-4 py-2 bg-indigo-600 text-white rounded-md text-[13px] font-medium hover:bg-indigo-700 transition-colors",
+                    (click)="extractEquations()",
+                    [disabled]="equationLoading || !selectedCollection")
+                    span(*ngIf="equationLoading")
+                        i(class="fas fa-spinner fa-spin mr-1")
+                        | 추출 중...
+                    span(*ngIf="!equationLoading")
+                        i(class="fas fa-cogs mr-1")
+                        | 전체 수식 추출
+                button(*ngIf="!equationStats && !equationLoading",
+                    class="px-4 py-2 bg-white border border-gray-200 rounded-md text-[13px] font-medium text-zinc-600 hover:bg-gray-50 transition-colors",
+                    (click)="loadEquationStats()")
+                    i(class="fas fa-chart-bar mr-1")
+                    | 통계 로드
+
+            //- 추출된 수식 카테고리 필터
+            div(*ngIf="equations.length > 0", class="bg-white rounded-lg border border-gray-200 p-4")
+                div(class="flex items-center justify-between mb-3")
+                    div(class="text-[15px] font-semibold text-zinc-800") 추출된 수식 목록 ({{filteredEquations().length}}건)
+                    div(class="flex gap-1.5")
+                        button(class="px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                            (click)="equationCategoryFilter = ''",
+                            [ngClass]="equationCategoryFilter === '' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-zinc-600 hover:bg-gray-200'") 전체
+                        button(*ngFor="let cat of equationStats?.by_category",
+                            class="px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                            (click)="equationCategoryFilter = cat.category",
+                            [ngClass]="equationCategoryFilter === cat.category ? 'bg-violet-600 text-white' : 'bg-gray-100 text-zinc-600 hover:bg-gray-200'") {{cat.label}}
+
+                div(class="space-y-2 max-h-96 overflow-y-auto")
+                    div(*ngFor="let eq of filteredEquations(); let i = index",
+                        class="flex items-start gap-3 p-3 rounded-md border border-gray-100 hover:bg-gray-50")
+                        div(class="text-xs text-zinc-400 w-6 text-right pt-0.5") {{i + 1}}
+                        div(class="flex-1 min-w-0")
+                            div(class="flex items-center gap-2 mb-1")
+                                span(*ngIf="eq.classification?.name", class="text-[13px] font-medium text-violet-700") {{eq.classification.name}}
+                                span(*ngIf="!eq.classification?.name", class="text-[13px] font-medium text-zinc-500") 미분류 수식
+                                span(class="px-1.5 py-0.5 rounded text-[10px] font-medium",
+                                    [ngClass]="{'bg-indigo-50 text-indigo-600': eq.classification?.category === 'governing', 'bg-violet-50 text-violet-600': eq.classification?.category === 'constitutive', 'bg-amber-50 text-amber-600': eq.classification?.category === 'empirical', 'bg-gray-100 text-gray-600': eq.classification?.category === 'other'}") {{eq.classification?.category_label || '기타'}}
+                            p(class="text-xs text-zinc-500 font-mono truncate", title="{{eq.latex}}") {{eq.latex}}
+                            div(class="flex items-center gap-2 mt-1 text-[11px] text-zinc-400")
+                                i(class="fas fa-file-alt")
+                                span {{eq.filename}}
+
+        //- ================================================================
+        //- Tab 2: Assumption Consistency Checker
+        //- ================================================================
+        div(*ngIf="tab === 'assumption'", class="p-5 space-y-5")
+            //- 통계 카드
+            div(*ngIf="assumptionStats", class="grid grid-cols-3 gap-4")
+                div(class="bg-white rounded-lg border border-gray-200 p-4 text-center")
+                    div(class="text-2xl font-bold text-amber-600") {{assumptionStats.total_assumptions}}
+                    div(class="text-xs text-zinc-500 mt-1") 추출된 가정
+                div(class="bg-white rounded-lg border border-gray-200 p-4 text-center")
+                    div(class="text-2xl font-bold text-indigo-600") {{assumptionStats.docs_with_assumptions}}
+                    div(class="text-xs text-zinc-500 mt-1") 가정 포함 문서
+                div(class="bg-white rounded-lg border border-gray-200 p-4 text-center")
+                    div(class="text-2xl font-bold text-zinc-600") {{assumptionStats.total_docs}}
+                    div(class="text-xs text-zinc-500 mt-1") 전체 문서
+
+            //- 가정 빈도 차트
+            div(*ngIf="assumptionStats?.by_name?.length > 0", class="bg-white rounded-lg border border-gray-200 p-4")
+                div(class="text-[13px] font-semibold text-zinc-700 mb-3") 주요 가정 빈도
+                div(class="space-y-2")
+                    div(*ngFor="let item of assumptionStats.by_name.slice(0, 10)", class="flex items-center gap-3")
+                        div(class="text-[13px] text-zinc-700 w-48 truncate") {{item.name}}
+                        div(class="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden")
+                            div(class="h-full bg-amber-500 rounded-full transition-all",
+                                [style.width.%]="(item.count / assumptionStats.by_name[0].count * 100)")
+                        div(class="text-xs text-zinc-500 w-8 text-right") {{item.count}}
+
+            //- 카테고리 분포
+            div(*ngIf="assumptionStats?.by_category?.length > 0", class="bg-white rounded-lg border border-gray-200 p-4")
+                div(class="text-[13px] font-semibold text-zinc-700 mb-3") 가정 카테고리 분포
+                div(class="flex flex-wrap gap-2")
+                    span(*ngFor="let cat of assumptionStats.by_category",
+                        class="px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-medium")
+                        | {{cat.category}} ({{cat.count}})
+
+            //- 액션 버튼
+            div(class="flex gap-2")
+                button(class="px-4 py-2 bg-amber-600 text-white rounded-md text-[13px] font-medium hover:bg-amber-700 transition-colors",
+                    (click)="extractAssumptions()",
+                    [disabled]="assumptionLoading || !selectedCollection")
+                    span(*ngIf="assumptionLoading")
+                        i(class="fas fa-spinner fa-spin mr-1")
+                        | 추출 중...
+                    span(*ngIf="!assumptionLoading")
+                        i(class="fas fa-search mr-1")
+                        | 가정 추출
+                button(class="px-4 py-2 bg-red-600 text-white rounded-md text-[13px] font-medium hover:bg-red-700 transition-colors",
+                    (click)="checkConsistency()",
+                    [disabled]="consistencyChecking || selectedDocIds.size < 2")
+                    span(*ngIf="consistencyChecking")
+                        i(class="fas fa-spinner fa-spin mr-1")
+                        | 검사 중...
+                    span(*ngIf="!consistencyChecking")
+                        i(class="fas fa-exclamation-triangle mr-1")
+                        | 상충 검사 ({{selectedDocIds.size}}건 선택)
+                button(*ngIf="!assumptionStats && !assumptionLoading",
+                    class="px-4 py-2 bg-white border border-gray-200 rounded-md text-[13px] font-medium text-zinc-600 hover:bg-gray-50 transition-colors",
+                    (click)="loadAssumptionStats()")
+                    i(class="fas fa-chart-bar mr-1")
+                    | 통계 로드
+
+            //- 문서별 가정 목록
+            div(*ngIf="assumptionDocuments.length > 0", class="space-y-3")
+                div(class="text-[15px] font-semibold text-zinc-800") 문서별 추출된 가정
+                div(*ngFor="let doc of assumptionDocuments",
+                    class="bg-white rounded-lg border p-4 transition-colors cursor-pointer",
+                    [ngClass]="isDocSelected(doc.doc_id) ? 'border-amber-400 bg-amber-50/30' : 'border-gray-200 hover:border-gray-300'",
+                    (click)="toggleDocSelection(doc.doc_id)")
+                    div(class="flex items-center justify-between mb-2")
+                        div(class="flex items-center gap-2")
+                            input(type="checkbox", [checked]="isDocSelected(doc.doc_id)",
+                                class="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500")
+                            div(class="text-[13px] font-semibold text-zinc-700") {{doc.filename}}
+                        span(class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium") {{doc.count}}개 가정
+
+                    div(class="flex flex-wrap gap-2")
+                        span(*ngFor="let ass of doc.assumptions",
+                            class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs",
+                            [ngClass]="ass.id === 'custom' ? 'bg-gray-100 text-gray-600' : 'bg-violet-50 text-violet-700'",
+                            [title]="ass.sentence")
+                            i(class="fas fa-tag text-[10px]")
+                            | {{ass.name}}
+                            span(class="text-[10px] text-zinc-400 ml-1") ({{ass.category_label}})
+
+            //- 상충 검사 결과
+            div(*ngIf="consistencyResult", class="space-y-4")
+                //- 요약
+                div(class="bg-white rounded-lg border p-4",
+                    [ngClass]="consistencyResult.total_conflicts > 0 ? 'border-red-200' : 'border-emerald-200'")
+                    div(class="flex items-center gap-3")
+                        div(class="w-10 h-10 rounded-full flex items-center justify-center",
+                            [ngClass]="consistencyResult.total_conflicts > 0 ? 'bg-red-100' : 'bg-emerald-100'")
+                            i(class="fas text-lg",
+                                [ngClass]="consistencyResult.total_conflicts > 0 ? 'fa-exclamation-triangle text-red-600' : 'fa-check-circle text-emerald-600'")
+                        div
+                            div(class="text-[15px] font-semibold",
+                                [ngClass]="consistencyResult.total_conflicts > 0 ? 'text-red-800' : 'text-emerald-800'")
+                                | {{consistencyResult.total_conflicts > 0 ? '상충 발견: ' + consistencyResult.total_conflicts + '건' : '상충 없음'}}
+                            p(class="text-xs text-zinc-500 mt-0.5") 선택된 {{selectedDocIds.size}}개 문서 간 가정 비교 결과
+
+                //- 상충 목록
+                div(*ngIf="consistencyResult.conflicts?.length > 0", class="space-y-3")
+                    div(class="text-[15px] font-semibold text-zinc-800") 상충 상세
+                    div(*ngFor="let conflict of consistencyResult.conflicts",
+                        class="bg-white rounded-lg border p-4",
+                        [ngClass]="conflict.severity === 'critical' ? 'border-red-300' : 'border-amber-300'")
+                        div(class="flex items-start gap-3")
+                            i(class="fas mt-1",
+                                [ngClass]="conflict.severity === 'critical' ? 'fa-times-circle text-red-500' : 'fa-exclamation-circle text-amber-500'")
+                            div(class="flex-1")
+                                div(class="text-[13px] font-medium text-zinc-800 mb-2") {{conflict.description}}
+                                div(class="grid grid-cols-2 gap-3")
+                                    div(class="p-2 rounded bg-gray-50")
+                                        div(class="text-[11px] text-zinc-400 mb-1") 문서 A
+                                        div(class="text-xs font-medium text-zinc-700") {{conflict.doc_a.filename}}
+                                        div(class="text-[11px] text-violet-600 mt-1") {{conflict.doc_a.assumption.name}}
+                                    div(class="p-2 rounded bg-gray-50")
+                                        div(class="text-[11px] text-zinc-400 mb-1") 문서 B
+                                        div(class="text-xs font-medium text-zinc-700") {{conflict.doc_b.filename}}
+                                        div(class="text-[11px] text-violet-600 mt-1") {{conflict.doc_b.assumption.name}}
+
+                //- 호환성 매트릭스
+                div(*ngIf="consistencyResult.matrix?.length > 0 && consistencyResult.matrix.length <= 12",
+                    class="bg-white rounded-lg border border-gray-200 p-4")
+                    div(class="text-[13px] font-semibold text-zinc-700 mb-3") 가정 호환성 매트릭스
+                    div(class="overflow-x-auto")
+                        table(class="text-xs w-full")
+                            thead
+                                tr
+                                    th(class="p-2 text-left text-zinc-500") &nbsp;
+                                    th(*ngFor="let lbl of consistencyResult.matrix_labels",
+                                        class="p-2 text-center text-zinc-500 max-w-16 truncate",
+                                        [title]="lbl") {{lbl.substring(0, 8)}}
+                            tbody
+                                tr(*ngFor="let row of consistencyResult.matrix")
+                                    td(class="p-2 font-medium text-zinc-700 whitespace-nowrap") {{row.name}}
+                                    td(*ngFor="let cell of row.cells", class="p-2 text-center")
+                                        span(class="inline-block w-5 h-5 rounded-sm",
+                                            [ngClass]="{'bg-gray-200': cell.relation === 'self', 'bg-red-400': cell.relation === 'conflict', 'bg-blue-200': cell.relation === 'same_category', 'bg-gray-100': cell.relation === 'neutral'}",
+                                            [title]="cell.relation")
+
+        //- ================================================================
+        //- Tab 3: Theory Knowledge Graph
+        //- ================================================================
+        div(*ngIf="tab === 'graph'", class="flex flex-col h-full")
+            //- 통계 바
+            div(*ngIf="graphStats", class="flex items-center gap-4 px-5 py-3 bg-white border-b border-gray-200")
+                div(class="flex items-center gap-2")
+                    span(class="text-[13px] text-zinc-500") 노드
+                    span(class="text-[13px] font-semibold text-indigo-600") {{graphStats.total_nodes}}
+                div(class="flex items-center gap-2")
+                    span(class="text-[13px] text-zinc-500") 엣지
+                    span(class="text-[13px] font-semibold text-violet-600") {{graphStats.total_edges}}
+                div(*ngIf="graphStats.node_types", class="flex gap-2 ml-4")
+                    span(*ngFor="let type of ['concept', 'equation', 'condition']",
+                        class="px-2 py-0.5 rounded text-[11px] font-medium cursor-pointer transition-colors",
+                        [ngClass]="graphNodeTypeFilter === type ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-zinc-600 hover:bg-gray-200'",
+                        (click)="graphNodeTypeFilter = graphNodeTypeFilter === type ? '' : type; renderGraphCanvas()")
+                        | {{getNodeTypeLabel(type)}} ({{graphStats.node_types[type] || 0}})
+
+                div(class="ml-auto flex gap-2")
+                    button(class="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-medium hover:bg-indigo-700 transition-colors",
+                        (click)="buildTheoryGraph()",
+                        [disabled]="graphLoading || !selectedCollection")
+                        span(*ngIf="graphLoading")
+                            i(class="fas fa-spinner fa-spin mr-1")
+                        span(*ngIf="!graphLoading")
+                            i(class="fas fa-sync-alt mr-1")
+                        | {{graphCached ? '재구축' : '구축'}}
+
+            div(class="flex flex-1 min-h-0 overflow-hidden")
+                //- 그래프 캔버스
+                div(class="flex-1 min-h-0 relative bg-white")
+                    canvas(*ngIf="graphNodes.length > 0",
+                        id="theoryGraphCanvas",
+                        class="w-full h-full cursor-grab",
+                        (click)="onGraphCanvasClick($event)",
+                        (wheel)="onGraphWheel($event)")
+
+                    //- 빈 상태
+                    div(*ngIf="graphNodes.length === 0 && !graphLoading", class="absolute inset-0 flex items-center justify-center")
+                        div(class="text-center")
+                            div(class="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center")
+                                i(class="fas fa-project-diagram text-2xl text-gray-400")
+                            div(class="text-[13px] text-zinc-500 mb-3") 이론 그래프가 아직 생성되지 않았습니다
+                            button(class="px-4 py-2 bg-indigo-600 text-white rounded-md text-[13px] font-medium hover:bg-indigo-700",
+                                (click)="buildTheoryGraph()",
+                                [disabled]="graphLoading || !selectedCollection")
+                                i(class="fas fa-cogs mr-1")
+                                | 그래프 구축
+
+                    //- 로딩
+                    div(*ngIf="graphLoading", class="absolute inset-0 flex items-center justify-center bg-white/80")
+                        div(class="text-center")
+                            i(class="fas fa-spinner fa-spin text-2xl text-indigo-600 mb-3")
+                            div(class="text-[13px] text-zinc-500") 그래프 구축 중...
+
+                    //- 범례
+                    div(*ngIf="graphNodes.length > 0", class="absolute bottom-4 left-4 bg-white/90 rounded-lg border border-gray-200 p-3 text-[11px]")
+                        div(class="font-semibold text-zinc-700 mb-2") 범례
+                        div(class="space-y-1.5")
+                            div(class="flex items-center gap-2")
+                                div(class="w-3 h-3 rounded-full bg-indigo-500")
+                                span 개념 (Concept)
+                            div(class="flex items-center gap-2")
+                                div(class="w-3 h-3 bg-violet-500", style="transform: rotate(45deg)")
+                                span 수식 (Equation)
+                            div(class="flex items-center gap-2")
+                                div(class="w-3 h-3 bg-amber-500")
+                                span 조건/가정 (Condition)
+                        hr(class="my-2 border-gray-200")
+                        div(class="space-y-1")
+                            div(class="flex items-center gap-2")
+                                div(class="w-4 h-0.5 bg-red-500")
+                                span 원인→결과
+                            div(class="flex items-center gap-2")
+                                div(class="w-4 h-0.5 bg-blue-500")
+                                span 의존
+                            div(class="flex items-center gap-2")
+                                div(class="w-4 h-0.5 bg-violet-500")
+                                span 사용
+                            div(class="flex items-center gap-2")
+                                div(class="w-4 border-t-2 border-dashed border-red-500")
+                                span 상충
+
+                //- 우측 사이드 패널
+                div(class="w-72 border-l border-gray-200 bg-white overflow-y-auto flex-shrink-0")
+                    //- 검색
+                    div(class="p-3 border-b border-gray-200")
+                        div(class="text-[13px] font-semibold text-zinc-700 mb-2") 노드 검색
+                        div(class="flex gap-1")
+                            input(class="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none",
+                                [(ngModel)]="graphSearchQuery",
+                                placeholder="개념, 수식 이름...",
+                                (keydown.enter)="searchGraph()")
+                            button(class="px-2 py-1.5 bg-indigo-600 text-white rounded-md text-xs hover:bg-indigo-700",
+                                (click)="searchGraph()")
+                                i(class="fas fa-search")
+
+                        div(*ngIf="graphSearchResults.length > 0", class="space-y-1 mt-2")
+                            div(*ngFor="let node of graphSearchResults",
+                                class="flex items-center gap-2 p-1.5 rounded hover:bg-gray-50 cursor-pointer text-xs",
+                                (click)="highlightNode(node.id)")
+                                div(class="w-2 h-2 rounded-full",
+                                    [ngClass]="{'bg-indigo-500': node.type === 'concept', 'bg-violet-500': node.type === 'equation', 'bg-amber-500': node.type === 'condition'}")
+                                div(class="flex-1 truncate") {{node.label}}
+                                span(class="text-zinc-400") ({{node.connected_edges}})
+
+                    //- 선택된 노드 정보
+                    div(*ngIf="selectedNode", class="p-3 border-b border-gray-200")
+                        div(class="text-[13px] font-semibold text-zinc-700 mb-2") 선택된 노드
+                        div(class="p-3 rounded-md bg-indigo-50 border border-indigo-200")
+                            div(class="text-[13px] font-semibold text-indigo-700") {{selectedNode.label}}
+                            div(class="flex items-center gap-2 mt-1")
+                                span(class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 text-indigo-600") {{getNodeTypeLabel(selectedNode.type)}}
+                                span(class="text-[11px] text-zinc-400") 연결: {{selectedNode.degree || 0}}
+                            div(*ngIf="selectedNode.docs?.length > 0", class="mt-2")
+                                div(class="text-[11px] text-zinc-500 mb-1") 관련 문서
+                                div(*ngFor="let doc of selectedNode.docs.slice(0, 5)",
+                                    class="text-[11px] text-zinc-600 truncate") · {{doc}}
+
+                    //- 영향 추적 결과
+                    div(*ngIf="impactResults.length > 0", class="p-3")
+                        div(class="text-[13px] font-semibold text-zinc-700 mb-2") 하류 영향 ({{impactResults.length}}개 노드)
+                        div(class="space-y-1.5")
+                            div(*ngFor="let item of impactResults",
+                                class="flex items-center gap-2 p-2 rounded-md hover:bg-gray-50 cursor-pointer text-xs",
+                                (click)="highlightNode(item.id)")
+                                div(class="flex items-center gap-1")
+                                    span(*ngFor="let d of [].constructor(item.depth)", class="w-2 h-0.5 bg-gray-300")
+                                div(class="w-2 h-2 rounded-full",
+                                    [ngClass]="{'bg-indigo-500': item.type === 'concept', 'bg-violet-500': item.type === 'equation', 'bg-amber-500': item.type === 'condition'}")
+                                div(class="flex-1 truncate") {{item.label}}
+                                span(class="text-zinc-400 text-[10px]") {{getRelationLabel(item.relation)}}

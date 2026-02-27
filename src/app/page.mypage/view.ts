@@ -4,6 +4,7 @@ import { Service } from '@wiz/libs/portal/season/service';
 export class Component implements OnInit {
     public user: any = null;
     public saving: boolean = false;
+    public loggedIn: boolean = false;
 
     public passwordForm: any = {
         current_password: '',
@@ -16,8 +17,11 @@ export class Component implements OnInit {
 
     public async ngOnInit() {
         await this.service.init();
-        await this.service.auth.allow("/access");
-        await this.load();
+        this.loggedIn = this.service.auth.check();
+        if (this.loggedIn) {
+            await this.load();
+        }
+        await this.service.render();
     }
 
     public async load() {

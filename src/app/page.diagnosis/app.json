@@ -1,0 +1,12 @@
+{
+    "id": "page.diagnosis",
+    "mode": "page",
+    "title": "\uc9c4\ub2e8 \ub370\uc774\ud130 \ubd84\uc11d",
+    "namespace": "diagnosis",
+    "category": "diagnosis",
+    "viewuri": "/diagnosis",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-diagnosis()"
+}

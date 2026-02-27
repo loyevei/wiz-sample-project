@@ -1,0 +1,423 @@
+nav(class="sticky top-0 z-20 bg-white shadow")
+    div(class="max-w-7xl px-4 sm:px-6 lg:px-8 py-3")
+        div(class="flex items-center justify-between")
+            h1(class="flex text-lg font-semibold text-zinc-950 gap-x-3 items-center")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-6 text-emerald-600")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z")
+                span 공정 예측 모델링
+            div(*ngIf="collections.length > 0", class="flex items-center gap-2")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-gray-400")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375")
+                select([(ngModel)]="selectedCollection", (ngModelChange)="onCollectionChange()", class="px-3 py-1.5 rounded-lg border border-gray-300 text-[12px] bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    option(*ngFor="let col of collections", [value]="col.name") {{col.name}} ({{col.short_name}})
+
+div(class="max-w-7xl pt-4 px-4 sm:px-6 lg:px-8 pb-8 space-y-5")
+
+    //- 상단 통계 카드
+    div(class="grid grid-cols-1 md:grid-cols-3 gap-4")
+        div(class="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-4 border border-emerald-100")
+            p(class="text-xs font-medium text-emerald-600 uppercase tracking-wider") 학습 데이터
+            p(class="text-2xl font-bold text-gray-900 mt-1") {{dbStats.total_docs || 0}}개 문서
+            p(class="text-[11px] text-gray-400 mt-0.5") {{dbStats.total_chunks || 0}}개 벡터 청크
+        div(class="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-4 border border-blue-100")
+            p(class="text-xs font-medium text-blue-600 uppercase tracking-wider") 예측 방식
+            p(class="text-[14px] font-bold text-gray-900 mt-1") 벡터 유사도 + Surrogate Model
+            p(class="text-[11px] text-gray-400 mt-0.5", *ngIf="getCollectionInfo()") {{getCollectionInfo().short_name}} {{getCollectionInfo().dim}}D 코사인 유사도
+        div(class="bg-gradient-to-br from-violet-50 to-violet-100/50 rounded-xl p-4 border border-violet-100")
+            p(class="text-xs font-medium text-violet-600 uppercase tracking-wider") 파라미터 DB
+            p(class="text-[14px] font-bold text-gray-900 mt-1") {{dbStats.has_param_db ? '구축 완료' : '미구축'}}
+            p(class="text-[11px] text-gray-400 mt-0.5") {{dbStats.has_param_db ? '역설계/불확실성 분석 가능' : '파라미터 DB 탭에서 추출하세요'}}
+
+    //- 탭 네비게이션
+    div(class="border-b border-gray-200")
+        nav(class="flex gap-x-1 -mb-px overflow-x-auto")
+            button(*ngFor="let tab of tabs", (click)="switchTab(tab.id)", class="flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-all whitespace-nowrap", [ngClass]="activeTab === tab.id ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4")
+                    path(stroke-linecap="round", stroke-linejoin="round", [attr.d]="tab.icon")
+                | {{tab.label}}
+
+    //- =====================================================================
+    //- Tab 1: 조건 예측
+    //- =====================================================================
+    div(*ngIf="activeTab === 'predict'", class="space-y-5")
+        //- 공정 조건 입력
+        div(class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+            div(class="px-6 py-4 border-b border-gray-100")
+                h2(class="text-[15px] font-semibold text-gray-900") 공정 조건 입력
+                p(class="mt-1 text-[12px] text-gray-400") 플라즈마 공정 파라미터를 입력하면 유사 조건의 논문을 검색하여 예상 결과를 추론합니다.
+            div(class="px-6 py-5")
+                div(class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1.5") 공정 유형
+                        select([(ngModel)]="params.process_type", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white")
+                            option(value="") 선택하세요
+                            option(value="에칭") 에칭 (Etching)
+                            option(value="증착") 증착 (Deposition)
+                            option(value="스퍼터링") 스퍼터링 (Sputtering)
+                            option(value="CVD") CVD
+                            option(value="PECVD") PECVD
+                            option(value="ALD") ALD
+                            option(value="RIE") RIE
+                            option(value="ICP") ICP
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1.5") 가스 종류
+                        input(type="text", [(ngModel)]="params.gas_type", placeholder="예: Ar, CF4, O2...", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1.5") 압력
+                        input(type="text", [(ngModel)]="params.pressure", placeholder="예: 10 mTorr", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1.5") 전력
+                        input(type="text", [(ngModel)]="params.power", placeholder="예: 300W", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1.5") 온도
+                        input(type="text", [(ngModel)]="params.temperature", placeholder="예: 300℃", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1.5") 기판
+                        input(type="text", [(ngModel)]="params.substrate", placeholder="예: Si, SiO2", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                div(class="mt-4")
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1.5") 관심 특성 (예측 대상)
+                    input(type="text", [(ngModel)]="params.target_property", placeholder="예: 식각 속도, 균일도, 선택비...", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                div(class="mt-5 flex items-center gap-3")
+                    button((click)="predict()", [disabled]="predicting", class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-50 transition-all active:scale-95")
+                        | {{predicting ? '예측 중...' : '유사도 검색'}}
+                    button((click)="resetParams()", class="text-[13px] text-gray-500 hover:text-gray-700 font-medium") 초기화
+
+        //- 검색 결과
+        div(*ngIf="predictions.length > 0", class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+            div(class="px-6 py-4 border-b border-gray-100")
+                div(class="flex items-center justify-between")
+                    div
+                        h2(class="text-[15px] font-semibold text-gray-900") 검색 결과
+                        p(class="text-[12px] text-gray-400 mt-0.5") 쿼리: "{{predictionQuery}}" — {{predictions.length}}건 매칭
+                    span(class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700") {{totalSearched}}개 검색
+            div(class="divide-y divide-gray-100")
+                div(*ngFor="let pred of predictions; let i = index", class="px-6 py-4 hover:bg-gray-50/50 transition-colors")
+                    div(class="flex items-start gap-3")
+                        div(class="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold", [ngClass]="i < 3 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'") {{i + 1}}
+                        div(class="flex-1 min-w-0")
+                            div(class="flex items-center gap-2 mb-1")
+                                span(class="text-[13px] font-medium text-gray-900 truncate") {{pred.filename}}
+                                span(class="text-[11px] font-mono text-emerald-600") {{(pred.relevance * 100).toFixed(1)}}%
+                            div(*ngIf="pred.extracted_values?.length > 0", class="flex flex-wrap gap-1.5 my-1.5")
+                                span(*ngFor="let val of pred.extracted_values", class="inline-flex items-center rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-mono text-blue-700") {{val}}
+                            p(class="text-[12px] text-gray-600 leading-relaxed line-clamp-2") {{pred.text}}
+
+        //- Surrogate Predict 섹션
+        div(class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+            div(class="px-6 py-4 border-b border-gray-100")
+                h2(class="text-[15px] font-semibold text-gray-900") Surrogate Model 예측
+                p(class="mt-1 text-[12px] text-gray-400") 추출된 파라미터 DB 기반 회귀 모델로 수치 예측 (파라미터 DB 구축 필요)
+            div(class="px-6 py-5")
+                div(class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 예측 대상
+                        select([(ngModel)]="surrogateTarget", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white")
+                            option(*ngFor="let opt of surrogateTargetOptions", [value]="opt.value") {{opt.label}}
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 압력 (mTorr)
+                        input(type="number", [(ngModel)]="surrogateConditions.pressure", placeholder="예: 50", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") RF 전력 (W)
+                        input(type="number", [(ngModel)]="surrogateConditions.rf_power", placeholder="예: 300", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 가스 유량 (sccm)
+                        input(type="number", [(ngModel)]="surrogateConditions.gas_flow", placeholder="예: 50", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 온도 (°C)
+                        input(type="number", [(ngModel)]="surrogateConditions.temperature", placeholder="예: 25", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 주파수 (MHz)
+                        input(type="number", [(ngModel)]="surrogateConditions.frequency", placeholder="예: 13.56", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 바이어스 전압 (V)
+                        input(type="number", [(ngModel)]="surrogateConditions.bias_voltage", placeholder="예: -100", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div(class="flex items-end")
+                        button((click)="runSurrogatePredict()", [disabled]="surrogatePredicting", class="w-full rounded-lg bg-gray-800 px-5 py-2 text-[13px] font-semibold text-white hover:bg-gray-700 disabled:opacity-50 transition-all")
+                            | {{surrogatePredicting ? '예측 중...' : '수치 예측'}}
+            //- Surrogate 결과
+            div(*ngIf="surrogateResult", class="px-6 pb-5")
+                div(*ngIf="surrogateResult.message", class="bg-amber-50 rounded-lg p-4 border border-amber-200")
+                    p(class="text-[13px] text-amber-700") {{surrogateResult.message}}
+                div(*ngIf="surrogateResult.prediction != null", class="bg-emerald-50 rounded-lg p-5 border border-emerald-200")
+                    div(class="flex items-center gap-6 flex-wrap")
+                        div
+                            p(class="text-[11px] text-emerald-600 font-medium uppercase") 예측값
+                            p(class="text-2xl font-bold text-gray-900") {{surrogateResult.prediction}} {{surrogateResult.unit}}
+                        div
+                            p(class="text-[11px] text-gray-500 font-medium") 95% 신뢰구간
+                            p(class="text-[13px] font-mono text-gray-700") {{surrogateResult.confidence_interval[0]}} ~ {{surrogateResult.confidence_interval[1]}} {{surrogateResult.unit}}
+                        div
+                            p(class="text-[11px] text-gray-500 font-medium") R² Score
+                            p(class="text-[13px] font-mono text-gray-700") {{surrogateResult.r2_score}}
+                        div
+                            p(class="text-[11px] text-gray-500 font-medium") RMSE
+                            p(class="text-[13px] font-mono text-gray-700") {{surrogateResult.rmse}}
+                        div
+                            p(class="text-[11px] text-gray-500 font-medium") 훈련 샘플
+                            p(class="text-[13px] font-mono text-gray-700") {{surrogateResult.n_training}}개
+                    div(*ngIf="surrogateResult.feature_importance", class="mt-4 pt-4 border-t border-emerald-200")
+                        p(class="text-[12px] font-medium text-gray-700 mb-2") Feature Importance
+                        div(class="flex flex-wrap gap-2")
+                            span(*ngFor="let fk of objectKeys(surrogateResult.feature_importance)", class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] border", [ngClass]="surrogateResult.feature_importance[fk].coefficient > 0 ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-red-50 border-red-200 text-red-700'")
+                                | {{surrogateResult.feature_importance[fk].label}}:
+                                strong {{surrogateResult.feature_importance[fk].coefficient}}
+
+    //- =====================================================================
+    //- Tab 2: 파라미터 DB
+    //- =====================================================================
+    div(*ngIf="activeTab === 'paramdb'", class="space-y-5")
+        div(class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+            div(class="px-6 py-4 border-b border-gray-100 flex items-center justify-between")
+                div
+                    h2(class="text-[15px] font-semibold text-gray-900") 파라미터 자동 추출
+                    p(class="mt-1 text-[12px] text-gray-400") 컬렉션 내 모든 문서에서 공정 파라미터를 regex + 패턴 매칭으로 추출합니다.
+                div(class="flex items-center gap-2")
+                    button((click)="extractParams(false)", [disabled]="paramDbLoading", class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-[13px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 transition-all")
+                        | {{paramDbLoading ? '추출 중...' : '추출 실행'}}
+                    button(*ngIf="paramDbExtracted", (click)="extractParams(true)", [disabled]="paramDbLoading", class="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-2 text-[12px] font-medium text-gray-600 hover:bg-gray-200 disabled:opacity-50")
+                        | 재추출
+
+        //- 요약 통계
+        div(*ngIf="paramDbExtracted && objectKeys(paramDbSummary).length > 0", class="space-y-4")
+            //- 조건 파라미터 요약
+            div(class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+                div(class="px-6 py-3 border-b border-gray-100")
+                    h3(class="text-[13px] font-semibold text-gray-700") 조건 파라미터 통계
+                div(class="overflow-x-auto")
+                    table(class="w-full text-[12px]")
+                        thead
+                            tr(class="bg-gray-50")
+                                th(class="px-4 py-2.5 text-left font-medium text-gray-500") 파라미터
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 문서수
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 값 수
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 최소
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 최대
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 평균
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 단위
+                        tbody
+                            tr(*ngFor="let pk of getConditionSummaryKeys()", class="border-t border-gray-100 hover:bg-gray-50")
+                                td(class="px-4 py-2.5 font-medium text-gray-900") {{paramDbSummary[pk].label}}
+                                td(class="px-4 py-2.5 text-right text-gray-600") {{paramDbSummary[pk].doc_count}}
+                                td(class="px-4 py-2.5 text-right text-gray-600") {{paramDbSummary[pk].count}}
+                                td(class="px-4 py-2.5 text-right font-mono text-gray-700") {{paramDbSummary[pk].min}}
+                                td(class="px-4 py-2.5 text-right font-mono text-gray-700") {{paramDbSummary[pk].max}}
+                                td(class="px-4 py-2.5 text-right font-mono text-gray-700") {{paramDbSummary[pk].mean}}
+                                td(class="px-4 py-2.5 text-right text-gray-400") {{paramDbSummary[pk].unit}}
+
+            //- 결과 파라미터 요약
+            div(*ngIf="getResultSummaryKeys().length > 0", class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+                div(class="px-6 py-3 border-b border-gray-100")
+                    h3(class="text-[13px] font-semibold text-gray-700") 결과 파라미터 통계
+                div(class="overflow-x-auto")
+                    table(class="w-full text-[12px]")
+                        thead
+                            tr(class="bg-gray-50")
+                                th(class="px-4 py-2.5 text-left font-medium text-gray-500") 파라미터
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 문서수
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 값 수
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 최소
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 최대
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 평균
+                                th(class="px-4 py-2.5 text-right font-medium text-gray-500") 단위
+                        tbody
+                            tr(*ngFor="let pk of getResultSummaryKeys()", class="border-t border-gray-100 hover:bg-gray-50")
+                                td(class="px-4 py-2.5 font-medium text-gray-900") {{paramDbSummary[pk].label}}
+                                td(class="px-4 py-2.5 text-right text-gray-600") {{paramDbSummary[pk].doc_count}}
+                                td(class="px-4 py-2.5 text-right text-gray-600") {{paramDbSummary[pk].count}}
+                                td(class="px-4 py-2.5 text-right font-mono text-gray-700") {{paramDbSummary[pk].min}}
+                                td(class="px-4 py-2.5 text-right font-mono text-gray-700") {{paramDbSummary[pk].max}}
+                                td(class="px-4 py-2.5 text-right font-mono text-gray-700") {{paramDbSummary[pk].mean}}
+                                td(class="px-4 py-2.5 text-right text-gray-400") {{paramDbSummary[pk].unit}}
+
+            //- 가스 종류 분포
+            div(*ngIf="paramDbSummary.gas_species", class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+                div(class="px-6 py-3 border-b border-gray-100")
+                    h3(class="text-[13px] font-semibold text-gray-700") 가스 종류 분포
+                div(class="px-6 py-4 flex flex-wrap gap-2")
+                    span(*ngFor="let gk of objectKeys(paramDbSummary.gas_species.distribution)", class="inline-flex items-center gap-1 rounded-full bg-cyan-50 border border-cyan-200 px-3 py-1 text-[12px] text-cyan-700")
+                        strong {{gk}}
+                        span(class="text-cyan-500") ({{paramDbSummary.gas_species.distribution[gk]}})
+
+            //- 문서별 상세
+            div(class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+                div(class="px-6 py-3 border-b border-gray-100")
+                    h3(class="text-[13px] font-semibold text-gray-700") 문서별 추출 결과 ({{paramDbDocuments.length}}건)
+                div(class="divide-y divide-gray-100 max-h-[500px] overflow-y-auto")
+                    div(*ngFor="let doc of paramDbDocuments", class="hover:bg-gray-50/50")
+                        div(class="px-6 py-3 flex items-center justify-between cursor-pointer", (click)="toggleDoc(doc.doc_id)")
+                            div(class="flex items-center gap-3 min-w-0")
+                                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-gray-400 flex-shrink-0 transition-transform", [ngClass]="expandedDoc === doc.doc_id ? 'rotate-90' : ''")
+                                    path(stroke-linecap="round", stroke-linejoin="round", d="m8.25 4.5 7.5 7.5-7.5 7.5")
+                                span(class="text-[13px] font-medium text-gray-900 truncate") {{doc.filename}}
+                            div(class="flex items-center gap-2 flex-shrink-0")
+                                span(class="text-[11px] text-gray-400") {{objectKeys(doc.params).length}} 파라미터
+                                span(class="text-[11px] text-gray-400") {{doc.chunks}} 청크
+                        div(*ngIf="expandedDoc === doc.doc_id", class="px-6 pb-4")
+                            div(*ngFor="let pk of objectKeys(doc.params)", class="mb-3")
+                                p(class="text-[11px] font-medium text-gray-500 mb-1") {{doc.params[pk].label}}
+                                div(class="flex flex-wrap gap-1.5")
+                                    span(*ngFor="let v of doc.params[pk].values", class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-[11px] font-mono", [ngClass]="doc.params[pk].category === 'condition' ? 'text-blue-700' : 'text-emerald-700'")
+                                        | {{v.value || v.raw_value}} {{v.unit || v.raw_unit}}
+
+    //- =====================================================================
+    //- Tab 3: 역설계
+    //- =====================================================================
+    div(*ngIf="activeTab === 'inverse'", class="space-y-5")
+        div(class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+            div(class="px-6 py-4 border-b border-gray-100")
+                h2(class="text-[15px] font-semibold text-gray-900") Inverse Condition Finder
+                p(class="mt-1 text-[12px] text-gray-400") 원하는 결과를 입력하면 해당 결과를 달성할 수 있는 공정 조건 범위를 문헌 기반으로 역추적합니다.
+            div(class="px-6 py-5")
+                div(class="flex flex-wrap gap-2 mb-4")
+                    button(*ngFor="let s of inverseSuggestions", (click)="useSuggestion(s)", class="rounded-full bg-gray-100 px-3 py-1.5 text-[11px] text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 transition-colors border border-gray-200 hover:border-emerald-200") {{s}}
+                div(class="flex gap-3")
+                    input(type="text", [(ngModel)]="inverseTarget", placeholder="목표 결과를 자연어로 입력 (예: Etch rate 200 nm/min with high selectivity)", class="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none", (keyup.enter)="runInverseSearch()")
+                    button((click)="runInverseSearch()", [disabled]="inverseLoading", class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-[13px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 transition-all")
+                        | {{inverseLoading ? '탐색 중...' : '역설계 실행'}}
+
+        //- 역설계 결과
+        div(*ngIf="inverseAnalyzed", class="space-y-4")
+            //- 신뢰도
+            div(class="bg-white rounded-xl border border-gray-200 shadow-sm p-5")
+                div(class="flex items-center justify-between")
+                    div
+                        p(class="text-[13px] font-semibold text-gray-900") 분석 신뢰도
+                        p(class="text-[12px] text-gray-400 mt-0.5") {{inverseEvidence.length}}개 근거 문서 기반
+                    div(class="flex items-center gap-2")
+                        div(class="w-32 bg-gray-200 rounded-full h-2.5")
+                            div(class="bg-emerald-500 h-2.5 rounded-full transition-all", [style.width.%]="inverseConfidence * 100")
+                        span(class="text-[14px] font-bold", [ngClass]="confidenceColor(inverseConfidence)") {{(inverseConfidence * 100).toFixed(0)}}% ({{confidenceLabel(inverseConfidence)}})
+
+            //- 제안 조건 범위
+            div(*ngIf="getInverseConditionKeys().length > 0", class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+                div(class="px-6 py-3 border-b border-gray-100")
+                    h3(class="text-[13px] font-semibold text-gray-700") 제안 공정 조건 범위
+                div(class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5")
+                    div(*ngFor="let ck of getInverseConditionKeys()", class="bg-gray-50 rounded-lg p-4 border border-gray-100")
+                        p(class="text-[12px] font-medium text-gray-500 mb-2") {{inverseConditions[ck].label}}
+                        div(class="flex items-baseline gap-1 mb-1")
+                            span(class="text-[18px] font-bold text-emerald-700") {{inverseConditions[ck].recommended_range[0]}} ~ {{inverseConditions[ck].recommended_range[1]}}
+                            span(class="text-[12px] text-gray-500") {{inverseConditions[ck].unit}}
+                        div(class="text-[11px] text-gray-400 space-y-0.5")
+                            p 전체 범위: {{inverseConditions[ck].min}} ~ {{inverseConditions[ck].max}} {{inverseConditions[ck].unit}}
+                            p 평균: {{inverseConditions[ck].mean}} (std: {{inverseConditions[ck].std}})
+                            p {{inverseConditions[ck].n_docs}}개 문서, {{inverseConditions[ck].sample_count}}개 샘플
+
+            //- 가스 제안
+            div(*ngIf="inverseConditions.gas_species", class="bg-white rounded-xl border border-gray-200 shadow-sm p-5")
+                p(class="text-[13px] font-medium text-gray-700 mb-2") 추천 가스
+                div(class="flex flex-wrap gap-2")
+                    span(*ngFor="let g of inverseConditions.gas_species.recommended", class="inline-flex items-center rounded-full bg-cyan-50 border border-cyan-200 px-3 py-1.5 text-[12px] font-medium text-cyan-700") {{g}}
+
+            //- 근거 문서
+            div(*ngIf="inverseEvidence.length > 0", class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+                div(class="px-6 py-3 border-b border-gray-100")
+                    h3(class="text-[13px] font-semibold text-gray-700") 근거 문서
+                div(class="divide-y divide-gray-100 max-h-[400px] overflow-y-auto")
+                    div(*ngFor="let ev of inverseEvidence; let i = index", class="px-6 py-3 hover:bg-gray-50/50")
+                        div(class="flex items-center gap-2 mb-1")
+                            span(class="text-[13px] font-medium text-gray-900 truncate") {{ev.filename}}
+                            span(class="text-[11px] font-mono text-emerald-600") {{(ev.relevance * 100).toFixed(1)}}%
+                        p(class="text-[12px] text-gray-600 leading-relaxed line-clamp-2") {{ev.text}}
+
+    //- =====================================================================
+    //- Tab 4: 불확실성
+    //- =====================================================================
+    div(*ngIf="activeTab === 'uncertainty'", class="space-y-5")
+        div(class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+            div(class="px-6 py-4 border-b border-gray-100")
+                h2(class="text-[15px] font-semibold text-gray-900") Uncertainty Estimator
+                p(class="mt-1 text-[12px] text-gray-400") 공정 조건을 입력하면 유사 실험 문헌 간 결과 차이를 분석하여 불확실성을 추정합니다 (파라미터 DB 구축 필요).
+            div(class="px-6 py-5")
+                div(class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 압력 (mTorr)
+                        input(type="number", [(ngModel)]="uncertaintyConditions.pressure", placeholder="50", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") RF 전력 (W)
+                        input(type="number", [(ngModel)]="uncertaintyConditions.rf_power", placeholder="300", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 가스유량 (sccm)
+                        input(type="number", [(ngModel)]="uncertaintyConditions.gas_flow", placeholder="50", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 온도 (°C)
+                        input(type="number", [(ngModel)]="uncertaintyConditions.temperature", placeholder="25", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 주파수 (MHz)
+                        input(type="number", [(ngModel)]="uncertaintyConditions.frequency", placeholder="13.56", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-700 mb-1") 바이어스 (V)
+                        input(type="number", [(ngModel)]="uncertaintyConditions.bias_voltage", placeholder="-100", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none")
+                div(class="mt-4")
+                    button((click)="runUncertainty()", [disabled]="uncertaintyLoading", class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-[13px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 transition-all")
+                        | {{uncertaintyLoading ? '분석 중...' : '불확실성 분석'}}
+
+        //- 불확실성 결과
+        div(*ngIf="uncertaintyAnalyzed", class="space-y-4")
+            div(*ngIf="getUncertaintyKeys().length === 0", class="bg-amber-50 rounded-xl p-5 border border-amber-200")
+                p(class="text-[13px] text-amber-700") 유사 조건의 문헌에서 충분한 결과 데이터를 찾을 수 없습니다. 조건을 조정하거나 더 많은 논문을 임베딩하세요.
+
+            div(*ngFor="let uk of getUncertaintyKeys()", class="bg-white rounded-xl border border-gray-200 shadow-sm p-5")
+                div(class="flex items-center justify-between mb-4")
+                    div
+                        p(class="text-[14px] font-semibold text-gray-900") {{uncertainties[uk].label}}
+                        p(class="text-[11px] text-gray-400") {{uncertainties[uk].n_samples}}개 유사 실험 기반
+                    div(class="flex items-center gap-2")
+                        span(class="text-[11px] text-gray-500") 신뢰도
+                        div(class="w-20 bg-gray-200 rounded-full h-2")
+                            div(class="h-2 rounded-full transition-all", [ngClass]="reliabilityColor(uncertainties[uk].reliability)", [style.width.%]="uncertainties[uk].reliability * 100")
+                        span(class="text-[12px] font-mono font-medium") {{(uncertainties[uk].reliability * 100).toFixed(0)}}%
+                div(class="grid grid-cols-2 md:grid-cols-5 gap-4")
+                    div(class="bg-emerald-50 rounded-lg p-3 text-center")
+                        p(class="text-[11px] text-emerald-600 font-medium") 가중 평균
+                        p(class="text-[16px] font-bold text-gray-900") {{uncertainties[uk].mean}}
+                        p(class="text-[10px] text-gray-400") {{uncertainties[uk].unit}}
+                    div(class="bg-blue-50 rounded-lg p-3 text-center")
+                        p(class="text-[11px] text-blue-600 font-medium") 95% CI 하한
+                        p(class="text-[16px] font-bold text-gray-900") {{uncertainties[uk].ci_lower}}
+                        p(class="text-[10px] text-gray-400") {{uncertainties[uk].unit}}
+                    div(class="bg-blue-50 rounded-lg p-3 text-center")
+                        p(class="text-[11px] text-blue-600 font-medium") 95% CI 상한
+                        p(class="text-[16px] font-bold text-gray-900") {{uncertainties[uk].ci_upper}}
+                        p(class="text-[10px] text-gray-400") {{uncertainties[uk].unit}}
+                    div(class="bg-gray-50 rounded-lg p-3 text-center")
+                        p(class="text-[11px] text-gray-500 font-medium") 표준편차
+                        p(class="text-[16px] font-bold text-gray-900") {{uncertainties[uk].std}}
+                    div(class="bg-gray-50 rounded-lg p-3 text-center")
+                        p(class="text-[11px] text-gray-500 font-medium") 범위
+                        p(class="text-[14px] font-bold text-gray-900") {{uncertainties[uk].min}} ~ {{uncertainties[uk].max}}
+
+            //- 유사 문서 목록
+            div(*ngIf="uncertaintySimilarDocs.length > 0", class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+                div(class="px-6 py-3 border-b border-gray-100")
+                    h3(class="text-[13px] font-semibold text-gray-700") 유사 조건 문서 ({{uncertaintySimilarDocs.length}}건)
+                div(class="divide-y divide-gray-100 max-h-[300px] overflow-y-auto")
+                    div(*ngFor="let d of uncertaintySimilarDocs", class="px-6 py-2.5 flex items-center justify-between hover:bg-gray-50")
+                        span(class="text-[12px] text-gray-900 truncate") {{d.filename}}
+                        span(class="text-[11px] font-mono text-emerald-600 flex-shrink-0 ml-2") 유사도 {{(d.similarity * 100).toFixed(1)}}%
+
+    //- =====================================================================
+    //- Tab 5: 파라미터 분석
+    //- =====================================================================
+    div(*ngIf="activeTab === 'analysis'", class="space-y-5")
+        div(class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+            div(class="px-6 py-4 border-b border-gray-100")
+                h2(class="text-[15px] font-semibold text-gray-900") 파라미터 심층 분석
+                p(class="mt-1 text-[12px] text-gray-400") 특정 공정 파라미터의 영향을 문헌 기반으로 분석합니다.
+            div(class="px-6 py-5")
+                div(class="flex gap-3")
+                    input(type="text", [(ngModel)]="analysisParam", placeholder="분석할 파라미터 (예: RF power, chamber pressure, gas flow rate...)", class="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none", (keyup.enter)="analyzeParam()")
+                    button((click)="analyzeParam()", [disabled]="analyzing", class="inline-flex items-center gap-2 rounded-lg bg-gray-800 px-6 py-2.5 text-[13px] font-semibold text-white hover:bg-gray-700 disabled:opacity-50 transition-all")
+                        | {{analyzing ? '분석 중...' : '분석'}}
+
+        div(*ngIf="paramAnalysis.length > 0", class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden")
+            div(class="px-6 py-3 border-b border-gray-100")
+                h3(class="text-[13px] font-semibold text-gray-700") "{{analysisParamName}}" 관련 문헌 분석 결과
+            div(class="divide-y divide-gray-100 max-h-[600px] overflow-y-auto")
+                div(*ngFor="let item of paramAnalysis; let i = index", class="px-6 py-3 hover:bg-gray-50/50")
+                    div(class="flex items-center justify-between mb-1")
+                        span(class="text-[12px] font-medium text-gray-900 truncate flex-1") {{item.filename}}
+                        div(class="flex items-center gap-2 flex-shrink-0 ml-2")
+                            span(class="text-[10px] text-gray-400") {{item.query}}
+                            span(class="text-[11px] font-mono text-emerald-600") {{(item.score * 100).toFixed(1)}}%
+                    p(class="text-[12px] text-gray-600 leading-relaxed line-clamp-3") {{item.text}}

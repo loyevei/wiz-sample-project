@@ -1,0 +1,125 @@
+div(class="flex flex-col h-full bg-white")
+    //- Header
+    div(class="flex items-center justify-between border-b border-gray-200 px-6 py-3 flex-shrink-0")
+        div(class="flex items-center gap-3")
+            div(class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 text-white")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-5")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z")
+            h1(class="text-lg font-semibold text-gray-900") AI Research Assistant
+        div(class="flex items-center gap-2")
+            //- Tool count badge
+            div(*ngIf="availableTools.length > 0", class="flex items-center gap-1 px-2 py-1 bg-violet-50 text-violet-600 rounded-full text-xs font-medium")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3.5")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z")
+                span {{availableTools.length}} tools
+
+            //- Clear button
+            button((click)="clearChat()", class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors", title="대화 초기화")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0")
+
+    //- Chat Messages Area
+    div(#chatContainer="", class="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4")
+        //- Welcome message (no messages yet)
+        div(*ngIf="chatMessages.length === 0", class="flex flex-col items-center justify-center h-full text-center")
+            div(class="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-4")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-8 text-white")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z")
+            h2(class="text-lg font-semibold text-gray-900 mb-2") 플라즈마 연구 AI 어시스턴트
+            p(class="text-[13px] text-gray-500 max-w-md") 논문 검색, 공정 예측, 진단 분석, 이론 연구 등 플라즈마 연구를 도와드립니다. 질문하시면 해당 연구 도구 페이지로 안내해 드립니다.
+            div(class="flex flex-wrap gap-2 mt-6 justify-center")
+                button(*ngFor="let q of ['플라즈마 에칭 선택비 향상 방법은?', 'RF power가 식각 속도에 미치는 영향은?', 'OES와 Langmuir probe 비교해줘', 'Boltzmann 방정식 관련 이론 분석해줘']", (click)="chatInput = q; sendChat()", class="px-3 py-1.5 bg-gray-100 hover:bg-violet-50 text-gray-600 hover:text-violet-700 rounded-full text-xs transition-colors")
+                    | {{q}}
+
+        //- Message list
+        ng-container(*ngFor="let msg of chatMessages; let i = index")
+            //- User message
+            div(*ngIf="msg.role === 'user'", class="flex justify-end")
+                div(class="max-w-[75%]")
+                    div(*ngIf="msg.collapsed", (click)="toggleCollapse(i)", class="px-4 py-2 bg-indigo-50 text-indigo-400 rounded-2xl rounded-br-md text-xs cursor-pointer hover:bg-indigo-100 truncate max-w-[200px]")
+                        | {{msg.content}}
+                    div(*ngIf="!msg.collapsed", class="px-4 py-2.5 bg-indigo-600 text-white rounded-2xl rounded-br-md text-[13px] leading-relaxed whitespace-pre-wrap")
+                        | {{msg.content}}
+
+            //- Assistant message
+            div(*ngIf="msg.role === 'assistant'", class="flex justify-start")
+                div(class="max-w-[85%] space-y-2")
+                    //- Collapsed assistant
+                    div(*ngIf="msg.collapsed", (click)="toggleCollapse(i)", class="px-4 py-2 bg-gray-50 text-gray-400 rounded-2xl rounded-bl-md text-xs cursor-pointer hover:bg-gray-100 truncate max-w-[300px]")
+                        | {{msg.content?.substring(0, 80) || '(tool calls)'}}...
+
+                    //- Expanded assistant
+                    ng-container(*ngIf="!msg.collapsed")
+                        //- Tool calls
+                        ng-container(*ngFor="let tc of msg.toolCalls; let j = index")
+                            //- Tool Use (navigate_to_page는 숨김)
+                            div(*ngIf="tc.type === 'use' && tc.name !== 'navigate_to_page'", class="border border-amber-200 bg-amber-50 rounded-xl overflow-hidden")
+                                div((click)="toggleToolCollapse(msg, j)", class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-amber-100 transition-colors")
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3.5 text-amber-600 flex-shrink-0")
+                                        path(stroke-linecap="round", stroke-linejoin="round", d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z")
+                                    span(class="text-xs font-medium text-amber-700") 🔧 {{tc.name}}
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3 text-amber-400 ml-auto", [class.rotate-180]="!tc.collapsed")
+                                        path(stroke-linecap="round", stroke-linejoin="round", d="m19.5 8.25-7.5 7.5-7.5-7.5")
+                                div(*ngIf="!tc.collapsed", class="px-3 pb-2")
+                                    pre(class="text-xs text-amber-800 bg-amber-100/50 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap") {{formatToolInput(tc.input)}}
+
+                            //- Tool Result (navigate_to_page는 숨김)
+                            div(*ngIf="tc.type === 'result' && tc.name !== 'navigate_to_page'", class="border border-emerald-200 bg-emerald-50 rounded-xl overflow-hidden")
+                                div((click)="toggleToolCollapse(msg, j)", class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-emerald-100 transition-colors")
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3.5 text-emerald-600 flex-shrink-0")
+                                        path(stroke-linecap="round", stroke-linejoin="round", d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z")
+                                    span(class="text-xs font-medium text-emerald-700") ✅ {{tc.name}} 결과
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3 text-emerald-400 ml-auto", [class.rotate-180]="!tc.collapsed")
+                                        path(stroke-linecap="round", stroke-linejoin="round", d="m19.5 8.25-7.5 7.5-7.5-7.5")
+                                div(*ngIf="!tc.collapsed", class="px-3 pb-2")
+                                    pre(class="text-xs text-emerald-800 bg-emerald-100/50 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto") {{tc.result}}
+
+                        //- Intent classification badge
+                        div(*ngIf="msg.intent", class="flex items-center gap-2")
+                            div(class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border", [ngClass]="getIntentBadgeClass(msg.intent)")
+                                span {{getPageConfig(msg.intent).icon}}
+                                span {{getPageConfig(msg.intent).label_ko}} 분석
+                            span(class="text-[10px] text-gray-400 italic") 잠시 후 해당 페이지로 이동합니다
+
+                        //- Text content (Markdown rendered)
+                        div(*ngIf="msg.content", class="px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl rounded-bl-md text-[13px] leading-relaxed")
+                            div([innerHTML]="renderMarkdown(msg.content)")
+
+                        //- Navigation Cards (페이지 이동 버튼)
+                        div(*ngIf="msg.navigations && msg.navigations.length > 0", class="space-y-2")
+                            div(*ngFor="let nav of msg.navigations", class="group")
+                                button((click)="navigateToPage(nav)", class="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl hover:from-violet-100 hover:to-indigo-100 hover:border-violet-300 transition-all cursor-pointer text-left")
+                                    div(class="flex items-center justify-center w-10 h-10 rounded-lg bg-white shadow-sm flex-shrink-0")
+                                        span(class="text-xl") {{getPageConfig(nav.page).icon}}
+                                    div(class="flex-1 min-w-0")
+                                        div(class="flex items-center gap-2")
+                                            span(class="text-[13px] font-semibold text-gray-900") {{nav.title_ko}}
+                                            span(class="text-xs text-gray-400") {{nav.title_en}}
+                                        div(*ngIf="nav.query", class="text-xs text-gray-500 mt-0.5 truncate")
+                                            | 🔍 {{nav.query}}
+                                    div(class="flex-shrink-0 text-violet-400 group-hover:text-violet-600 transition-colors")
+                                        svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-5")
+                                            path(stroke-linecap="round", stroke-linejoin="round", d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3")
+
+        //- Loading indicator
+        div(*ngIf="chatLoading", class="flex justify-start")
+            div(class="px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl rounded-bl-md")
+                div(class="flex items-center gap-2")
+                    div(class="flex gap-1")
+                        div(class="w-2 h-2 bg-violet-400 rounded-full animate-bounce", style="animation-delay: 0ms")
+                        div(class="w-2 h-2 bg-violet-400 rounded-full animate-bounce", style="animation-delay: 150ms")
+                        div(class="w-2 h-2 bg-violet-400 rounded-full animate-bounce", style="animation-delay: 300ms")
+                    span(class="text-xs text-gray-400") 생각하는 중...
+
+    //- Input Area
+    div(class="flex-shrink-0 border-t border-gray-200 px-4 py-3 bg-white")
+        div(class="flex items-end gap-2 max-w-4xl mx-auto")
+            div(class="flex-1 relative")
+                textarea(#chatInputEl="", [(ngModel)]="chatInput", (keydown)="onKeydown($event)", placeholder="플라즈마 연구에 대해 질문하세요...", rows="1", class="w-full resize-none rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-[13px] text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 focus:outline-none transition-colors", style="max-height: 120px; min-height: 40px;")
+            //- Send / Cancel button
+            button(*ngIf="!chatLoading", (click)="sendChat()", [disabled]="!chatInput.trim()", class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-white transition-colors", [class]="chatInput.trim() ? 'bg-violet-600 hover:bg-violet-700' : 'bg-gray-300 cursor-not-allowed'")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-5")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5")
+            button(*ngIf="chatLoading", (click)="cancelChat()", class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white transition-colors")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-5")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z")

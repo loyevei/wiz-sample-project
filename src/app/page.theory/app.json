@@ -1,0 +1,12 @@
+{
+    "id": "page.theory",
+    "mode": "page",
+    "title": "/theory",
+    "namespace": "theory",
+    "category": "theory",
+    "viewuri": "/theory",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-theory()"
+}

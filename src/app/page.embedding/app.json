@@ -1,0 +1,12 @@
+{
+    "id": "page.embedding",
+    "mode": "page",
+    "title": "PDF \uc784\ubca0\ub529",
+    "namespace": "embedding",
+    "category": "embedding",
+    "viewuri": "/embedding",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-embedding()"
+}

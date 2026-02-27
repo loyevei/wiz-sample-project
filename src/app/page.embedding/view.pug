@@ -1,0 +1,384 @@
+nav(class="sticky top-0 z-20 bg-white shadow")
+    div(class="max-w-6xl px-4 sm:px-6 lg:px-8 py-3")
+        div(class="flex items-center justify-between")
+            div(class="min-w-0 flex-1")
+                h1(class="flex text-lg font-semibold text-zinc-950 gap-x-3 items-center")
+                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-6 text-indigo-600")
+                        path(stroke-linecap="round", stroke-linejoin="round", d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5")
+                    span 플라즈마 논문 PDF 임베딩
+
+div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
+
+    //- How It Works (collapsible)
+    div(class="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 overflow-hidden")
+        div(class="px-6 py-4 flex items-center justify-between cursor-pointer", (click)="showGuide = !showGuide")
+            div(class="flex items-center gap-3")
+                div(class="flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600")
+                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4")
+                        path(stroke-linecap="round", stroke-linejoin="round", d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z")
+                h3(class="text-[14px] font-semibold text-indigo-900") 사용 방법 안내
+            svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4 text-indigo-400 transition-transform", [class.rotate-180]="showGuide")
+                path(stroke-linecap="round", stroke-linejoin="round", d="m19.5 8.25-7.5 7.5-7.5-7.5")
+        div(*ngIf="showGuide", class="px-6 pb-5")
+            div(class="grid grid-cols-1 md:grid-cols-4 gap-4")
+                div(class="flex gap-3")
+                    div(class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold") 1
+                    div
+                        p(class="text-[13px] font-medium text-gray-900") 모델 & 컬렉션 선택
+                        p(class="text-[12px] text-gray-500 mt-0.5") 임베딩 모델과 저장할 Milvus 컬렉션을 선택하세요.
+                div(class="flex gap-3")
+                    div(class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold") 2
+                    div
+                        p(class="text-[13px] font-medium text-gray-900") PDF 파일 업로드
+                        p(class="text-[12px] text-gray-500 mt-0.5") 논문 PDF를 드래그하거나 선택하세요. 여러 파일 동시 가능.
+                div(class="flex gap-3")
+                    div(class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold") 3
+                    div
+                        p(class="text-[13px] font-medium text-gray-900") 스마트 추출 & 청킹
+                        p(class="text-[12px] text-gray-500 mt-0.5") 그림·수식·표를 감지하고 문맥 기반으로 텍스트를 분할합니다.
+                div(class="flex gap-3")
+                    div(class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold") 4
+                    div
+                        p(class="text-[13px] font-medium text-gray-900") 임베딩 & 저장
+                        p(class="text-[12px] text-gray-500 mt-0.5") 선택한 모델로 벡터를 생성하여 Milvus DB에 저장합니다.
+
+    //- 임베딩 설정 섹션
+    div(class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm")
+        div(class="px-6 py-4 border-b border-gray-100")
+            h2(class="text-[15px] font-semibold text-gray-900") 임베딩 설정
+
+        div(class="px-6 py-5 space-y-5")
+            //- 모델 선택
+            div(class="grid grid-cols-1 md:grid-cols-2 gap-5")
+                div
+                    label(class="block text-[13px] font-medium text-gray-700 mb-1.5") 임베딩 모델
+                    select([(ngModel)]="selectedModel", class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-[13px] text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
+                        optgroup(*ngFor="let group of modelGroups", [label]="group.label")
+                            option(*ngFor="let m of group.models", [value]="m.name") {{m.short_name}} — {{m.description}} ({{m.dim}}D)
+                    div(*ngIf="getSelectedModelInfo().name", class="mt-1.5 flex items-center gap-2")
+                        span(class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium", [ngClass]="getLangClass(getSelectedModelInfo().lang)") {{getLangLabel(getSelectedModelInfo().lang)}}
+                        span(class="text-[11px] text-gray-400") {{getSelectedModelInfo().dim}}차원 · max {{getSelectedModelInfo().max_seq_length}} tokens
+
+                //- 컬렉션 선택
+                div
+                    label(class="block text-[13px] font-medium text-gray-700 mb-1.5") Milvus 컬렉션
+                    div(class="flex items-center gap-2")
+                        select([(ngModel)]="selectedCollection", (ngModelChange)="onCollectionChange()", class="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-[13px] text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
+                            option(value="", disabled) 컬렉션을 선택하세요
+                            option(*ngFor="let c of collections", [value]="c.name") {{c.name}} ({{c.total_docs}}문서 / {{c.short_name}})
+                        button((click)="showCreateCollection = !showCreateCollection", class="flex items-center justify-center w-9 h-9 rounded-lg border border-gray-300 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 transition-colors", title="새 컬렉션 생성")
+                            svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4")
+                                path(stroke-linecap="round", stroke-linejoin="round", d="M12 4.5v15m7.5-7.5h-15")
+                    //- 컬렉션이 없을 때 안내
+                    div(*ngIf="collections.length === 0", class="mt-1.5 flex items-center gap-1.5")
+                        svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3.5 text-amber-500")
+                            path(stroke-linecap="round", stroke-linejoin="round", d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z")
+                        span(class="text-[12px] text-amber-600") 컬렉션이 없습니다. + 버튼을 눌러 새 컬렉션을 만드세요.
+
+            //- 새 컬렉션 생성 인라인
+            div(*ngIf="showCreateCollection", class="bg-indigo-50 rounded-lg p-4 border border-indigo-100")
+                div(class="flex items-center gap-2 mb-3")
+                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-indigo-600")
+                        path(stroke-linecap="round", stroke-linejoin="round", d="M12 4.5v15m7.5-7.5h-15")
+                    span(class="text-[13px] font-semibold text-indigo-900") 새 컬렉션 생성
+                div(class="flex items-center gap-3")
+                    input([(ngModel)]="newCollectionName", placeholder="컬렉션 이름 (영문/숫자/밑줄)", (keyup.enter)="createCollection()", class="flex-1 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
+                    button((click)="createCollection()", [disabled]="!newCollectionName.trim() || creatingCollection", class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all")
+                        svg(*ngIf="creatingCollection", class="animate-spin size-3.5", viewBox="0 0 24 24")
+                            circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                            path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                        | {{creatingCollection ? '생성 중...' : '생성'}}
+                    button((click)="showCreateCollection = false", class="text-[13px] text-gray-500 hover:text-gray-700 transition-colors") 취소
+                p(class="mt-2 text-[11px] text-gray-500") 선택된 모델({{getSelectedModelInfo().short_name || ''}})의 {{getSelectedModelInfo().dim || 768}}차원 스키마로 생성됩니다.
+
+            //- 청킹 옵션 (항상 표출)
+            div(class="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4")
+                //- 청킹 전략 선택 (버튼 그룹)
+                div
+                    label(class="block text-[12px] font-medium text-gray-600 mb-2") 청킹 전략
+                    div(class="flex flex-wrap gap-2")
+                        button(*ngFor="let s of chunkStrategies", (click)="selectedStrategy = s.name; onStrategyChange()", class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all border", [ngClass]="selectedStrategy === s.name ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-300 hover:text-indigo-600'")
+                            | {{s.label}}
+                    p(*ngIf="getSelectedStrategyInfo().description", class="mt-2 text-[11px] text-gray-500 leading-relaxed") {{getSelectedStrategyInfo().description}}
+                //- 전략별 파라미터
+                div(class="grid grid-cols-1 md:grid-cols-3 gap-4")
+                    div(*ngIf="getStrategyParams().includes('chunk_size')")
+                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 청크 크기 (문자)
+                        input(type="number", [(ngModel)]="chunkSize", min="100", max="2000", class="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
+                    div(*ngIf="getStrategyParams().includes('chunk_overlap')")
+                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 오버랩 (문자)
+                        input(type="number", [(ngModel)]="chunkOverlap", min="0", max="500", class="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
+                    div(*ngIf="getStrategyParams().includes('respect_sentences')")
+                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 문장 경계 존중
+                        div(class="flex items-center gap-2 mt-1")
+                            button((click)="respectSentences = !respectSentences", class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors", [ngClass]="respectSentences ? 'bg-indigo-600' : 'bg-gray-300'")
+                                span(class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform", [ngClass]="respectSentences ? 'translate-x-6' : 'translate-x-1'")
+                            span(class="text-[12px] text-gray-600") {{respectSentences ? 'ON' : 'OFF'}}
+                    div(*ngIf="getStrategyParams().includes('similarity_threshold')")
+                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 유사도 임계값
+                        input(type="number", [(ngModel)]="similarityThreshold", min="0", max="1", step="0.05", class="w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-[13px] text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none")
+                        p(class="text-[11px] text-gray-400 mt-0.5") 0~1 사이 값 (낮을수록 세밀 분할)
+
+    //- Upload Section
+    div(class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm")
+        div(class="px-6 py-5 border-b border-gray-100")
+            h2(class="text-[15px] font-semibold text-gray-900") PDF 파일 업로드
+            p(class="mt-1 text-[13px] text-gray-500") 그림·수식·표를 자동 감지하고 문맥 기반 시맨틱 청킹을 적용합니다.
+
+        div(class="px-6 py-6")
+            //- Drop Zone
+            div(
+                class="border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer",
+                [ngClass]="dragOver ? 'border-indigo-400 bg-indigo-50 scale-[1.01]' : 'border-gray-300 bg-gray-50 hover:border-indigo-300 hover:bg-indigo-50/50'",
+                (dragover)="onDragOver($event)",
+                (dragleave)="onDragLeave($event)",
+                (drop)="onDrop($event)",
+                (click)="openFileDialog()")
+                input(
+                    type="file",
+                    accept=".pdf",
+                    multiple,
+                    hidden,
+                    id="pdfFileInput",
+                    (change)="onFileSelect($event)")
+                div(class="flex flex-col items-center")
+                    div(class="flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 mb-4")
+                        svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-7")
+                            path(stroke-linecap="round", stroke-linejoin="round", d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5")
+                    p(class="text-[14px] font-medium text-gray-700") 파일을 드래그하거나 클릭하여 선택하세요
+                    p(class="text-[12px] text-gray-400 mt-1") PDF 파일만 지원 · 여러 파일 동시 업로드 가능
+
+            //- Selected Files
+            div(*ngIf="selectedFiles.length > 0", class="mt-5 space-y-2")
+                div(class="flex items-center justify-between mb-2")
+                    p(class="text-[13px] font-medium text-gray-700") 선택된 파일 ({{selectedFiles.length}}개)
+                    button((click)="selectedFiles = []", class="text-[12px] text-gray-400 hover:text-red-500 transition-colors") 모두 제거
+
+                div(*ngFor="let file of selectedFiles; let i = index", class="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors")
+                    div(class="flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 flex-shrink-0")
+                        svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-red-500")
+                            path(stroke-linecap="round", stroke-linejoin="round", d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z")
+                    div(class="flex-1 min-w-0")
+                        p(class="text-[13px] font-medium text-gray-900 truncate") {{file.name}}
+                        p(class="text-[11px] text-gray-400") {{formatSize(file.size)}}
+                    button((click)="removeFile(i); $event.stopPropagation()", class="text-gray-400 hover:text-red-500 transition-colors p-1 rounded hover:bg-red-50")
+                        svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4")
+                            path(stroke-linecap="round", stroke-linejoin="round", d="M6 18 18 6M6 6l12 12")
+
+            //- Upload Button & Progress
+            div(class="mt-5")
+                //- Progress Bar (during processing)
+                div(*ngIf="processing", class="mb-4")
+                    div(class="flex items-center justify-between mb-2")
+                        span(class="text-[13px] font-medium text-indigo-600") {{statusMessage}}
+                        span(class="text-[12px] text-gray-400") {{currentFileIndex + 1}} / {{totalFiles}}
+                    div(class="w-full bg-gray-200 rounded-full h-2")
+                        div(class="bg-indigo-600 h-2 rounded-full transition-all duration-500", [style.width.%]="progressPercent")
+
+                div(class="flex items-center gap-3")
+                    button(
+                        (click)="upload()",
+                        [disabled]="selectedFiles.length === 0 || processing || !selectedCollection",
+                        class="inline-flex items-center rounded-lg bg-indigo-600 px-6 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95")
+                        svg(class="animate-spin size-4 mr-2", viewBox="0 0 24 24", *ngIf="processing")
+                            circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                            path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                        | {{processing ? '처리 중...' : '업로드 및 임베딩 시작'}}
+                    button((click)="previewExtract()", [disabled]="selectedFiles.length === 0 || previewLoading || processing", class="inline-flex items-center rounded-lg bg-white border border-gray-300 px-4 py-2.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all")
+                        svg(class="animate-spin size-4 mr-1.5", viewBox="0 0 24 24", *ngIf="previewLoading")
+                            circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                            path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                        svg(*ngIf="!previewLoading", xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 mr-1.5")
+                            path(stroke-linecap="round", stroke-linejoin="round", d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z")
+                        | {{previewLoading ? '분석 중...' : '미리보기'}}
+                    span(*ngIf="!selectedCollection && !processing", class="text-[12px] text-amber-600") ⚠️ 컬렉션을 먼저 선택하세요
+
+    //- Preview Results
+    div(*ngIf="previewData", class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm")
+        div(class="px-6 py-4 border-b border-gray-100 flex items-center justify-between")
+            div(class="flex items-center gap-2")
+                h2(class="text-[15px] font-semibold text-gray-900") 미리보기 결과
+                span(class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-medium text-indigo-700") {{previewData.strategy_used}}
+                span(class="text-[11px] text-gray-400") {{previewData.filename}}
+            button((click)="previewData = null", class="text-[12px] text-gray-400 hover:text-gray-600 transition-colors") 닫기
+        div(class="px-6 py-5 space-y-5")
+            //- 요약 통계
+            div(class="grid grid-cols-2 md:grid-cols-5 gap-3")
+                div(class="bg-blue-50 rounded-lg px-4 py-3 text-center border border-blue-100")
+                    p(class="text-2xl font-bold text-blue-700") {{previewData.total_pages}}
+                    p(class="text-[11px] text-blue-600") 페이지
+                div(class="bg-purple-50 rounded-lg px-4 py-3 text-center border border-purple-100")
+                    p(class="text-2xl font-bold text-purple-700") {{previewData.total_chunks}}
+                    p(class="text-[11px] text-purple-600") 청크
+                div(class="bg-emerald-50 rounded-lg px-4 py-3 text-center border border-emerald-100")
+                    p(class="text-2xl font-bold text-emerald-700") {{previewData.figures}}
+                    p(class="text-[11px] text-emerald-600") 그림
+                div(class="bg-amber-50 rounded-lg px-4 py-3 text-center border border-amber-100")
+                    p(class="text-2xl font-bold text-amber-700") {{previewData.formulas}}
+                    p(class="text-[11px] text-amber-600") 수식
+                div(class="bg-rose-50 rounded-lg px-4 py-3 text-center border border-rose-100")
+                    p(class="text-2xl font-bold text-rose-700") {{previewData.tables}}
+                    p(class="text-[11px] text-rose-600") 표
+            //- 청크 타입 분포
+            div(*ngIf="getPreviewChunkTypeDist().length > 0")
+                p(class="text-[13px] font-medium text-gray-700 mb-2") 청크 타입 분포
+                div(class="flex flex-wrap gap-2")
+                    div(*ngFor="let item of getPreviewChunkTypeDist()", class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium", [ngClass]="getChunkTypeColor(item.type)")
+                        span {{getChunkTypeLabel(item.type)}}
+                        span(class="font-bold") {{item.count}}
+            //- 섹션 구조
+            div(*ngIf="previewData.sections && previewData.sections.length > 0")
+                p(class="text-[13px] font-medium text-gray-700 mb-2") 감지된 섹션 ({{previewData.sections.length}})
+                div(class="flex flex-wrap gap-2")
+                    span(*ngFor="let sec of previewData.sections", class="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 rounded-md text-[11px] text-gray-700")
+                        span(class="text-[10px] text-gray-400") p.{{sec.page}}
+                        span {{sec.title}}
+            //- 평균 청크 길이 & OCR
+            div(class="flex items-center gap-4 px-4 py-3 bg-gray-50 rounded-lg")
+                div(class="flex items-center gap-2")
+                    span(class="text-[12px] text-gray-500") 평균 청크 길이:
+                    span(class="text-[13px] font-semibold text-gray-900") {{previewData.avg_chunk_length}}자
+                div(*ngIf="previewData.ocr_extractions > 0", class="flex items-center gap-2")
+                    span(class="text-[12px] text-gray-500") OCR 추출:
+                    span(class="text-[13px] font-semibold text-gray-900") {{previewData.ocr_extractions}}건
+            //- 샘플 청크
+            div(*ngIf="previewData.sample_chunks && previewData.sample_chunks.length > 0")
+                p(class="text-[13px] font-medium text-gray-700 mb-2") 샘플 청크 (상위 {{previewData.sample_chunks.length}}개)
+                div(class="space-y-2 max-h-80 overflow-y-auto")
+                    div(*ngFor="let chunk of previewData.sample_chunks", class="p-3 bg-gray-50 rounded-lg border border-gray-100")
+                        div(class="flex items-center gap-2 mb-1.5")
+                            span(class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium", [ngClass]="getChunkTypeColor(chunk.chunk_type)") {{getChunkTypeLabel(chunk.chunk_type)}}
+                            span(class="text-[10px] text-gray-400") {{'#' + chunk.index}} · p.{{chunk.page_num}} · {{chunk.length}}자
+                            span(*ngIf="chunk.section_title", class="text-[10px] text-indigo-500 truncate") §{{chunk.section_title}}
+                        p(class="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap break-words") {{chunk.text}}
+
+    //- Processing Log
+    div(*ngIf="logs.length > 0", class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm")
+        div(class="px-6 py-4 border-b border-gray-100 flex items-center justify-between")
+            div(class="flex items-center gap-2")
+                h2(class="text-[15px] font-semibold text-gray-900") 처리 로그
+                span(class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600") {{logs.length}}
+            button((click)="logs = []", class="text-[12px] text-gray-400 hover:text-gray-600 transition-colors") 지우기
+        div(class="px-6 py-3 max-h-64 overflow-y-auto space-y-1")
+            div(*ngFor="let log of logs", class="flex items-start gap-3 py-1.5 border-b border-gray-50 last:border-0")
+                span(class="text-[11px] text-gray-400 font-mono flex-shrink-0 pt-px") {{log.time}}
+                span(class="text-[12px] leading-relaxed", [ngClass]="{'text-red-600 font-medium': log.type === 'error', 'text-green-600': log.type === 'success', 'text-gray-600': log.type === 'info'}") {{log.message}}
+
+    //- Stats Section
+    div(class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm")
+        div(class="px-6 py-4 border-b border-gray-100 flex items-center justify-between")
+            div(class="flex items-center gap-2")
+                h2(class="text-[15px] font-semibold text-gray-900") Milvus 컬렉션 현황
+                span(*ngIf="selectedCollection", class="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-medium text-indigo-700") {{selectedCollection}}
+            button((click)="loadStats()", class="inline-flex items-center gap-1 text-[12px] text-indigo-600 hover:text-indigo-500 font-medium transition-colors")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3.5", [class.animate-spin]="statsLoading")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182")
+                span 새로고침
+        div(class="px-6 py-5")
+            div(*ngIf="statsLoading", class="flex items-center justify-center gap-2 py-6")
+                svg(class="animate-spin size-5 text-indigo-600", viewBox="0 0 24 24")
+                    circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                    path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                span(class="text-[13px] text-gray-500") 통계 로딩 중...
+            div(*ngIf="!statsLoading")
+                div(*ngIf="!selectedCollection", class="text-center py-6")
+                    p(class="text-[13px] text-gray-400") 컬렉션을 선택하면 통계가 표시됩니다.
+
+                div(*ngIf="selectedCollection")
+                    div(class="grid grid-cols-1 md:grid-cols-3 gap-4")
+                        div(class="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-5 border border-blue-100")
+                            div(class="flex items-center gap-2 mb-2")
+                                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-blue-600")
+                                    path(stroke-linecap="round", stroke-linejoin="round", d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z")
+                                p(class="text-xs font-medium text-blue-600 uppercase tracking-wider") 총 문서 수
+                            p(class="text-3xl font-bold text-gray-900") {{stats.total_docs || 0}}
+                            p(class="text-[11px] text-gray-400 mt-1") 업로드된 PDF 파일
+
+                        div(class="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl p-5 border border-purple-100")
+                            div(class="flex items-center gap-2 mb-2")
+                                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-purple-600")
+                                    path(stroke-linecap="round", stroke-linejoin="round", d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z")
+                                p(class="text-xs font-medium text-purple-600 uppercase tracking-wider") 총 청크 수
+                            p(class="text-3xl font-bold text-gray-900") {{stats.total_chunks || 0}}
+                            p(class="text-[11px] text-gray-400 mt-1") 임베딩된 텍스트 조각
+
+                        div(class="bg-gradient-to-br from-green-50 to-green-100/50 rounded-xl p-5 border border-green-100")
+                            div(class="flex items-center gap-2 mb-2")
+                                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-green-600")
+                                    path(stroke-linecap="round", stroke-linejoin="round", d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5")
+                                p(class="text-xs font-medium text-green-600 uppercase tracking-wider") 임베딩 모델
+                            p(class="text-[14px] font-bold text-gray-900 mt-1") {{stats.model_short_name || 'N/A'}}
+                            p(class="text-[11px] text-gray-400 mt-1") {{stats.model_dim || 0}}차원
+
+                    //- 청크 타입 분포
+                    div(*ngIf="chunkTypeEntries.length > 0 && !chunkTypeStatsLoading", class="mt-5 pt-5 border-t border-gray-100")
+                        div(class="flex items-center justify-between mb-3")
+                            p(class="text-[13px] font-medium text-gray-700") 청크 타입 분포
+                            span(class="text-[11px] text-gray-400") 총 {{chunkTypeStats.total}}개 청크
+                        div(class="w-full h-2.5 rounded-full bg-gray-100 overflow-hidden flex mb-4")
+                            div(*ngFor="let entry of chunkTypeEntries", class="h-full transition-all", [ngClass]="entry.barColor", [style.width.%]="entry.percent")
+                        div(class="flex flex-wrap gap-3")
+                            div(*ngFor="let entry of chunkTypeEntries", class="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100")
+                                div(class="w-2.5 h-2.5 rounded-full flex-shrink-0", [ngClass]="entry.barColor")
+                                div
+                                    p(class="text-[13px] font-bold text-gray-900") {{entry.count}}
+                                    p(class="text-[10px] text-gray-500") {{entry.label}} ({{entry.percent}}%)
+                    div(*ngIf="chunkTypeStatsLoading", class="mt-5 pt-5 border-t border-gray-100 flex items-center justify-center gap-2 py-4")
+                        svg(class="animate-spin size-4 text-indigo-600", viewBox="0 0 24 24")
+                            circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                            path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                        span(class="text-[13px] text-gray-500") 청크 타입 분석 중...
+
+    //- 컬렉션 관리 테이블
+    div(class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm")
+        div(class="px-6 py-4 border-b border-gray-100 flex items-center justify-between")
+            div(class="flex items-center gap-2")
+                h2(class="text-[15px] font-semibold text-gray-900") 전체 컬렉션 목록
+                span(class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600") {{collections.length}}개
+            button((click)="loadCollections()", class="inline-flex items-center gap-1 text-[12px] text-indigo-600 hover:text-indigo-500 font-medium transition-colors")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3.5")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182")
+                span 새로고침
+
+        //- 컬렉션이 없을 때
+        div(*ngIf="collections.length === 0", class="px-6 py-10 text-center")
+            div(class="flex flex-col items-center gap-3")
+                div(class="flex items-center justify-center w-12 h-12 rounded-xl bg-gray-100 text-gray-400")
+                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-6")
+                        path(stroke-linecap="round", stroke-linejoin="round", d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z")
+                p(class="text-[13px] text-gray-500") 아직 생성된 컬렉션이 없습니다.
+                button((click)="showCreateCollection = true", class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-indigo-500 transition-colors")
+                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3.5")
+                        path(stroke-linecap="round", stroke-linejoin="round", d="M12 4.5v15m7.5-7.5h-15")
+                    | 첫 번째 컬렉션 만들기
+
+        //- 컬렉션 테이블
+        div(*ngIf="collections.length > 0", class="overflow-x-auto")
+            table(class="w-full text-[13px]")
+                thead
+                    tr(class="bg-gray-50 border-b border-gray-200")
+                        th(class="text-left px-6 py-3 font-medium text-gray-600") 이름
+                        th(class="text-left px-4 py-3 font-medium text-gray-600") 모델
+                        th(class="text-right px-4 py-3 font-medium text-gray-600") 문서
+                        th(class="text-right px-4 py-3 font-medium text-gray-600") 청크
+                        th(class="text-right px-6 py-3 font-medium text-gray-600") 작업
+                tbody
+                    tr(*ngFor="let c of collections", class="border-b border-gray-100 hover:bg-gray-50 transition-colors", [class.opacity-50]="deletingCollection === c.name")
+                        td(class="px-6 py-3 font-medium text-gray-900")
+                            div(class="flex items-center gap-2")
+                                span {{c.name}}
+                                span(*ngIf="c.name === selectedCollection", class="inline-flex items-center rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700") 선택됨
+                        td(class="px-4 py-3 text-gray-600")
+                            span(class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium bg-gray-100 text-gray-700") {{c.short_name}} ({{c.dim}}D)
+                        td(class="px-4 py-3 text-right text-gray-900") {{c.total_docs}}
+                        td(class="px-4 py-3 text-right text-gray-900") {{c.total_chunks}}
+                        td(class="px-6 py-3 text-right")
+                            button(*ngIf="deletingCollection !== c.name", (click)="deleteCollection(c.name)", class="inline-flex items-center gap-1 text-[12px] text-red-500 hover:text-red-700 transition-colors")
+                                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3.5")
+                                    path(stroke-linecap="round", stroke-linejoin="round", d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0")
+                                span 삭제
+                            div(*ngIf="deletingCollection === c.name", class="inline-flex items-center gap-1.5 text-[12px] text-gray-400")
+                                svg(class="animate-spin size-3.5", viewBox="0 0 24 24")
+                                    circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                                    path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                                span 삭제 중...

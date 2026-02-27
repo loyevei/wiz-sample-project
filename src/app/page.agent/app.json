@@ -1,0 +1,12 @@
+{
+    "id": "page.agent",
+    "mode": "page",
+    "title": "/agent",
+    "namespace": "agent",
+    "category": "agent",
+    "viewuri": "/agent",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-agent()"
+}
