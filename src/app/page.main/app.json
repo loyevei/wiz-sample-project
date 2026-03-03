@@ -4,7 +4,7 @@
     "title": "Home",
     "namespace": "main",
     "category": "landing",
-    "viewuri": "/",
+    "viewuri": "/main",
     "preview": "/main",
     "controller": "base",
     "layout": "layout.sidebar",
