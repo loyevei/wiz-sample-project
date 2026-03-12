@@ -1318,3 +1318,170 @@ def generate_hypothesis():
     except Exception as e:
         traceback.print_exc()
         wiz.response.status(500, message=str(e))
+
+
+# ==============================================================================
+# 논문 추천 (recommend)
+# ==============================================================================
+def recommend_papers():
+    """관심 분야 기반 논문 추천"""
+    try:
+        interests = wiz.request.query("interests", "")
+        collection_name = wiz.request.query("collection", "")
+
+        if not interests.strip():
+            wiz.response.status(400, message="관심 분야를 입력하세요.")
+
+        if not collection_name:
+            collection_name = _get_default_collection()
+
+        client = MilvusClient(uri=MILVUS_URI)
+        meta = _load_collection_meta()
+        col_meta = meta.get(collection_name, {})
+        model_name = col_meta.get("model_name", list(MODEL_REGISTRY.keys())[0])
+        model = SentenceTransformer(model_name)
+
+        query_vec = model.encode(interests).tolist()
+        results = client.search(
+            collection_name=collection_name,
+            data=[query_vec],
+            limit=10,
+            output_fields=["title", "text", "metadata"]
+        )
+
+        papers = []
+        for hit in results[0]:
+            entity = hit.get("entity", {})
+            papers.append({
+                "title": entity.get("title", "제목 없음"),
+                "text": (entity.get("text", "") or "")[:300],
+                "score": round(hit.get("distance", 0), 4),
+                "authors": (entity.get("metadata", {}) or {}).get("authors", "")
+            })
+
+        wiz.response.status(200, papers)
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))
+
+
+# ==============================================================================
+# 제안서 생성 (proposal)
+# ==============================================================================
+def generate_proposal():
+    """연구 제안서 초안 생성"""
+    try:
+        title = wiz.request.query("title", "")
+        objective = wiz.request.query("objective", "")
+        keywords = wiz.request.query("keywords", "")
+        collection_name = wiz.request.query("collection", "")
+
+        if not title.strip():
+            wiz.response.status(400, message="연구 제목을 입력하세요.")
+
+        if not collection_name:
+            collection_name = _get_default_collection()
+
+        # 키워드 기반으로 관련 문헌 검색
+        search_text = f"{title} {objective} {keywords}"
+        client = MilvusClient(uri=MILVUS_URI)
+        meta = _load_collection_meta()
+        col_meta = meta.get(collection_name, {})
+        model_name = col_meta.get("model_name", list(MODEL_REGISTRY.keys())[0])
+        model = SentenceTransformer(model_name)
+
+        query_vec = model.encode(search_text).tolist()
+        results = client.search(
+            collection_name=collection_name,
+            data=[query_vec],
+            limit=5,
+            output_fields=["title", "text", "metadata"]
+        )
+
+        references = []
+        context_texts = []
+        for hit in results[0]:
+            entity = hit.get("entity", {})
+            ref_title = entity.get("title", "제목 없음")
+            references.append(ref_title)
+            context_texts.append(entity.get("text", "")[:200])
+
+        # 제안서 초안 구성
+        kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+        kw_str = ", ".join(kw_list) if kw_list else "플라즈마 공정"
+
+        proposal = {
+            "background": f"본 연구는 '{title}'에 관한 것으로, {kw_str} 분야의 최근 연구 동향을 기반으로 합니다. "
+                         f"관련 문헌 {len(references)}편을 분석한 결과, 해당 분야에서 추가적인 연구가 필요한 것으로 판단됩니다. "
+                         f"{objective}" if objective else f"본 연구는 '{title}'에 관한 것입니다.",
+            "methodology": f"1) {kw_str} 관련 실험 설계 및 파라미터 최적화\n"
+                          f"2) 관련 문헌 기반 비교 분석\n"
+                          f"3) 실험 결과 검증 및 통계적 유의성 분석\n"
+                          f"4) 결과 해석 및 모델링",
+            "expected_results": f"본 연구를 통해 {kw_str} 분야에서의 새로운 지견을 확보하고, "
+                               f"관련 공정의 효율성 향상에 기여할 것으로 기대됩니다.",
+            "references": references
+        }
+
+        wiz.response.status(200, proposal)
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))
+
+
+# ==============================================================================
+# 특허 검색 (patent)
+# ==============================================================================
+def search_patents():
+    """특허 관련 기술 검색"""
+    try:
+        query = wiz.request.query("query", "")
+        collection_name = wiz.request.query("collection", "")
+
+        if not query.strip():
+            wiz.response.status(400, message="검색어를 입력하세요.")
+
+        if not collection_name:
+            collection_name = _get_default_collection()
+
+        client = MilvusClient(uri=MILVUS_URI)
+        meta = _load_collection_meta()
+        col_meta = meta.get(collection_name, {})
+        model_name = col_meta.get("model_name", list(MODEL_REGISTRY.keys())[0])
+        model = SentenceTransformer(model_name)
+
+        # 특허 관련 키워드 추가하여 검색
+        patent_query = f"{query} patent method apparatus system process"
+        query_vec = model.encode(patent_query).tolist()
+        results = client.search(
+            collection_name=collection_name,
+            data=[query_vec],
+            limit=10,
+            output_fields=["title", "text", "metadata"]
+        )
+
+        patents = []
+        for hit in results[0]:
+            entity = hit.get("entity", {})
+            meta_data = entity.get("metadata", {}) or {}
+            patents.append({
+                "title": entity.get("title", "제목 없음"),
+                "text": (entity.get("text", "") or "")[:300],
+                "score": round(hit.get("distance", 0), 4),
+                "year": meta_data.get("year", ""),
+                "authors": meta_data.get("authors", "")
+            })
+
+        wiz.response.status(200, patents)
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))

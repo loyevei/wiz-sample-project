@@ -31,8 +31,24 @@ export class Component implements OnInit, OnDestroy {
         research: { icon: '🔬', label_ko: '주제 발굴', label_en: 'Research Discovery', color: 'violet' },
         prediction: { icon: '📊', label_ko: '공정 예측', label_en: 'Process Prediction', color: 'blue' },
         diagnosis: { icon: '🩺', label_ko: '진단 분석', label_en: 'Diagnostics Analysis', color: 'emerald' },
-        theory: { icon: '📐', label_ko: '이론 연구', label_en: 'Theory Analysis', color: 'amber' }
+        theory: { icon: '📐', label_ko: '이론 연구', label_en: 'Theory Analysis', color: 'amber' },
+        calculator: { icon: '🧮', label_ko: '플라즈마 계산기', label_en: 'Plasma Calculator', color: 'purple' },
+        experiment: { icon: '🧪', label_ko: '실험 관리', label_en: 'Experiment Manager', color: 'teal' },
+        analysis: { icon: '📈', label_ko: '데이터 분석', label_en: 'Data Analysis', color: 'cyan' },
+        collaboration: { icon: '👥', label_ko: '협업', label_en: 'Collaboration', color: 'green' }
     };
+
+    // 도메인 카드 목록 (quickActions)
+    public domainCards = [
+        { page: 'research', url: '/research', desc: '논문 탐색, 토픽맵, Research Gap 분석' },
+        { page: 'prediction', url: '/prediction', desc: '공정 예측 모델 및 최적화' },
+        { page: 'diagnosis', url: '/diagnosis', desc: '스펙트럼 분석, 이상탐지, 고장진단' },
+        { page: 'theory', url: '/theory', desc: '이론 시뮬레이션 및 모델링' },
+        { page: 'calculator', url: '/calculator', desc: '플라즈마 파라미터 계산' },
+        { page: 'experiment', url: '/experiment', desc: 'DOE 설계, 실험노트, 레시피' },
+        { page: 'analysis', url: '/analysis', desc: '데이터 플로팅, 통계, 커브피팅' },
+        { page: 'collaboration', url: '/collaboration', desc: '프로젝트 관리 및 팀 협업' }
+    ];
 
     // =========================================================================
     // Lifecycle

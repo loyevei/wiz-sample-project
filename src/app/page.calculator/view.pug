@@ -1,0 +1,228 @@
+nav(class="sticky top-0 z-20 bg-white shadow")
+    div(class="max-w-6xl px-4 sm:px-6 lg:px-8 py-3")
+        div(class="flex items-center justify-between")
+            h1(class="flex text-lg font-semibold text-zinc-950 gap-x-3 items-center")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-6 text-violet-600")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0 0 12 2.25Z")
+                span 플라즈마 계산기
+
+div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
+    //- Tab Navigation
+    div(class="bg-white rounded-xl border border-gray-200 shadow-sm")
+        div(class="border-b border-gray-200 overflow-x-auto")
+            nav(class="flex -mb-px px-4 min-w-max")
+                button(*ngFor="let tab of tabs", (click)="switchTab(tab.id)", class="px-4 py-3 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap", [ngClass]="activeTab === tab.id ? 'border-violet-500 text-violet-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'") {{tab.label}}
+
+        //- ===== Tab: 플라즈마 계산 =====
+        div(*ngIf="activeTab === 'plasma'", class="px-6 py-5")
+            h2(class="text-[15px] font-semibold text-gray-900 mb-4") 플라즈마 기본 파라미터 계산
+            div(class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") 전자 온도 Te (eV)
+                    input(type="number", [(ngModel)]="plasmaInputs.Te", step="0.1", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") 전자 밀도 ne (m⁻³)
+                    input(type="number", [(ngModel)]="plasmaInputs.ne", step="1e14", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") 가스 종류
+                    select([(ngModel)]="plasmaInputs.gas", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                        option(value="Ar") Ar
+                        option(value="N2") N₂
+                        option(value="O2") O₂
+                        option(value="He") He
+                        option(value="H2") H₂
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") 압력 (mTorr)
+                    input(type="number", [(ngModel)]="plasmaInputs.pressure", step="1", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") 자기장 B (T)
+                    input(type="number", [(ngModel)]="plasmaInputs.B", step="0.001", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+            button((click)="calculatePlasma()", [disabled]="plasmaCalculating", class="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-violet-500 disabled:opacity-50 transition-all active:scale-95")
+                span(*ngIf="!plasmaCalculating") 계산
+                span(*ngIf="plasmaCalculating") 계산 중...
+
+            div(*ngIf="plasmaResults", class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3")
+                div(*ngFor="let key of objectKeys(plasmaResults)", class="bg-violet-50 border border-violet-100 rounded-lg px-4 py-3")
+                    div(class="text-[11px] text-violet-500 font-medium") {{plasmaResults[key].label}}
+                    div(class="text-lg font-bold text-violet-900 mt-0.5 font-mono") {{plasmaResults[key].value}}
+                    div(class="text-[11px] text-violet-400 mt-0.5") {{plasmaResults[key].unit}}
+
+        //- ===== Tab: 단위 변환 =====
+        div(*ngIf="activeTab === 'units'", class="px-6 py-5")
+            h2(class="text-[15px] font-semibold text-gray-900 mb-4") 단위 변환
+            div(class="flex flex-wrap gap-2 mb-4")
+                button(*ngFor="let cat of unitCategories", (click)="unitCategory = cat.id; onCategoryChange()", class="px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors", [ngClass]="unitCategory === cat.id ? 'bg-violet-100 border-violet-300 text-violet-700' : 'bg-white border-gray-200 text-gray-600 hover:border-violet-200'") {{cat.label}}
+            div(class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") 값
+                    input(type="number", [(ngModel)]="unitFromVal", class="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") From
+                    select([(ngModel)]="unitFromUnit", class="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                        option(*ngFor="let u of getUnitsForCategory()", [value]="u") {{u}}
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") To
+                    select([(ngModel)]="unitToUnit", class="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                        option(*ngFor="let u of getUnitsForCategory()", [value]="u") {{u}}
+                div
+                    button((click)="convertUnit()", class="w-full rounded-lg bg-violet-600 px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-violet-500 transition-all") 변환
+            div(*ngIf="unitResult !== null", class="mt-4 bg-violet-50 border border-violet-100 rounded-lg px-6 py-4 text-center")
+                span(class="text-[14px] text-gray-700") {{unitFromVal}} {{unitFromUnit}} =
+                span(class="text-xl font-bold text-violet-700 ml-2 font-mono") {{formatSci(unitResult)}}
+                span(class="text-[14px] text-violet-600 ml-1") {{unitToUnit}}
+
+        //- ===== Tab: 물리 상수 =====
+        div(*ngIf="activeTab === 'constants'", class="px-6 py-5")
+            div(class="flex items-center justify-between mb-4")
+                h2(class="text-[15px] font-semibold text-gray-900") 물리 상수 테이블
+                input(type="text", [(ngModel)]="constantsFilter", placeholder="검색...", class="px-3 py-1.5 rounded-lg border border-gray-300 text-[12px] w-48 focus:ring-2 focus:ring-violet-500 outline-none")
+            div(class="overflow-hidden rounded-lg border border-gray-200")
+                table(class="w-full text-[13px]")
+                    thead(class="bg-gray-50")
+                        tr
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 기호
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 이름
+                            th(class="px-4 py-2.5 text-right text-[11px] font-semibold text-gray-500 uppercase") 값
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 단위
+                    tbody(class="divide-y divide-gray-100")
+                        tr(*ngFor="let c of filteredConstants()", class="hover:bg-gray-50")
+                            td(class="px-4 py-2.5 font-mono font-bold text-violet-700") {{c.symbol}}
+                            td(class="px-4 py-2.5 text-gray-900") {{c.name}}
+                            td(class="px-4 py-2.5 text-right font-mono text-gray-700") {{formatSci(c.value)}}
+                            td(class="px-4 py-2.5 text-gray-500") {{c.unit}}
+
+        //- ===== Tab: 주요 수식 =====
+        div(*ngIf="activeTab === 'equations'", class="px-6 py-5")
+            h2(class="text-[15px] font-semibold text-gray-900 mb-4") 플라즈마 주요 수식
+            div(class="grid grid-cols-1 md:grid-cols-2 gap-4")
+                div(class="bg-white border border-gray-200 rounded-lg p-4")
+                    h3(class="text-[13px] font-semibold text-violet-700 mb-2") Debye 길이
+                    div(class="bg-gray-50 rounded px-3 py-2 font-mono text-[13px] text-gray-800") λ_D = √(ε₀·k_B·T_e / n_e·e²)
+                    p(class="text-[12px] text-gray-500 mt-2") 플라즈마 내 전하 차폐 거리. 전자 온도가 높고 밀도가 낮을수록 길어짐.
+                div(class="bg-white border border-gray-200 rounded-lg p-4")
+                    h3(class="text-[13px] font-semibold text-violet-700 mb-2") 플라즈마 주파수
+                    div(class="bg-gray-50 rounded px-3 py-2 font-mono text-[13px] text-gray-800") ω_pe = √(n_e·e² / m_e·ε₀)
+                    p(class="text-[12px] text-gray-500 mt-2") 전자의 집단 진동 주파수. 이보다 낮은 주파수의 전자기파는 플라즈마를 투과하지 못함.
+                div(class="bg-white border border-gray-200 rounded-lg p-4")
+                    h3(class="text-[13px] font-semibold text-violet-700 mb-2") 전자 평균 자유 경로
+                    div(class="bg-gray-50 rounded px-3 py-2 font-mono text-[13px] text-gray-800") λ_mfp = 1 / (n_g · σ)
+                    p(class="text-[12px] text-gray-500 mt-2") 전자가 충돌 없이 이동하는 평균 거리. 가스 밀도와 충돌 단면적에 반비례.
+                div(class="bg-white border border-gray-200 rounded-lg p-4")
+                    h3(class="text-[13px] font-semibold text-violet-700 mb-2") 전자 열속도
+                    div(class="bg-gray-50 rounded px-3 py-2 font-mono text-[13px] text-gray-800") v_th = √(8·k_B·T_e / π·m_e)
+                    p(class="text-[12px] text-gray-500 mt-2") Maxwell-Boltzmann 분포에서의 전자 평균 속도.
+                div(class="bg-white border border-gray-200 rounded-lg p-4")
+                    h3(class="text-[13px] font-semibold text-violet-700 mb-2") Bohm 속도
+                    div(class="bg-gray-50 rounded px-3 py-2 font-mono text-[13px] text-gray-800") v_B = √(k_B·T_e / m_i)
+                    p(class="text-[12px] text-gray-500 mt-2") 쉬스(sheath) 경계에서 이온이 가져야 할 최소 속도 (Bohm criterion).
+                div(class="bg-white border border-gray-200 rounded-lg p-4")
+                    h3(class="text-[13px] font-semibold text-violet-700 mb-2") 이온 라모어 반경
+                    div(class="bg-gray-50 rounded px-3 py-2 font-mono text-[13px] text-gray-800") r_L = m_i·v_⊥ / (q·B)
+                    p(class="text-[12px] text-gray-500 mt-2") 자기장 내 하전입자의 선회 반경. 자기장이 강할수록 작아짐.
+                div(class="bg-white border border-gray-200 rounded-lg p-4")
+                    h3(class="text-[13px] font-semibold text-violet-700 mb-2") Paschen 법칙
+                    div(class="bg-gray-50 rounded px-3 py-2 font-mono text-[13px] text-gray-800") V_b = B·p·d / [ln(A·p·d) - ln(ln(1+1/γ))]
+                    p(class="text-[12px] text-gray-500 mt-2") 기체의 절연 파괴 전압. 압력×전극간격(pd) 곱의 함수.
+                div(class="bg-white border border-gray-200 rounded-lg p-4")
+                    h3(class="text-[13px] font-semibold text-violet-700 mb-2") Child-Langmuir 법칙
+                    div(class="bg-gray-50 rounded px-3 py-2 font-mono text-[13px] text-gray-800") J = (4/9)·ε₀·√(2q/m_i)·V^(3/2)/d²
+                    p(class="text-[12px] text-gray-500 mt-2") 쉬스 영역의 공간 전하 제한 전류 밀도. 이온 에칭 속도 결정 요인.
+
+        //- ===== Tab: Paschen 곡선 =====
+        div(*ngIf="activeTab === 'paschen'", class="px-6 py-5")
+            h2(class="text-[15px] font-semibold text-gray-900 mb-4") Paschen 곡선 계산기
+            div(class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") 가스 종류
+                    select([(ngModel)]="paschenGas", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                        option(value="Ar") Ar
+                        option(value="N2") N₂
+                        option(value="O2") O₂
+                        option(value="He") He
+                        option(value="H2") H₂
+                        option(value="Air") Air
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") pd 최소 (Torr·cm)
+                    input(type="number", [(ngModel)]="paschenPdMin", step="0.1", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") pd 최대 (Torr·cm)
+                    input(type="number", [(ngModel)]="paschenPdMax", step="10", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") γ (이차전자 계수)
+                    input(type="number", [(ngModel)]="paschenGamma", step="0.001", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-violet-500 outline-none")
+            button((click)="calculatePaschen()", [disabled]="paschenCalculating", class="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-violet-500 disabled:opacity-50 transition-all") 계산
+            div(*ngIf="paschenResult", class="mt-6")
+                div(class="grid grid-cols-3 gap-3 mb-4")
+                    div(class="bg-violet-50 border border-violet-100 rounded-lg px-4 py-3 text-center")
+                        div(class="text-[11px] text-violet-500") 최소 파괴 전압
+                        div(class="text-lg font-bold text-violet-700 font-mono") {{paschenResult.min_voltage?.toFixed(1)}} V
+                    div(class="bg-violet-50 border border-violet-100 rounded-lg px-4 py-3 text-center")
+                        div(class="text-[11px] text-violet-500") 최소 pd
+                        div(class="text-lg font-bold text-violet-700 font-mono") {{paschenResult.min_pd?.toFixed(2)}} Torr·cm
+                    div(class="bg-violet-50 border border-violet-100 rounded-lg px-4 py-3 text-center")
+                        div(class="text-[11px] text-violet-500") 계수 A / B
+                        div(class="text-lg font-bold text-violet-700 font-mono") {{paschenResult.A}} / {{paschenResult.B}}
+                div(*ngIf="paschenResult.curve", class="overflow-x-auto")
+                    table(class="w-full text-[12px]")
+                        thead(class="bg-gray-50")
+                            tr
+                                th(class="px-3 py-2 text-left font-semibold text-gray-500") pd (Torr·cm)
+                                th(class="px-3 py-2 text-right font-semibold text-gray-500") V_b (V)
+                        tbody(class="divide-y divide-gray-100")
+                            tr(*ngFor="let pt of paschenResult.curve", class="hover:bg-gray-50")
+                                td(class="px-3 py-1.5 font-mono") {{pt.pd.toFixed(2)}}
+                                td(class="px-3 py-1.5 text-right font-mono") {{pt.voltage.toFixed(1)}}
+
+        //- ===== Tab: 가스 DB =====
+        div(*ngIf="activeTab === 'gasdb'", class="px-6 py-5")
+            div(class="flex items-center justify-between mb-4")
+                h2(class="text-[15px] font-semibold text-gray-900") 플라즈마 공정 가스 데이터베이스
+                input(type="text", [(ngModel)]="gasFilter", placeholder="가스명, 화학식, 용도 검색...", class="px-3 py-1.5 rounded-lg border border-gray-300 text-[12px] w-64 focus:ring-2 focus:ring-violet-500 outline-none")
+            div(class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3")
+                div(*ngFor="let gas of filteredGases()", class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow")
+                    div(class="flex items-center justify-between mb-2")
+                        h3(class="text-[14px] font-bold text-gray-900") {{gas.formula}}
+                        span(class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold", [ngClass]="{'bg-purple-100 text-purple-700': gas.type === '불활성', 'bg-red-100 text-red-700': gas.type === '반응성', 'bg-pink-100 text-pink-700': gas.type === '환원성', 'bg-amber-100 text-amber-700': gas.type === '전구체'}") {{gas.type}}
+                    div(class="text-[12px] text-gray-500 mb-2") {{gas.name}}
+                    div(class="space-y-1 text-[12px]")
+                        div(class="flex justify-between")
+                            span(class="text-gray-500") 분자량
+                            span(class="font-mono text-gray-700") {{gas.mass}} amu
+                        div(class="flex justify-between")
+                            span(class="text-gray-500") 이온화 에너지
+                            span(class="font-mono text-gray-700") {{gas.ionE}} eV
+                        div(class="flex justify-between")
+                            span(class="text-gray-500") 충돌 단면적
+                            span(class="font-mono text-gray-700") {{formatSci(gas.crossSection)}} m²
+                    div(class="mt-2 pt-2 border-t border-gray-100")
+                        div(class="text-[11px] text-gray-400") 주요 용도
+                        div(class="text-[12px] text-gray-600 mt-0.5") {{gas.uses}}
+
+        //- ===== Tab: 장비 참조 =====
+        div(*ngIf="activeTab === 'equipment'", class="px-6 py-5")
+            div(class="flex items-center justify-between mb-4")
+                h2(class="text-[15px] font-semibold text-gray-900") 플라즈마 장비 참조
+                input(type="text", [(ngModel)]="equipFilter", placeholder="장비명, 유형, 용도 검색...", class="px-3 py-1.5 rounded-lg border border-gray-300 text-[12px] w-64 focus:ring-2 focus:ring-violet-500 outline-none")
+            div(class="overflow-hidden rounded-lg border border-gray-200")
+                table(class="w-full text-[13px]")
+                    thead(class="bg-gray-50")
+                        tr
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 장비명
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 유형
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 주파수
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 압력 범위
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 밀도 범위
+                            th(class="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500 uppercase") 용도
+                    tbody(class="divide-y divide-gray-100")
+                        tr(*ngFor="let eq of filteredEquipment()", class="hover:bg-gray-50")
+                            td(class="px-4 py-3 font-medium text-gray-900") {{eq.name}}
+                            td(class="px-4 py-3")
+                                span(class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold", [ngClass]="{'bg-violet-100 text-violet-700': eq.type === 'Source', 'bg-blue-100 text-blue-700': eq.type === 'Sputter'}") {{eq.type}}
+                            td(class="px-4 py-3 text-gray-600 font-mono text-[12px]") {{eq.freqRange}}
+                            td(class="px-4 py-3 text-gray-600 text-[12px]") {{eq.pressureRange}}
+                            td(class="px-4 py-3 text-gray-600 font-mono text-[12px]") {{eq.densityRange}}
+                            td(class="px-4 py-3 text-gray-600 text-[12px]") {{eq.apps}}
+
+    //- Helper template
+    ng-template(#objectKeys="", let-obj)
+        span {{obj | json}}

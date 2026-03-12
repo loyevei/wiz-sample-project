@@ -574,3 +574,93 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                                 div(class="bg-amber-500 h-1.5 rounded-full transition-all", [style.width.%]="(kw.frequency / maxFrequency) * 100")
                         span(class="text-[12px] text-gray-500 font-mono") {{kw.frequency}}회
                         button((click)="searchKeyword = kw.term; switchTab('discover'); searchAndRecommend()", class="opacity-0 group-hover:opacity-100 text-[11px] text-violet-600 hover:text-violet-500 font-medium transition-all") 추천
+
+        //- ========================================
+        //- 논문 추천 탭 (recommend)
+        //- ========================================
+        div(*ngIf="activeTab === 'recommend'")
+            div(class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6")
+                h2(class="text-[15px] font-semibold text-gray-900 mb-4") 관심 분야 기반 논문 추천
+                p(class="text-[13px] text-gray-500 mb-4") 연구 관심 분야를 입력하면, 저장된 컬렉션에서 관련 논문을 추천합니다.
+                div(class="space-y-4")
+                    textarea(class="w-full px-4 py-3 border border-gray-300 rounded-lg text-[13px] focus:ring-2 focus:ring-amber-200 focus:border-amber-400", rows="3", placeholder="관심 분야를 입력하세요 (예: 플라즈마 에칭 균일도 향상, 저온 CVD 박막 특성...)", [(ngModel)]="recInterests")
+                    div(class="flex items-center gap-3")
+                        button((click)="getRecommendations()", [disabled]="recLoading || !recInterests.trim()", class="px-6 py-2.5 bg-amber-600 text-white text-[13px] font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors")
+                            span(*ngIf="!recLoading") 추천 받기
+                            span(*ngIf="recLoading") 분석 중...
+
+            //- 추천 결과
+            div(*ngIf="recResults.length > 0", class="space-y-3")
+                div(*ngFor="let paper of recResults; let i = index", class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:border-amber-200 transition-colors")
+                    div(class="flex items-start gap-3")
+                        div(class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[11px] font-bold") {{i + 1}}
+                        div(class="flex-1")
+                            h3(class="text-[13px] font-semibold text-gray-900 mb-1") {{paper.title || '제목 없음'}}
+                            p(class="text-[12px] text-gray-500 mb-2 line-clamp-3") {{paper.abstract || paper.text || ''}}
+                            div(class="flex items-center gap-3")
+                                span(*ngIf="paper.score", class="text-[11px] text-amber-600 font-mono") 유사도: {{(paper.score * 100).toFixed(1)}}%
+                                span(*ngIf="paper.authors", class="text-[11px] text-gray-400") {{paper.authors}}
+
+        //- ========================================
+        //- 제안서 생성 탭 (proposal)
+        //- ========================================
+        div(*ngIf="activeTab === 'proposal'")
+            div(class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6")
+                h2(class="text-[15px] font-semibold text-gray-900 mb-4") 연구 제안서 초안 생성
+                p(class="text-[13px] text-gray-500 mb-4") 연구 주제와 목표를 입력하면, 저장된 문헌 기반으로 제안서 초안을 생성합니다.
+                div(class="space-y-4")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 연구 제목
+                        input(type="text", class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-[13px] focus:ring-2 focus:ring-amber-200 focus:border-amber-400", placeholder="연구 제목을 입력하세요", [(ngModel)]="proposalTitle")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 연구 목표
+                        textarea(class="w-full px-4 py-3 border border-gray-300 rounded-lg text-[13px] focus:ring-2 focus:ring-amber-200 focus:border-amber-400", rows="3", placeholder="연구의 주요 목표와 기대 성과를 입력하세요", [(ngModel)]="proposalObjective")
+                    div
+                        label(class="block text-[12px] font-medium text-gray-600 mb-1") 핵심 키워드 (쉼표 구분)
+                        input(type="text", class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-[13px] focus:ring-2 focus:ring-amber-200 focus:border-amber-400", placeholder="플라즈마, 에칭, 균일도", [(ngModel)]="proposalKeywords")
+                    button((click)="generateProposal()", [disabled]="proposalLoading || !proposalTitle.trim()", class="px-6 py-2.5 bg-amber-600 text-white text-[13px] font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors")
+                        span(*ngIf="!proposalLoading") 제안서 생성
+                        span(*ngIf="proposalLoading") 생성 중...
+
+            //- 제안서 결과
+            div(*ngIf="proposalResult", class="bg-white rounded-xl shadow-sm border border-gray-200 p-6")
+                h3(class="text-[15px] font-semibold text-gray-900 mb-4") 생성된 제안서 초안
+                div(class="space-y-4")
+                    div(*ngIf="proposalResult.background", class="p-4 bg-gray-50 rounded-lg")
+                        h4(class="text-[13px] font-semibold text-gray-700 mb-2") 연구 배경
+                        p(class="text-[13px] text-gray-600 whitespace-pre-line") {{proposalResult.background}}
+                    div(*ngIf="proposalResult.methodology", class="p-4 bg-gray-50 rounded-lg")
+                        h4(class="text-[13px] font-semibold text-gray-700 mb-2") 연구 방법론
+                        p(class="text-[13px] text-gray-600 whitespace-pre-line") {{proposalResult.methodology}}
+                    div(*ngIf="proposalResult.expected_results", class="p-4 bg-gray-50 rounded-lg")
+                        h4(class="text-[13px] font-semibold text-gray-700 mb-2") 기대 결과
+                        p(class="text-[13px] text-gray-600 whitespace-pre-line") {{proposalResult.expected_results}}
+                    div(*ngIf="proposalResult.references && proposalResult.references.length > 0", class="p-4 bg-gray-50 rounded-lg")
+                        h4(class="text-[13px] font-semibold text-gray-700 mb-2") 참고 문헌
+                        div(*ngFor="let ref of proposalResult.references", class="text-[12px] text-gray-500 mb-1") • {{ref}}
+
+        //- ========================================
+        //- 특허 검색 탭 (patent)
+        //- ========================================
+        div(*ngIf="activeTab === 'patent'")
+            div(class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6")
+                h2(class="text-[15px] font-semibold text-gray-900 mb-4") 특허 기술 검색
+                p(class="text-[13px] text-gray-500 mb-4") 기술 키워드를 입력하면, 저장된 문헌에서 특허 관련 기술 동향을 검색합니다.
+                div(class="flex gap-3")
+                    input(type="text", class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-[13px] focus:ring-2 focus:ring-amber-200 focus:border-amber-400", placeholder="기술 키워드 (예: atomic layer etching, 플라즈마 표면처리)", [(ngModel)]="patentQuery", (keydown.enter)="searchPatents()")
+                    button((click)="searchPatents()", [disabled]="patentSearching || !patentQuery.trim()", class="px-6 py-2.5 bg-amber-600 text-white text-[13px] font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors whitespace-nowrap")
+                        span(*ngIf="!patentSearching") 검색
+                        span(*ngIf="patentSearching") 검색 중...
+
+            //- 검색 결과
+            div(*ngIf="patentResults.length > 0", class="space-y-3")
+                div(*ngFor="let patent of patentResults; let i = index", class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:border-amber-200 transition-colors")
+                    div(class="flex items-start gap-3")
+                        div(class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[11px] font-bold") {{i + 1}}
+                        div(class="flex-1")
+                            h3(class="text-[13px] font-semibold text-gray-900 mb-1") {{patent.title || '제목 없음'}}
+                            p(class="text-[12px] text-gray-500 mb-2 line-clamp-3") {{patent.abstract || patent.text || ''}}
+                            div(class="flex items-center gap-3")
+                                span(*ngIf="patent.score", class="text-[11px] text-amber-600 font-mono") 관련도: {{(patent.score * 100).toFixed(1)}}%
+                                span(*ngIf="patent.year", class="text-[11px] text-gray-400") {{patent.year}}
+

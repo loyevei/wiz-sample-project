@@ -1,0 +1,12 @@
+{
+    "id": "page.calculator",
+    "mode": "page",
+    "title": "\ud50c\ub77c\uc988\ub9c8 \uacc4\uc0b0\uae30",
+    "namespace": "calculator",
+    "category": "tools",
+    "viewuri": "/calculator",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-calculator()"
+}

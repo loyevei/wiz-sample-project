@@ -1,0 +1,12 @@
+{
+    "id": "page.analysis",
+    "mode": "page",
+    "title": "\ub370\uc774\ud130 \ubd84\uc11d",
+    "namespace": "analysis",
+    "category": "tools",
+    "viewuri": "/analysis",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-analysis()"
+}

@@ -1,0 +1,12 @@
+{
+    "id": "page.collaboration",
+    "mode": "page",
+    "title": "\ud611\uc5c5",
+    "namespace": "collaboration",
+    "category": "tools",
+    "viewuri": "/collaboration",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-collaboration()"
+}

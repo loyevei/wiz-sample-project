@@ -27,6 +27,15 @@ div(class="flex flex-col h-full bg-white")
                     path(stroke-linecap="round", stroke-linejoin="round", d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z")
             h2(class="text-lg font-semibold text-gray-900 mb-2") 플라즈마 연구 AI 어시스턴트
             p(class="text-[13px] text-gray-500 max-w-md") 논문 검색, 공정 예측, 진단 분석, 이론 연구 등 플라즈마 연구를 도와드립니다. 질문하시면 해당 연구 도구 페이지로 안내해 드립니다.
+
+            //- Domain Cards Grid
+            div(class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 w-full max-w-2xl")
+                a(*ngFor="let card of domainCards", [href]="card.url", class="group block p-3 bg-gray-50 hover:bg-violet-50 rounded-xl border border-gray-200 hover:border-violet-300 transition-all text-left")
+                    div(class="flex items-center gap-2 mb-1")
+                        span(class="text-lg") {{getPageConfig(card.page).icon}}
+                        span(class="text-[13px] font-semibold text-gray-900 group-hover:text-violet-700") {{getPageConfig(card.page).label_ko}}
+                    p(class="text-[11px] text-gray-500 group-hover:text-violet-500 line-clamp-2") {{card.desc}}
+
             div(class="flex flex-wrap gap-2 mt-6 justify-center")
                 button(*ngFor="let q of ['플라즈마 에칭 선택비 향상 방법은?', 'RF power가 식각 속도에 미치는 영향은?', 'OES와 Langmuir probe 비교해줘', 'Boltzmann 방정식 관련 이론 분석해줘']", (click)="chatInput = q; sendChat()", class="px-3 py-1.5 bg-gray-100 hover:bg-violet-50 text-gray-600 hover:text-violet-700 rounded-full text-xs transition-colors")
                     | {{q}}

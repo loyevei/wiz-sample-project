@@ -1039,3 +1039,240 @@ def delete_failure_pattern():
         raise
     except Exception as e:
         wiz.response.status(500, message=str(e))
+
+
+# ==============================================================================
+# Boltzmann Plot 분석
+# ==============================================================================
+def boltzmann_plot():
+    """OES 데이터로 Boltzmann plot → 전자 온도 추정"""
+    try:
+        spectrum_data = wiz.request.query("spectrum_data", "")
+        if not spectrum_data.strip():
+            wiz.response.status(400, message="스펙트럼 데이터를 입력하세요.")
+
+        import math
+
+        lines = [l.strip() for l in spectrum_data.strip().split('\n') if l.strip()]
+        points = []
+        for line in lines:
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) < 5:
+                continue
+            wavelength = float(parts[0])
+            intensity = float(parts[1])
+            energy = float(parts[2])    # 상태 에너지 (eV)
+            g = float(parts[3])         # 통계 가중치
+            A = float(parts[4])         # 전이 확률 (s⁻¹)
+
+            if intensity <= 0 or g <= 0 or A <= 0 or wavelength <= 0:
+                continue
+            ln_val = math.log(intensity * wavelength * 1e-9 / (g * A))
+            points.append({
+                "wavelength": wavelength,
+                "energy": energy,
+                "g": g,
+                "A": A,
+                "intensity": intensity,
+                "ln_value": round(ln_val, 4)
+            })
+
+        if len(points) < 2:
+            wiz.response.status(400, message="최소 2개 이상의 유효한 데이터 포인트가 필요합니다.")
+
+        # 선형 회귀: ln(I*λ/(g*A)) = -E/(kT) + const
+        x = np.array([p["energy"] for p in points])
+        y = np.array([p["ln_value"] for p in points])
+
+        n = len(x)
+        sx = np.sum(x)
+        sy = np.sum(y)
+        sxy = np.sum(x * y)
+        sxx = np.sum(x * x)
+        syy = np.sum(y * y)
+
+        slope = (n * sxy - sx * sy) / (n * sxx - sx * sx)
+        intercept = (sy - slope * sx) / n
+
+        # R²
+        ss_res = np.sum((y - (slope * x + intercept)) ** 2)
+        ss_tot = np.sum((y - np.mean(y)) ** 2)
+        r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0
+
+        # Te = -1/slope (eV) (since slope = -1/(kT) with k_B=1 when E in eV)
+        Te_eV = round(-1.0 / slope, 3) if slope != 0 else 0
+        Te_K = round(Te_eV * 11604.5, 1)
+
+        wiz.response.status(200, {
+            "Te_eV": Te_eV,
+            "Te_K": Te_K,
+            "slope": round(slope, 6),
+            "intercept": round(intercept, 4),
+            "r_squared": round(r_squared, 4),
+            "n_points": n,
+            "points": points
+        })
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))
+
+
+# ==============================================================================
+# Langmuir Probe I-V 분석
+# ==============================================================================
+def langmuir_analysis():
+    """I-V 특성 데이터에서 플라즈마 파라미터 추출"""
+    try:
+        iv_data = wiz.request.query("iv_data", "")
+        if not iv_data.strip():
+            wiz.response.status(400, message="I-V 데이터를 입력하세요.")
+
+        import math
+
+        lines = [l.strip() for l in iv_data.strip().split('\n') if l.strip()]
+        voltages = []
+        currents = []
+        for line in lines:
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) >= 2:
+                voltages.append(float(parts[0]))
+                currents.append(float(parts[1]))
+
+        if len(voltages) < 4:
+            wiz.response.status(400, message="최소 4개 이상의 데이터 포인트가 필요합니다.")
+
+        V = np.array(voltages)
+        I = np.array(currents)
+
+        # 부유 전위 Vf: I=0 지점 근사
+        Vf = 0
+        for i in range(len(I) - 1):
+            if I[i] <= 0 and I[i+1] > 0:
+                Vf = V[i] + (V[i+1] - V[i]) * (-I[i]) / (I[i+1] - I[i])
+                break
+
+        # 이온 포화 전류 (가장 음의 전압 영역)
+        i_ion_sat = np.mean(I[V < V.min() + (V.max() - V.min()) * 0.2])
+
+        # 전자 전류: I_e = I - I_ion_sat
+        I_e = I - i_ion_sat
+
+        # 전이 영역에서 Te 추정 (ln(I_e) vs V의 기울기)
+        mask = (I_e > 0) & (V < np.max(V) * 0.8) & (V > Vf - 5)
+        if np.sum(mask) >= 2:
+            V_trans = V[mask]
+            ln_Ie = np.log(I_e[mask])
+            coeffs = np.polyfit(V_trans, ln_Ie, 1)
+            Te_eV = round(1.0 / coeffs[0], 3) if coeffs[0] > 0 else 1.0
+        else:
+            Te_eV = 1.0
+
+        Te_K = round(Te_eV * 11604.5, 1)
+
+        # 플라즈마 전위 Vp: dI/dV 최대 지점
+        dI = np.gradient(I, V)
+        Vp_idx = np.argmax(dI)
+        Vp = round(float(V[Vp_idx]), 2)
+
+        # 전자 포화 전류 → ne
+        I_e_sat = float(np.max(I_e))
+        e = 1.602e-19
+        me = 9.109e-31
+        kB = 1.381e-23
+        Te_K_val = Te_eV * 11604.5
+        probe_area = 1e-6  # 가정: 1 mm² 프로브 면적
+        if Te_K_val > 0 and I_e_sat > 0:
+            ne = I_e_sat / (e * probe_area * math.sqrt(e * Te_eV / (2 * math.pi * me)))
+        else:
+            ne = 0
+
+        wiz.response.status(200, {
+            "ne": f"{ne:.2e}",
+            "Te_eV": round(Te_eV, 3),
+            "Te_K": Te_K,
+            "Vp": Vp,
+            "Vf": round(Vf, 2),
+            "I_ion_sat": f"{i_ion_sat:.4e}",
+            "I_e_sat": f"{I_e_sat:.4e}",
+            "n_points": len(voltages)
+        })
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))
+
+
+# ==============================================================================
+# Actinometry 분석
+# ==============================================================================
+def actinometry_analysis():
+    """OES Actinometry를 통한 반응성 종 상대 밀도 추정"""
+    try:
+        spectrum_data = wiz.request.query("spectrum_data", "")
+        ref_gas = wiz.request.query("ref_gas", "Ar")
+
+        if not spectrum_data.strip():
+            wiz.response.status(400, message="스펙트럼 데이터를 입력하세요.")
+
+        # 기준 파장 매핑
+        ref_wavelengths = {
+            "Ar": 750.4,
+            "He": 706.5,
+            "Ne": 585.2
+        }
+        ref_wl = ref_wavelengths.get(ref_gas, 750.4)
+
+        lines_input = [l.strip() for l in spectrum_data.strip().split('\n') if l.strip()]
+        entries = []
+        ref_entry = None
+
+        for line in lines_input:
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) >= 3:
+                wl = float(parts[0])
+                intensity = float(parts[1])
+                species = parts[2].strip()
+                entry = {"wavelength": wl, "intensity": intensity, "name": species}
+                entries.append(entry)
+                if species.lower() == ref_gas.lower():
+                    if ref_entry is None or abs(wl - ref_wl) < abs(ref_entry["wavelength"] - ref_wl):
+                        ref_entry = entry
+
+        if ref_entry is None:
+            wiz.response.status(400, message=f"기준 가스({ref_gas}) 데이터가 없습니다.")
+
+        ref_intensity = ref_entry["intensity"]
+        if ref_intensity <= 0:
+            wiz.response.status(400, message="기준 가스 강도가 0 이하입니다.")
+
+        # 각 종별 상대 밀도 계산
+        species_results = []
+        for entry in entries:
+            if entry["name"].lower() == ref_gas.lower():
+                continue
+            ratio = entry["intensity"] / ref_intensity
+            species_results.append({
+                "name": entry["name"],
+                "wavelength": entry["wavelength"],
+                "intensity": entry["intensity"],
+                "ratio": round(ratio, 4),
+                "relative_density": round(ratio, 4)
+            })
+
+        wiz.response.status(200, {
+            "ref_gas": ref_gas,
+            "ref_wavelength": ref_entry["wavelength"],
+            "ref_intensity": ref_intensity,
+            "species": species_results
+        })
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))

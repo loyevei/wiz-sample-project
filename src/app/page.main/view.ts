@@ -6,6 +6,8 @@ export class Component implements OnInit {
 
     public async ngOnInit() {
         await this.service.init();
-        location.href = "/dashboard";
+        if (this.service.auth.status) {
+            this.service.href("/dashboard");
+        }
     }
 }

@@ -1,0 +1,262 @@
+nav(class="sticky top-0 z-20 bg-white shadow")
+    div(class="max-w-6xl px-4 sm:px-6 lg:px-8 py-3")
+        div(class="flex items-center justify-between")
+            h1(class="flex text-lg font-semibold text-zinc-950 gap-x-3 items-center")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-6 text-cyan-600")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z")
+                span 데이터 분석
+
+div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
+    //- Tab Navigation
+    div(class="bg-white rounded-xl border border-gray-200 shadow-sm")
+        div(class="border-b border-gray-200 overflow-x-auto")
+            nav(class="flex -mb-px px-4 min-w-max")
+                button(*ngFor="let tab of tabs", (click)="switchTab(tab.id)", class="px-4 py-3 text-[13px] font-medium border-b-2 transition-colors whitespace-nowrap", [ngClass]="activeTab === tab.id ? 'border-cyan-500 text-cyan-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'") {{tab.label}}
+
+        //- ===== Tab: 데이터 플로터 =====
+        div(*ngIf="activeTab === 'plotter'", class="px-6 py-5")
+            h2(class="text-[15px] font-semibold text-gray-900 mb-4") 데이터 플로터
+            p(class="text-[12px] text-gray-500 mb-4") CSV 형식의 데이터를 입력하면 파싱하여 테이블로 표시합니다. 첫 행은 헤더로 인식됩니다.
+
+            div(class="grid grid-cols-1 lg:grid-cols-2 gap-6")
+                //- Input Section
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") CSV 데이터 입력
+                    textarea([(ngModel)]="plotterCsvInput", rows="10", placeholder="x,y1,y2\n0,0,0\n1,2,1\n...", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] font-mono focus:ring-2 focus:ring-cyan-500 outline-none resize-y")
+
+                    div(class="mt-4 flex flex-wrap items-end gap-4")
+                        div(class="flex-1 min-w-[140px]")
+                            label(class="block text-[12px] font-medium text-gray-700 mb-1") 차트 유형
+                            select([(ngModel)]="plotterChartType", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] focus:ring-2 focus:ring-cyan-500 outline-none")
+                                option(*ngFor="let ct of plotterChartTypes", [value]="ct.id") {{ct.label}}
+                        div
+                            button((click)="parsePlotData()", [disabled]="plotterParsing", class="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-cyan-500 disabled:opacity-50 transition-all active:scale-95")
+                                span(*ngIf="!plotterParsing") 플로팅
+                                span(*ngIf="plotterParsing") 파싱 중...
+
+                //- Results Section
+                div(*ngIf="plotterParsed")
+                    //- Column Selection
+                    div(class="mb-4")
+                        div(class="text-[12px] font-medium text-gray-700 mb-2") X축 컬럼
+                        div(class="flex flex-wrap gap-2")
+                            button(*ngFor="let h of plotterHeaders", (click)="plotterXCol = h", class="px-3 py-1 rounded-full text-[12px] font-medium border transition-colors", [ngClass]="plotterXCol === h ? 'bg-cyan-100 border-cyan-300 text-cyan-700' : 'bg-white border-gray-200 text-gray-600 hover:border-cyan-200'") {{h}}
+                    div(class="mb-4")
+                        div(class="text-[12px] font-medium text-gray-700 mb-2") Y축 컬럼 (복수 선택 가능)
+                        div(class="flex flex-wrap gap-2")
+                            button(*ngFor="let h of plotterHeaders", (click)="toggleYCol(h)", class="px-3 py-1 rounded-full text-[12px] font-medium border transition-colors", [ngClass]="isYColSelected(h) ? 'bg-cyan-100 border-cyan-300 text-cyan-700' : 'bg-white border-gray-200 text-gray-600 hover:border-cyan-200'") {{h}}
+
+                    //- Summary
+                    div(class="grid grid-cols-3 gap-3 mb-4")
+                        div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3 text-center")
+                            div(class="text-[11px] text-cyan-500 font-medium") 행 수
+                            div(class="text-lg font-bold text-cyan-700") {{plotterRows.length}}
+                        div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3 text-center")
+                            div(class="text-[11px] text-cyan-500 font-medium") 컬럼 수
+                            div(class="text-lg font-bold text-cyan-700") {{plotterHeaders.length}}
+                        div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3 text-center")
+                            div(class="text-[11px] text-cyan-500 font-medium") 차트 유형
+                            div(class="text-lg font-bold text-cyan-700") {{plotterChartType}}
+
+            //- Data Table
+            div(*ngIf="plotterParsed && plotterRows.length > 0", class="mt-6")
+                div(class="flex items-center justify-between mb-2")
+                    h3(class="text-[13px] font-semibold text-gray-700") 파싱된 데이터 (최대 50행 표시)
+                    span(class="text-[11px] text-gray-400") 총 {{plotterRows.length}}행
+                div(class="overflow-x-auto rounded-lg border border-gray-200")
+                    table(class="w-full text-[12px]")
+                        thead(class="bg-gray-50")
+                            tr
+                                th(class="px-3 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase") #
+                                th(*ngFor="let h of plotterHeaders", class="px-3 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase") {{h}}
+                        tbody(class="divide-y divide-gray-100")
+                            tr(*ngFor="let row of getPlotterDisplayRows(); let i = index", class="hover:bg-gray-50")
+                                td(class="px-3 py-1.5 text-gray-400") {{i + 1}}
+                                td(*ngFor="let h of plotterHeaders", class="px-3 py-1.5 text-right font-mono text-gray-700") {{row[h]}}
+
+        //- ===== Tab: 통계 분석 =====
+        div(*ngIf="activeTab === 'statistics'", class="px-6 py-5")
+            h2(class="text-[15px] font-semibold text-gray-900 mb-4") 기술 통계 분석
+            p(class="text-[12px] text-gray-500 mb-4") 숫자 데이터를 쉼표로 구분하여 입력하세요. 여러 데이터셋은 줄바꿈으로 구분합니다.
+
+            div(class="grid grid-cols-1 lg:grid-cols-3 gap-6")
+                //- Input
+                div(class="lg:col-span-1")
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") 데이터 입력 (쉼표 구분, 줄바꿈=별도 셋)
+                    textarea([(ngModel)]="statsInput", rows="10", placeholder="1.2, 3.4, 5.6, 7.8\n2.1, 4.3, 6.5, 8.7", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] font-mono focus:ring-2 focus:ring-cyan-500 outline-none resize-y")
+                    button((click)="calculateStatistics()", [disabled]="statsCalculating", class="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-cyan-500 disabled:opacity-50 transition-all active:scale-95")
+                        span(*ngIf="!statsCalculating") 분석
+                        span(*ngIf="statsCalculating") 분석 중...
+
+                //- Results
+                div(class="lg:col-span-2")
+                    div(*ngIf="statsResults.length === 0", class="flex items-center justify-center h-full text-gray-400 text-[13px]") 데이터를 입력하고 분석 버튼을 클릭하세요.
+
+                    div(*ngFor="let sr of statsResults; let si = index", class="mb-6")
+                        h3(class="text-[13px] font-semibold text-gray-700 mb-3") 데이터셋 {{si + 1}}
+                            span(class="text-[11px] text-gray-400 ml-2") (n={{sr.count}})
+                        div(class="grid grid-cols-2 md:grid-cols-4 gap-3")
+                            div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-cyan-500 font-medium") 평균 (Mean)
+                                div(class="text-[15px] font-bold text-cyan-900 mt-0.5 font-mono") {{formatSci(sr.mean)}}
+                            div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-cyan-500 font-medium") 표준편차 (Std)
+                                div(class="text-[15px] font-bold text-cyan-900 mt-0.5 font-mono") {{formatSci(sr.std)}}
+                            div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-cyan-500 font-medium") 중앙값 (Median)
+                                div(class="text-[15px] font-bold text-cyan-900 mt-0.5 font-mono") {{formatSci(sr.median)}}
+                            div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-cyan-500 font-medium") 분산 (Variance)
+                                div(class="text-[15px] font-bold text-cyan-900 mt-0.5 font-mono") {{formatSci(sr.variance)}}
+                            div(class="bg-white border border-gray-200 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-gray-500 font-medium") 최솟값 (Min)
+                                div(class="text-[15px] font-bold text-gray-900 mt-0.5 font-mono") {{formatSci(sr.min)}}
+                            div(class="bg-white border border-gray-200 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-gray-500 font-medium") 최댓값 (Max)
+                                div(class="text-[15px] font-bold text-gray-900 mt-0.5 font-mono") {{formatSci(sr.max)}}
+                            div(class="bg-white border border-gray-200 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-gray-500 font-medium") 왜도 (Skewness)
+                                div(class="text-[15px] font-bold text-gray-900 mt-0.5 font-mono") {{formatSci(sr.skewness)}}
+                            div(class="bg-white border border-gray-200 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-gray-500 font-medium") 첨도 (Kurtosis)
+                                div(class="text-[15px] font-bold text-gray-900 mt-0.5 font-mono") {{formatSci(sr.kurtosis)}}
+
+        //- ===== Tab: 커브 피팅 =====
+        div(*ngIf="activeTab === 'fitting'", class="px-6 py-5")
+            h2(class="text-[15px] font-semibold text-gray-900 mb-4") 커브 피팅
+            p(class="text-[12px] text-gray-500 mb-4") X, Y 데이터를 한 줄에 하나씩 쉼표로 구분하여 입력하세요. 모델을 선택한 후 피팅을 수행합니다.
+
+            div(class="grid grid-cols-1 lg:grid-cols-2 gap-6")
+                //- Input
+                div
+                    label(class="block text-[12px] font-medium text-gray-700 mb-1") X, Y 데이터 (한 줄에 x, y)
+                    textarea([(ngModel)]="fittingInput", rows="10", placeholder="0, 0.1\n1, 2.1\n2, 3.9\n...", class="w-full px-3 py-2 rounded-lg border border-gray-300 text-[13px] font-mono focus:ring-2 focus:ring-cyan-500 outline-none resize-y")
+
+                    //- Model Selection
+                    div(class="mt-4")
+                        label(class="block text-[12px] font-medium text-gray-700 mb-2") 피팅 모델
+                        div(class="flex flex-wrap gap-2")
+                            button(*ngFor="let m of fittingModels", (click)="selectFittingModel(m.id)", class="px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors", [ngClass]="fittingModel === m.id ? 'bg-cyan-100 border-cyan-300 text-cyan-700' : 'bg-white border-gray-200 text-gray-600 hover:border-cyan-200'") {{m.label}}
+                        div(class="mt-2 bg-gray-50 rounded-lg px-3 py-2 text-[12px] font-mono text-gray-600") 수식: {{getSelectedModelInfo()?.eq}}
+
+                    button((click)="performFitting()", [disabled]="fittingCalculating", class="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-cyan-500 disabled:opacity-50 transition-all active:scale-95")
+                        span(*ngIf="!fittingCalculating") 피팅
+                        span(*ngIf="fittingCalculating") 계산 중...
+
+                //- Results
+                div
+                    div(*ngIf="!fittingResult", class="flex items-center justify-center h-full text-gray-400 text-[13px]") 데이터와 모델을 선택한 후 피팅 버튼을 클릭하세요.
+
+                    div(*ngIf="fittingResult")
+                        h3(class="text-[13px] font-semibold text-gray-700 mb-3") 피팅 결과
+
+                        //- R² and Equation
+                        div(class="grid grid-cols-1 gap-3 mb-4")
+                            div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-cyan-500 font-medium") 결정계수 (R²)
+                                div(class="text-xl font-bold text-cyan-900 mt-0.5 font-mono") {{fittingResult.r_squared?.toFixed(6)}}
+                            div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-cyan-500 font-medium") 피팅 수식
+                                div(class="text-[14px] font-bold text-cyan-900 mt-0.5 font-mono") {{fittingResult.equation}}
+                            div(class="bg-cyan-50 border border-cyan-100 rounded-lg px-4 py-3")
+                                div(class="text-[11px] text-cyan-500 font-medium") 잔차 제곱합 (RSS)
+                                div(class="text-[14px] font-bold text-cyan-900 mt-0.5 font-mono") {{formatSci(fittingResult.residual_sum)}}
+
+                        //- Coefficients
+                        div(*ngIf="fittingResult.coefficients", class="mt-4")
+                            h4(class="text-[12px] font-semibold text-gray-600 mb-2") 계수 (Coefficients)
+                            div(class="overflow-hidden rounded-lg border border-gray-200")
+                                table(class="w-full text-[13px]")
+                                    thead(class="bg-gray-50")
+                                        tr
+                                            th(class="px-4 py-2 text-left text-[11px] font-semibold text-gray-500 uppercase") 파라미터
+                                            th(class="px-4 py-2 text-right text-[11px] font-semibold text-gray-500 uppercase") 값
+                                    tbody(class="divide-y divide-gray-100")
+                                        tr(*ngFor="let key of objectKeys(fittingResult.coefficients)", class="hover:bg-gray-50")
+                                            td(class="px-4 py-2 font-medium text-gray-700 font-mono") {{key}}
+                                            td(class="px-4 py-2 text-right font-mono text-gray-900") {{formatSci(fittingResult.coefficients[key])}}
+
+                        //- Fitted Values
+                        div(*ngIf="fittingResult.fitted_values", class="mt-4")
+                            h4(class="text-[12px] font-semibold text-gray-600 mb-2") 원본 vs 피팅 값
+                            div(class="overflow-x-auto rounded-lg border border-gray-200 max-h-64 overflow-y-auto")
+                                table(class="w-full text-[12px]")
+                                    thead(class="bg-gray-50 sticky top-0")
+                                        tr
+                                            th(class="px-3 py-2 text-right text-[11px] font-semibold text-gray-500") X
+                                            th(class="px-3 py-2 text-right text-[11px] font-semibold text-gray-500") Y (원본)
+                                            th(class="px-3 py-2 text-right text-[11px] font-semibold text-gray-500") Y (피팅)
+                                            th(class="px-3 py-2 text-right text-[11px] font-semibold text-gray-500") 잔차
+                                    tbody(class="divide-y divide-gray-100")
+                                        tr(*ngFor="let fv of fittingResult.fitted_values", class="hover:bg-gray-50")
+                                            td(class="px-3 py-1.5 text-right font-mono text-gray-700") {{fv.x?.toFixed(4)}}
+                                            td(class="px-3 py-1.5 text-right font-mono text-gray-700") {{fv.y?.toFixed(4)}}
+                                            td(class="px-3 py-1.5 text-right font-mono text-cyan-700") {{fv.y_fit?.toFixed(4)}}
+                                            td(class="px-3 py-1.5 text-right font-mono", [ngClass]="fv.residual >= 0 ? 'text-red-500' : 'text-blue-500'") {{fv.residual?.toFixed(4)}}
+
+        //- ===== Tab: 대시보드 =====
+        div(*ngIf="activeTab === 'dashboard'", class="px-6 py-5")
+            h2(class="text-[15px] font-semibold text-gray-900 mb-4") 분석 대시보드
+
+            //- Summary Cards
+            div(class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6")
+                div(class="bg-gradient-to-br from-cyan-50 to-cyan-100 border border-cyan-200 rounded-xl px-5 py-4")
+                    div(class="flex items-center justify-between")
+                        div
+                            div(class="text-[11px] text-cyan-600 font-medium") 통계 분석 도구
+                            div(class="text-xl font-bold text-cyan-900 mt-1") 8개 지표
+                        div(class="text-2xl") 📊
+                    div(class="text-[11px] text-cyan-500 mt-2") mean, std, median, min, max, var, skew, kurt
+                div(class="bg-gradient-to-br from-teal-50 to-teal-100 border border-teal-200 rounded-xl px-5 py-4")
+                    div(class="flex items-center justify-between")
+                        div
+                            div(class="text-[11px] text-teal-600 font-medium") 피팅 모델
+                            div(class="text-xl font-bold text-teal-900 mt-1") 5개 모델
+                        div(class="text-2xl") 📈
+                    div(class="text-[11px] text-teal-500 mt-2") linear, quadratic, exponential, power, gaussian
+                div(class="bg-gradient-to-br from-sky-50 to-sky-100 border border-sky-200 rounded-xl px-5 py-4")
+                    div(class="flex items-center justify-between")
+                        div
+                            div(class="text-[11px] text-sky-600 font-medium") 데이터 플로터
+                            div(class="text-xl font-bold text-sky-900 mt-1") 3개 차트
+                        div(class="text-2xl") 📉
+                    div(class="text-[11px] text-sky-500 mt-2") line, scatter, bar
+                div(class="bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-200 rounded-xl px-5 py-4")
+                    div(class="flex items-center justify-between")
+                        div
+                            div(class="text-[11px] text-indigo-600 font-medium") 지원 형식
+                            div(class="text-xl font-bold text-indigo-900 mt-1") CSV
+                        div(class="text-2xl") 📄
+                    div(class="text-[11px] text-indigo-500 mt-2") 쉼표 구분 데이터 입력
+
+            //- Quick Guide
+            div(class="bg-white border border-gray-200 rounded-xl p-5 mb-6")
+                h3(class="text-[13px] font-semibold text-gray-900 mb-3") 빠른 사용 가이드
+                div(class="grid grid-cols-1 md:grid-cols-3 gap-4")
+                    div(class="flex gap-3")
+                        div(class="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600 text-[13px] font-bold") 1
+                        div
+                            div(class="text-[13px] font-medium text-gray-900") 데이터 입력
+                            div(class="text-[12px] text-gray-500 mt-0.5") CSV 형식이나 쉼표 구분 숫자를 직접 입력하세요.
+                    div(class="flex gap-3")
+                        div(class="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600 text-[13px] font-bold") 2
+                        div
+                            div(class="text-[13px] font-medium text-gray-900") 분석 유형 선택
+                            div(class="text-[12px] text-gray-500 mt-0.5") 플로팅, 통계, 커브 피팅 중 원하는 탭을 선택합니다.
+                    div(class="flex gap-3")
+                        div(class="flex-shrink-0 w-8 h-8 rounded-full bg-cyan-100 flex items-center justify-center text-cyan-600 text-[13px] font-bold") 3
+                        div
+                            div(class="text-[13px] font-medium text-gray-900") 결과 확인
+                            div(class="text-[12px] text-gray-500 mt-0.5") 계산 결과를 카드와 테이블 형태로 확인합니다.
+
+            //- Analysis History
+            div(class="bg-white border border-gray-200 rounded-xl p-5")
+                h3(class="text-[13px] font-semibold text-gray-900 mb-3") 최근 분석 이력
+                div(*ngIf="analysisHistory.length === 0", class="text-center text-[13px] text-gray-400 py-8") 아직 수행된 분석이 없습니다. 통계 분석 또는 커브 피팅을 실행해 보세요.
+                div(*ngIf="analysisHistory.length > 0", class="space-y-2")
+                    div(*ngFor="let h of analysisHistory", class="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-lg")
+                        span(class="text-xl") {{h.icon}}
+                        div(class="flex-1 min-w-0")
+                            div(class="text-[13px] text-gray-900 truncate") {{h.description}}
+                            div(class="text-[11px] text-gray-400 mt-0.5") {{h.timestamp}}
+                        span(class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold", [ngClass]="h.type === 'statistics' ? 'bg-cyan-100 text-cyan-700' : 'bg-teal-100 text-teal-700'") {{h.type}}

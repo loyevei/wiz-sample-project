@@ -7,6 +7,6 @@
     "viewuri": "/main",
     "preview": "/main",
     "controller": "base",
-    "layout": "layout.sidebar",
+    "layout": "layout.empty",
     "template": "wiz-page-main()"
 }

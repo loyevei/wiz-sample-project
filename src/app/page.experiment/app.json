@@ -1,0 +1,12 @@
+{
+    "id": "page.experiment",
+    "mode": "page",
+    "title": "\uc2e4\ud5d8 \uad00\ub9ac",
+    "namespace": "experiment",
+    "category": "tools",
+    "viewuri": "/experiment",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-experiment()"
+}

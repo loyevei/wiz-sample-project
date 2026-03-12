@@ -10,7 +10,10 @@ export class Component implements OnInit {
         { id: 'multimodal', label: '멀티모달 검색' },
         { id: 'detection', label: '이상 탐지' },
         { id: 'failure', label: '고장 진단' },
-        { id: 'compare', label: '진단 비교' }
+        { id: 'compare', label: '진단 비교' },
+        { id: 'boltzmann', label: 'Boltzmann Plot' },
+        { id: 'langmuir', label: 'Langmuir Probe' },
+        { id: 'actinometry', label: 'Actinometry' }
     ];
 
     // Collections
@@ -83,6 +86,22 @@ export class Component implements OnInit {
         '식각 속도 변동', '플라즈마 불안정', '챔버 오염',
         '전력 반사 증가', '가스 누출'
     ];
+
+    // ===== Boltzmann Plot Tab =====
+    public boltzmannData: string = '';
+    public boltzmannLoading: boolean = false;
+    public boltzmannResult: any = null;
+
+    // ===== Langmuir Probe Tab =====
+    public langmuirData: string = '';
+    public langmuirLoading: boolean = false;
+    public langmuirResult: any = null;
+
+    // ===== Actinometry Tab =====
+    public actinometryData: string = '';
+    public actinometryRefGas: string = 'Ar';
+    public actinometryLoading: boolean = false;
+    public actinometryResult: any = null;
 
     // ===== Compare Tab =====
     public compareMethodA: string = '';
@@ -515,5 +534,51 @@ export class Component implements OnInit {
 
     public objectKeys(obj: any): string[] {
         return obj ? Object.keys(obj) : [];
+    }
+
+    // ===== Boltzmann Plot =====
+    public async analyzeBoltzmann() {
+        if (!this.boltzmannData.trim()) return;
+        this.boltzmannLoading = true;
+        await this.service.render();
+        try {
+            const { code, data } = await wiz.call("boltzmann_plot", {
+                spectrum_data: this.boltzmannData
+            });
+            if (code === 200) this.boltzmannResult = data;
+        } catch (e) { }
+        this.boltzmannLoading = false;
+        await this.service.render();
+    }
+
+    // ===== Langmuir Probe =====
+    public async analyzeLangmuir() {
+        if (!this.langmuirData.trim()) return;
+        this.langmuirLoading = true;
+        await this.service.render();
+        try {
+            const { code, data } = await wiz.call("langmuir_analysis", {
+                iv_data: this.langmuirData
+            });
+            if (code === 200) this.langmuirResult = data;
+        } catch (e) { }
+        this.langmuirLoading = false;
+        await this.service.render();
+    }
+
+    // ===== Actinometry =====
+    public async analyzeActinometry() {
+        if (!this.actinometryData.trim()) return;
+        this.actinometryLoading = true;
+        await this.service.render();
+        try {
+            const { code, data } = await wiz.call("actinometry_analysis", {
+                spectrum_data: this.actinometryData,
+                ref_gas: this.actinometryRefGas
+            });
+            if (code === 200) this.actinometryResult = data;
+        } catch (e) { }
+        this.actinometryLoading = false;
+        await this.service.render();
     }
 }
