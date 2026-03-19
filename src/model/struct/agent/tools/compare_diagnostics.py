@@ -64,7 +64,7 @@ class CompareDiagnosticsTool(BaseTool):
         if not method_a.strip() or not method_b.strip():
             return "Error: Both method_a and method_b are required."
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
 
         model_name = DEFAULT_MODEL
         try:

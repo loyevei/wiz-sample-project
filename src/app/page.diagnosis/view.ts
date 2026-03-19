@@ -3,6 +3,8 @@ import { ActivatedRoute } from '@angular/router';
 import { Service } from '@wiz/libs/portal/season/service';
 
 export class Component implements OnInit {
+    private readonly collectionStorageKey: string = 'plasma.selectedCollection';
+
     public activeTab: string = 'search';
     public tabs: any[] = [
         { id: 'search', label: '문헌 검색' },
@@ -111,6 +113,21 @@ export class Component implements OnInit {
 
     constructor(public service: Service, private route: ActivatedRoute) { }
 
+    private getStoredCollection(): string {
+        try {
+            return localStorage.getItem(this.collectionStorageKey) || '';
+        } catch (e) { }
+        return '';
+    }
+
+    private persistCollection(name: string) {
+        try {
+            if (name && name.trim()) {
+                localStorage.setItem(this.collectionStorageKey, name);
+            }
+        } catch (e) { }
+    }
+
     public async ngOnInit() {
         await this.service.init();
         await this.loadCollections();
@@ -128,6 +145,7 @@ export class Component implements OnInit {
         }
         if (params['collection'] && this.collections.find((c: any) => c.name === params['collection'])) {
             this.selectedCollection = params['collection'];
+            this.persistCollection(this.selectedCollection);
         }
 
         const q = params['q'] || '';
@@ -166,8 +184,18 @@ export class Component implements OnInit {
             const { code, data } = await wiz.call("collections");
             if (code === 200) {
                 this.collections = data.collections || [];
+                const storedCollection = this.getStoredCollection();
+                if (storedCollection && this.collections.find((c: any) => c.name === storedCollection)) {
+                    this.selectedCollection = storedCollection;
+                }
                 if (this.collections.length > 0 && !this.selectedCollection) {
                     this.selectedCollection = this.collections[0].name;
+                }
+                if (this.selectedCollection && !this.collections.find((c: any) => c.name === this.selectedCollection)) {
+                    this.selectedCollection = this.collections.length > 0 ? this.collections[0].name : '';
+                }
+                if (this.selectedCollection) {
+                    this.persistCollection(this.selectedCollection);
                 }
             }
         } catch (e) { }
@@ -178,6 +206,7 @@ export class Component implements OnInit {
     }
 
     public async onCollectionChange() {
+        this.persistCollection(this.selectedCollection);
         // 탭별 기존 결과 초기화
         this.searchResults = [];
         this.similarSpectra = [];

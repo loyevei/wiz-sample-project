@@ -42,7 +42,7 @@ class SearchEquationsTool(BaseTool):
         if not query.strip():
             return "Error: query is required"
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
         limit = max(1, min(20, int(limit)))
 
         # 모델

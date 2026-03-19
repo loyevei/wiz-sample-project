@@ -42,9 +42,9 @@ class Struct:
         """User Sub-Struct 접근 (호출마다 새 인스턴스)"""
         return self._User(self)
 
-    def agent(self):
+    def agent(self, collection=""):
         """Agent 인스턴스 생성 (매 호출마다 새 인스턴스 — Stateless)"""
-        return self._Agent(self)
+        return self._Agent(self, collection=collection)
 
     def __getattr__(self, name):
         """알 수 없는 속성 → 패키지 Struct 동적 로드"""

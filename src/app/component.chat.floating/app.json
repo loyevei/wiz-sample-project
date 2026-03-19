@@ -1,0 +1,10 @@
+{
+    "mode": "component",
+    "id": "component.chat.floating",
+    "namespace": "chat.floating",
+    "title": "Floating AI Chatbot",
+    "viewuri": "",
+    "category": "",
+    "controller": "base",
+    "template": "wiz-component-chat-floating()"
+}

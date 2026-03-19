@@ -115,7 +115,7 @@ class ExtractEquationsTool(BaseTool):
         DEFAULT_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
 
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
 
         model_name = DEFAULT_MODEL
         try:

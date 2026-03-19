@@ -1,4 +1,5 @@
 import { OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { Service } from '@wiz/libs/portal/season/service';
 
 declare const wiz: any;
@@ -46,14 +47,41 @@ export class Component implements OnInit {
         description: ''
     };
 
-    constructor(public service: Service) { }
+    constructor(public service: Service, private route: ActivatedRoute) { }
 
     public async ngOnInit() {
         await this.service.init();
         await this.loadNotes();
         await this.loadRecipes();
         this.noteForm.date = new Date().toISOString().split('T')[0];
+        await this.handleQueryParams();
         await this.service.render();
+    }
+
+    private async handleQueryParams() {
+        const params = this.route.snapshot.queryParams;
+        if (!params || Object.keys(params).length === 0) return;
+
+        if (params['tab'] && this.tabs.find((t: any) => t.id === params['tab'])) {
+            this.activeTab = params['tab'];
+        }
+
+        const q = params['q'] || '';
+
+        switch (this.activeTab) {
+            case 'notebook':
+                if (q) this.noteSearch = q;
+                break;
+            case 'recipe':
+                if (q) this.recipeSearch = q;
+                // Pre-fill recipe params from navigate_to_page
+                if (params['gas']) this.recipeForm.gas = params['gas'];
+                if (params['pressure']) this.recipeForm.pressure = parseFloat(params['pressure']);
+                if (params['power']) this.recipeForm.power = parseFloat(params['power']);
+                if (params['temperature']) this.recipeForm.temperature = parseFloat(params['temperature']);
+                if (params['time']) this.recipeForm.time = parseFloat(params['time']);
+                break;
+        }
     }
 
     public async switchTab(tabId: string) {

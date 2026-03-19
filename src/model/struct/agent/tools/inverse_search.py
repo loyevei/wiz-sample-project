@@ -108,7 +108,7 @@ class InverseSearchTool(BaseTool):
         if not target_text.strip():
             return "Error: target_text is required."
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
         top_k = int(top_k) if top_k else 30
 
         model_name = DEFAULT_MODEL

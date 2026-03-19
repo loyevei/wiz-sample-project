@@ -1,4 +1,5 @@
 import { OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { Service } from '@wiz/libs/portal/season/service';
 
 declare const wiz: any;
@@ -95,11 +96,38 @@ export class Component implements OnInit {
         { name: 'HiPIMS', type: 'Sputter', freqRange: 'Pulsed DC', pressureRange: '1~30 mTorr', densityRange: '10¹²~10¹³ cm⁻³', apps: '고밀도 박막, 초경합금' }
     ];
 
-    constructor(public service: Service) { }
+    constructor(public service: Service, private route: ActivatedRoute) { }
 
     public async ngOnInit() {
         await this.service.init();
+        await this.handleQueryParams();
         await this.service.render();
+    }
+
+    private async handleQueryParams() {
+        const params = this.route.snapshot.queryParams;
+        if (!params || Object.keys(params).length === 0) return;
+
+        if (params['tab'] && this.tabs.find((t: any) => t.id === params['tab'])) {
+            this.activeTab = params['tab'];
+        }
+
+        // Plasma calculator params
+        if (params['Te']) this.plasmaInputs.Te = parseFloat(params['Te']);
+        if (params['ne']) this.plasmaInputs.ne = parseFloat(params['ne']);
+        if (params['gas']) this.plasmaInputs.gas = params['gas'];
+        if (params['pressure']) this.plasmaInputs.pressure = parseFloat(params['pressure']);
+        if (params['B']) this.plasmaInputs.B = parseFloat(params['B']);
+
+        await this.service.render();
+
+        // Auto-calculate if params provided
+        if (this.activeTab === 'plasma' && (params['Te'] || params['ne'] || params['gas'] || params['pressure'])) {
+            await this.calculatePlasma();
+        } else if (this.activeTab === 'paschen' && params['gas']) {
+            this.paschenGas = params['gas'];
+            await this.calculatePaschen();
+        }
     }
 
     public async switchTab(tabId: string) {

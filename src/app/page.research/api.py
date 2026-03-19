@@ -1324,39 +1324,56 @@ def generate_hypothesis():
 # 논문 추천 (recommend)
 # ==============================================================================
 def recommend_papers():
-    """관심 분야 기반 논문 추천"""
+    """관심 분야 기반 논문 추천 — 컬렉션 벡터 검색으로 유사 문헌 반환"""
     try:
         interests = wiz.request.query("interests", "")
-        collection_name = wiz.request.query("collection", "")
+        collection_name, model_name = _resolve_collection_and_model()
 
         if not interests.strip():
             wiz.response.status(400, message="관심 분야를 입력하세요.")
 
-        if not collection_name:
-            collection_name = _get_default_collection()
+        client = _get_client()
+        if not client.has_collection(collection_name):
+            wiz.response.status(200, [])
 
-        client = MilvusClient(uri=MILVUS_URI)
-        meta = _load_collection_meta()
-        col_meta = meta.get(collection_name, {})
-        model_name = col_meta.get("model_name", list(MODEL_REGISTRY.keys())[0])
-        model = SentenceTransformer(model_name)
+        model = _get_model(model_name)
+        query_vec = model.encode([interests], normalize_embeddings=True)[0].tolist()
 
-        query_vec = model.encode(interests).tolist()
         results = client.search(
             collection_name=collection_name,
             data=[query_vec],
-            limit=10,
-            output_fields=["title", "text", "metadata"]
+            limit=15,
+            output_fields=["doc_id", "filename", "chunk_index", "text"],
+            search_params={"metric_type": "COSINE"}
         )
 
+        seen_docs = set()
         papers = []
         for hit in results[0]:
             entity = hit.get("entity", {})
+            doc_id = entity.get("doc_id", "")
+            if doc_id in seen_docs:
+                continue
+            seen_docs.add(doc_id)
+
+            text_preview = (entity.get("text", "") or "")[:400]
+            doc_title = entity.get("filename", "") or doc_id or "제목 없음"
+
+            # 키워드 매칭 분석
+            interest_terms = [t.strip().lower() for t in re.split(r'[,\s]+', interests) if t.strip()]
+            text_lower = (doc_title + " " + text_preview).lower()
+            matched = [t for t in interest_terms if t in text_lower]
+
             papers.append({
-                "title": entity.get("title", "제목 없음"),
-                "text": (entity.get("text", "") or "")[:300],
+                "title": doc_title,
+                "text": text_preview,
+                "abstract": text_preview,
                 "score": round(hit.get("distance", 0), 4),
-                "authors": (entity.get("metadata", {}) or {}).get("authors", "")
+                "authors": "",
+                "year": "",
+                "filename": entity.get("filename", doc_id),
+                "matched_terms": matched,
+                "relevance": "높음" if hit.get("distance", 0) > 0.7 else ("보통" if hit.get("distance", 0) > 0.5 else "낮음")
             })
 
         wiz.response.status(200, papers)
@@ -1372,58 +1389,105 @@ def recommend_papers():
 # 제안서 생성 (proposal)
 # ==============================================================================
 def generate_proposal():
-    """연구 제안서 초안 생성"""
+    """연구 제안서 초안 생성 — 벡터 검색으로 관련 문헌을 찾고 구조화된 제안서 생성"""
     try:
         title = wiz.request.query("title", "")
         objective = wiz.request.query("objective", "")
         keywords = wiz.request.query("keywords", "")
-        collection_name = wiz.request.query("collection", "")
+        collection_name, model_name = _resolve_collection_and_model()
 
         if not title.strip():
             wiz.response.status(400, message="연구 제목을 입력하세요.")
 
-        if not collection_name:
-            collection_name = _get_default_collection()
+        client = _get_client()
+        model = _get_model(model_name)
 
         # 키워드 기반으로 관련 문헌 검색
         search_text = f"{title} {objective} {keywords}"
-        client = MilvusClient(uri=MILVUS_URI)
-        meta = _load_collection_meta()
-        col_meta = meta.get(collection_name, {})
-        model_name = col_meta.get("model_name", list(MODEL_REGISTRY.keys())[0])
-        model = SentenceTransformer(model_name)
-
-        query_vec = model.encode(search_text).tolist()
-        results = client.search(
-            collection_name=collection_name,
-            data=[query_vec],
-            limit=5,
-            output_fields=["title", "text", "metadata"]
-        )
+        query_vec = model.encode([search_text], normalize_embeddings=True)[0].tolist()
 
         references = []
         context_texts = []
-        for hit in results[0]:
-            entity = hit.get("entity", {})
-            ref_title = entity.get("title", "제목 없음")
-            references.append(ref_title)
-            context_texts.append(entity.get("text", "")[:200])
 
-        # 제안서 초안 구성
+        if client.has_collection(collection_name):
+            results = client.search(
+                collection_name=collection_name,
+                data=[query_vec],
+                limit=8,
+                output_fields=["doc_id", "filename", "chunk_index", "text"],
+                search_params={"metric_type": "COSINE"}
+            )
+
+            seen_docs = set()
+            for hit in results[0]:
+                entity = hit.get("entity", {})
+                doc_id = entity.get("doc_id", "")
+                if doc_id in seen_docs:
+                    continue
+                seen_docs.add(doc_id)
+                ref_title = entity.get("filename", "") or doc_id or "Unknown"
+                ref_str = ref_title
+                references.append(ref_str)
+                context_texts.append((entity.get("text", "") or "")[:300])
+
+        # 키워드 처리
         kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
         kw_str = ", ".join(kw_list) if kw_list else "플라즈마 공정"
 
+        # 관련 문헌에서 핵심 용어 추출
+        all_context = " ".join(context_texts)
+        domain_counter = _extract_terms_from_text(all_context)
+        top_terms = [t for t, _ in domain_counter.most_common(10)]
+        terms_str = ", ".join(top_terms[:5]) if top_terms else kw_str
+
+        # 구조화된 제안서 생성
+        obj_text = f" {objective}" if objective else ""
+        ref_count = len(references)
+
         proposal = {
-            "background": f"본 연구는 '{title}'에 관한 것으로, {kw_str} 분야의 최근 연구 동향을 기반으로 합니다. "
-                         f"관련 문헌 {len(references)}편을 분석한 결과, 해당 분야에서 추가적인 연구가 필요한 것으로 판단됩니다. "
-                         f"{objective}" if objective else f"본 연구는 '{title}'에 관한 것입니다.",
-            "methodology": f"1) {kw_str} 관련 실험 설계 및 파라미터 최적화\n"
-                          f"2) 관련 문헌 기반 비교 분석\n"
-                          f"3) 실험 결과 검증 및 통계적 유의성 분석\n"
-                          f"4) 결과 해석 및 모델링",
-            "expected_results": f"본 연구를 통해 {kw_str} 분야에서의 새로운 지견을 확보하고, "
-                               f"관련 공정의 효율성 향상에 기여할 것으로 기대됩니다.",
-            "references": references
+            "title": title,
+            "background": (
+                f"본 연구는 '{title}'에 관한 것으로, {kw_str} 분야의 최근 연구 동향을 기반으로 합니다.\n\n"
+                f"관련 문헌 {ref_count}편을 분석한 결과, 해당 분야에서 {terms_str} 등의 핵심 주제가 활발히 "
+                f"연구되고 있으며, 추가적인 연구가 필요한 것으로 판단됩니다.\n\n"
+                f"특히, 기존 연구에서는 개별 파라미터의 영향에 초점을 맞추었으나, "
+                f"복합적인 상호작용 효과에 대한 체계적인 연구는 부족한 실정입니다."
+                f"{obj_text}"
+            ),
+            "objective": (
+                f"본 연구의 주요 목표는 다음과 같습니다:\n\n"
+                f"1) {kw_str} 관련 핵심 파라미터의 체계적 규명\n"
+                f"2) 공정 조건 최적화를 통한 성능 향상 방안 도출\n"
+                f"3) 실험적 검증과 이론적 모델링의 상호 보완적 분석\n"
+                f"4) 재현 가능한 표준 공정 조건 확립"
+            ),
+            "methodology": (
+                f"1단계: 문헌 조사 및 예비 실험\n"
+                f"  - {kw_str} 관련 국내외 문헌 심층 분석 (참고문헌 {ref_count}편 포함)\n"
+                f"  - 주요 공정 파라미터 선정 및 실험 범위 결정\n\n"
+                f"2단계: 체계적 실험 설계 (DOE)\n"
+                f"  - 요인 배치법을 활용한 실험 설계\n"
+                f"  - {terms_str} 등 핵심 변수의 주효과 및 교호작용 분석\n\n"
+                f"3단계: 데이터 분석 및 모델링\n"
+                f"  - 통계적 유의성 검정 (ANOVA, 회귀분석)\n"
+                f"  - 반응표면분석법(RSM)을 통한 최적 조건 도출\n"
+                f"  - 물리적 메커니즘 기반 해석\n\n"
+                f"4단계: 검증 및 응용\n"
+                f"  - 최적 조건 재현성 검증 (3회 이상 반복)\n"
+                f"  - 스케일업 가능성 평가\n"
+                f"  - 결과 해석 및 학술 논문 작성"
+            ),
+            "expected_results": (
+                f"본 연구를 통해 다음과 같은 성과를 기대합니다:\n\n"
+                f"• {kw_str} 분야에서의 새로운 과학적 지견 확보\n"
+                f"• 핵심 공정 파라미터 간 상호작용 메커니즘 규명\n"
+                f"• 관련 공정의 효율성 및 재현성 향상\n"
+                f"• 국내외 학술지 논문 1~2편 게재\n"
+                f"• 관련 특허 출원 검토"
+            ),
+            "references": references,
+            "keywords": kw_list if kw_list else [kw_str],
+            "related_terms": top_terms[:8]
         }
 
         wiz.response.status(200, proposal)
@@ -1439,43 +1503,65 @@ def generate_proposal():
 # 특허 검색 (patent)
 # ==============================================================================
 def search_patents():
-    """특허 관련 기술 검색"""
+    """특허 관련 기술 검색 — 벡터 유사도 검색으로 관련 기술 문헌 반환"""
     try:
         query = wiz.request.query("query", "")
-        collection_name = wiz.request.query("collection", "")
+        collection_name, model_name = _resolve_collection_and_model()
 
         if not query.strip():
             wiz.response.status(400, message="검색어를 입력하세요.")
 
-        if not collection_name:
-            collection_name = _get_default_collection()
+        client = _get_client()
+        if not client.has_collection(collection_name):
+            wiz.response.status(200, [])
 
-        client = MilvusClient(uri=MILVUS_URI)
-        meta = _load_collection_meta()
-        col_meta = meta.get(collection_name, {})
-        model_name = col_meta.get("model_name", list(MODEL_REGISTRY.keys())[0])
-        model = SentenceTransformer(model_name)
+        model = _get_model(model_name)
 
-        # 특허 관련 키워드 추가하여 검색
-        patent_query = f"{query} patent method apparatus system process"
-        query_vec = model.encode(patent_query).tolist()
+        # 특허 관련 키워드를 추가하여 기술 문헌 검색
+        patent_query = f"{query} method apparatus system process technique"
+        query_vec = model.encode([patent_query], normalize_embeddings=True)[0].tolist()
+
         results = client.search(
             collection_name=collection_name,
             data=[query_vec],
-            limit=10,
-            output_fields=["title", "text", "metadata"]
+            limit=15,
+            output_fields=["doc_id", "filename", "chunk_index", "text"],
+            search_params={"metric_type": "COSINE"}
         )
 
+        seen_docs = set()
         patents = []
         for hit in results[0]:
             entity = hit.get("entity", {})
-            meta_data = entity.get("metadata", {}) or {}
+            doc_id = entity.get("doc_id", "")
+            if doc_id in seen_docs:
+                continue
+            seen_docs.add(doc_id)
+
+            meta_data = {}
+            text_preview = (entity.get("text", "") or "")[:400]
+            title = entity.get("filename", "") or doc_id or "제목 없음"
+
+            # 기술 키워드 매칭
+            query_terms = [t.strip().lower() for t in re.split(r'[,\s]+', query) if t.strip()]
+            text_lower = (title + " " + text_preview).lower()
+            matched = [t for t in query_terms if t in text_lower]
+
+            # 관련 도메인 용어 추출
+            domain_counter = _extract_terms_from_text(text_preview)
+            tech_keywords = [t for t, _ in domain_counter.most_common(5)]
+
             patents.append({
-                "title": entity.get("title", "제목 없음"),
-                "text": (entity.get("text", "") or "")[:300],
+                "title": title,
+                "text": text_preview,
+                "abstract": text_preview,
                 "score": round(hit.get("distance", 0), 4),
-                "year": meta_data.get("year", ""),
-                "authors": meta_data.get("authors", "")
+                "year": "",
+                "authors": "",
+                "filename": entity.get("filename", doc_id),
+                "tech_keywords": tech_keywords,
+                "matched_terms": matched,
+                "type": "기술 문헌"
             })
 
         wiz.response.status(200, patents)

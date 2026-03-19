@@ -77,7 +77,7 @@ class BuildTheoryGraphTool(BaseTool):
         if not seed_concept.strip():
             return "Error: seed_concept is required."
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
         depth = min(int(depth) if depth else 2, 3)
 
         model_name = DEFAULT_MODEL

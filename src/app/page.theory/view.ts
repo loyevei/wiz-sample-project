@@ -5,6 +5,23 @@ import { Service } from '@wiz/libs/portal/season/service';
 export class Component implements OnInit, OnDestroy {
     constructor(public service: Service, private route: ActivatedRoute) { }
 
+    private readonly collectionStorageKey: string = 'plasma.selectedCollection';
+
+    private getStoredCollection(): string {
+        try {
+            return localStorage.getItem(this.collectionStorageKey) || '';
+        } catch (e) { }
+        return '';
+    }
+
+    private persistCollection(name: string) {
+        try {
+            if (name && name.trim()) {
+                localStorage.setItem(this.collectionStorageKey, name);
+            }
+        } catch (e) { }
+    }
+
     // ==============================================================================
     // 상태 관리
     // ==============================================================================
@@ -66,6 +83,7 @@ export class Component implements OnInit, OnDestroy {
         }
         if (params['collection'] && this.collections.find((c: any) => c.name === params['collection'])) {
             this.selectedCollection = params['collection'];
+            this.persistCollection(this.selectedCollection);
         }
 
         const q = params['q'] || '';
@@ -113,14 +131,25 @@ export class Component implements OnInit, OnDestroy {
         const { code, data } = await wiz.call("collections");
         if (code === 200 && data.collections) {
             this.collections = data.collections;
+            const storedCollection = this.getStoredCollection();
+            if (storedCollection && this.collections.find((c: any) => c.name === storedCollection)) {
+                this.selectedCollection = storedCollection;
+            }
             if (this.collections.length > 0 && !this.selectedCollection) {
                 this.selectedCollection = this.collections[0].name;
+            }
+            if (this.selectedCollection && !this.collections.find((c: any) => c.name === this.selectedCollection)) {
+                this.selectedCollection = this.collections.length > 0 ? this.collections[0].name : '';
+            }
+            if (this.selectedCollection) {
+                this.persistCollection(this.selectedCollection);
             }
         }
         await this.service.render();
     }
 
     public async onCollectionChange() {
+        this.persistCollection(this.selectedCollection);
         this.equationStats = null;
         this.equations = [];
         this.equationSearchResults = [];

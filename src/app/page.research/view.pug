@@ -580,26 +580,48 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
         //- ========================================
         div(*ngIf="activeTab === 'recommend'")
             div(class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6")
-                h2(class="text-[15px] font-semibold text-gray-900 mb-4") 관심 분야 기반 논문 추천
-                p(class="text-[13px] text-gray-500 mb-4") 연구 관심 분야를 입력하면, 저장된 컬렉션에서 관련 논문을 추천합니다.
+                h2(class="text-[15px] font-semibold text-gray-900 mb-2") 관심 분야 기반 논문 추천
+                p(class="text-[13px] text-gray-500 mb-4") 연구 관심 분야를 입력하면, 저장된 컬렉션에서 벡터 유사도 기반으로 관련 논문을 추천합니다.
                 div(class="space-y-4")
                     textarea(class="w-full px-4 py-3 border border-gray-300 rounded-lg text-[13px] focus:ring-2 focus:ring-amber-200 focus:border-amber-400", rows="3", placeholder="관심 분야를 입력하세요 (예: 플라즈마 에칭 균일도 향상, 저온 CVD 박막 특성...)", [(ngModel)]="recInterests")
+                    //- 추천 태그
+                    div(class="flex flex-wrap gap-2")
+                        span(class="text-[11px] text-gray-400 py-1") 빠른 입력:
+                        button(*ngFor="let tag of suggestedTags.slice(0,6)", (click)="recInterests = tag; getRecommendations()", class="px-2.5 py-1 text-[11px] border border-gray-200 rounded-full text-gray-600 hover:bg-amber-50 hover:border-amber-300 transition-colors") {{tag}}
                     div(class="flex items-center gap-3")
-                        button((click)="getRecommendations()", [disabled]="recLoading || !recInterests.trim()", class="px-6 py-2.5 bg-amber-600 text-white text-[13px] font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors")
+                        button((click)="getRecommendations()", [disabled]="recLoading || !recInterests.trim()", class="inline-flex items-center gap-2 px-6 py-2.5 bg-amber-600 text-white text-[13px] font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors")
+                            svg(class="animate-spin size-4", viewBox="0 0 24 24", fill="none", *ngIf="recLoading")
+                                circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4")
+                                path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
                             span(*ngIf="!recLoading") 추천 받기
                             span(*ngIf="recLoading") 분석 중...
+                        span(*ngIf="recResults.length > 0", class="text-[12px] text-gray-500") {{recResults.length}}건 발견
+
+            //- 로딩 중
+            div(*ngIf="recLoading", class="flex flex-col items-center justify-center py-16")
+                div(class="animate-spin rounded-full h-8 w-8 border-2 border-amber-500 border-t-transparent mb-3")
+                span(class="text-[13px] text-gray-500") 컬렉션에서 관련 논문을 검색하고 있습니다...
 
             //- 추천 결과
-            div(*ngIf="recResults.length > 0", class="space-y-3")
-                div(*ngFor="let paper of recResults; let i = index", class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:border-amber-200 transition-colors")
+            div(*ngIf="!recLoading && recResults.length > 0", class="space-y-3")
+                div(*ngFor="let paper of recResults; let i = index", class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:border-amber-300 hover:shadow-md transition-all")
                     div(class="flex items-start gap-3")
-                        div(class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[11px] font-bold") {{i + 1}}
-                        div(class="flex-1")
-                            h3(class="text-[13px] font-semibold text-gray-900 mb-1") {{paper.title || '제목 없음'}}
-                            p(class="text-[12px] text-gray-500 mb-2 line-clamp-3") {{paper.abstract || paper.text || ''}}
-                            div(class="flex items-center gap-3")
-                                span(*ngIf="paper.score", class="text-[11px] text-amber-600 font-mono") 유사도: {{(paper.score * 100).toFixed(1)}}%
-                                span(*ngIf="paper.authors", class="text-[11px] text-gray-400") {{paper.authors}}
+                        div(class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold", [ngClass]="paper.score > 0.7 ? 'bg-amber-100 text-amber-700' : (paper.score > 0.5 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')") {{i + 1}}
+                        div(class="flex-1 min-w-0")
+                            h3(class="text-[13px] font-semibold text-gray-900 mb-1 leading-snug") {{paper.title || '제목 없음'}}
+                            p(*ngIf="paper.authors", class="text-[11px] text-gray-400 mb-2") {{paper.authors}}
+                                span(*ngIf="paper.year", class="ml-2") ({{paper.year}})
+                            p(class="text-[12px] text-gray-500 mb-3 line-clamp-3 leading-relaxed") {{paper.abstract || paper.text || ''}}
+                            div(class="flex items-center flex-wrap gap-2")
+                                span(class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold", [ngClass]="paper.relevance === '높음' ? 'bg-green-100 text-green-700' : (paper.relevance === '보통' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')")
+                                    | 유사도 {{(paper.score * 100).toFixed(1)}}%
+                                span(*ngIf="paper.filename", class="text-[10px] text-gray-400 font-mono truncate max-w-[200px]") 📄 {{paper.filename}}
+                                span(*ngFor="let term of (paper.matched_terms || []).slice(0,3)", class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700") {{term}}
+
+            //- 빈 상태
+            div(*ngIf="!recLoading && recResults.length === 0 && recInterests.trim()", class="text-center py-16")
+                div(class="text-4xl mb-3") 📚
+                p(class="text-[13px] text-gray-500") 검색 결과가 없습니다. 다른 키워드를 시도해 보세요.
 
         //- ========================================
         //- 제안서 생성 탭 (proposal)
@@ -623,21 +645,47 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                         span(*ngIf="proposalLoading") 생성 중...
 
             //- 제안서 결과
-            div(*ngIf="proposalResult", class="bg-white rounded-xl shadow-sm border border-gray-200 p-6")
-                h3(class="text-[15px] font-semibold text-gray-900 mb-4") 생성된 제안서 초안
-                div(class="space-y-4")
-                    div(*ngIf="proposalResult.background", class="p-4 bg-gray-50 rounded-lg")
-                        h4(class="text-[13px] font-semibold text-gray-700 mb-2") 연구 배경
-                        p(class="text-[13px] text-gray-600 whitespace-pre-line") {{proposalResult.background}}
-                    div(*ngIf="proposalResult.methodology", class="p-4 bg-gray-50 rounded-lg")
-                        h4(class="text-[13px] font-semibold text-gray-700 mb-2") 연구 방법론
-                        p(class="text-[13px] text-gray-600 whitespace-pre-line") {{proposalResult.methodology}}
-                    div(*ngIf="proposalResult.expected_results", class="p-4 bg-gray-50 rounded-lg")
-                        h4(class="text-[13px] font-semibold text-gray-700 mb-2") 기대 결과
-                        p(class="text-[13px] text-gray-600 whitespace-pre-line") {{proposalResult.expected_results}}
-                    div(*ngIf="proposalResult.references && proposalResult.references.length > 0", class="p-4 bg-gray-50 rounded-lg")
-                        h4(class="text-[13px] font-semibold text-gray-700 mb-2") 참고 문헌
-                        div(*ngFor="let ref of proposalResult.references", class="text-[12px] text-gray-500 mb-1") • {{ref}}
+            div(*ngIf="proposalResult", class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden")
+                div(class="bg-gradient-to-r from-amber-50 to-amber-100 px-6 py-4 border-b border-amber-200")
+                    h3(class="text-[15px] font-semibold text-gray-900") 📋 생성된 제안서 초안
+                    p(*ngIf="proposalResult.title", class="text-[13px] text-amber-700 mt-1 font-medium") {{proposalResult.title}}
+                div(class="p-6 space-y-5")
+                    div(*ngIf="proposalResult.background")
+                        div(class="flex items-center gap-2 mb-2")
+                            div(class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-[11px] font-bold text-blue-600") 1
+                            h4(class="text-[13px] font-semibold text-gray-700") 연구 배경
+                        div(class="p-4 bg-gray-50 rounded-lg ml-8")
+                            p(class="text-[13px] text-gray-600 whitespace-pre-line leading-relaxed") {{proposalResult.background}}
+                    div(*ngIf="proposalResult.objective")
+                        div(class="flex items-center gap-2 mb-2")
+                            div(class="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center text-[11px] font-bold text-green-600") 2
+                            h4(class="text-[13px] font-semibold text-gray-700") 연구 목표
+                        div(class="p-4 bg-gray-50 rounded-lg ml-8")
+                            p(class="text-[13px] text-gray-600 whitespace-pre-line leading-relaxed") {{proposalResult.objective}}
+                    div(*ngIf="proposalResult.methodology")
+                        div(class="flex items-center gap-2 mb-2")
+                            div(class="w-6 h-6 rounded-full bg-purple-100 flex items-center justify-center text-[11px] font-bold text-purple-600") 3
+                            h4(class="text-[13px] font-semibold text-gray-700") 연구 방법론
+                        div(class="p-4 bg-gray-50 rounded-lg ml-8")
+                            p(class="text-[13px] text-gray-600 whitespace-pre-line leading-relaxed") {{proposalResult.methodology}}
+                    div(*ngIf="proposalResult.expected_results")
+                        div(class="flex items-center gap-2 mb-2")
+                            div(class="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center text-[11px] font-bold text-amber-600") 4
+                            h4(class="text-[13px] font-semibold text-gray-700") 기대 결과
+                        div(class="p-4 bg-gray-50 rounded-lg ml-8")
+                            p(class="text-[13px] text-gray-600 whitespace-pre-line leading-relaxed") {{proposalResult.expected_results}}
+                    div(*ngIf="proposalResult.references && proposalResult.references.length > 0")
+                        div(class="flex items-center gap-2 mb-2")
+                            div(class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[11px] font-bold text-gray-600") 5
+                            h4(class="text-[13px] font-semibold text-gray-700") 참고 문헌 ({{proposalResult.references.length}}편)
+                        div(class="p-4 bg-gray-50 rounded-lg ml-8 space-y-1")
+                            div(*ngFor="let ref of proposalResult.references; let ri = index", class="text-[12px] text-gray-500 flex gap-2")
+                                span(class="text-gray-400 flex-shrink-0") [{{ri + 1}}]
+                                span {{ref}}
+                    div(*ngIf="proposalResult.related_terms && proposalResult.related_terms.length > 0", class="ml-8")
+                        h4(class="text-[12px] font-medium text-gray-500 mb-2") 관련 핵심 용어
+                        div(class="flex flex-wrap gap-1.5")
+                            span(*ngFor="let term of proposalResult.related_terms", class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] bg-amber-50 text-amber-700 border border-amber-200") {{term}}
 
         //- ========================================
         //- 특허 검색 탭 (patent)
@@ -653,14 +701,28 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                         span(*ngIf="patentSearching") 검색 중...
 
             //- 검색 결과
-            div(*ngIf="patentResults.length > 0", class="space-y-3")
-                div(*ngFor="let patent of patentResults; let i = index", class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:border-amber-200 transition-colors")
+            div(*ngIf="patentSearching", class="flex flex-col items-center justify-center py-16")
+                div(class="animate-spin rounded-full h-8 w-8 border-2 border-amber-500 border-t-transparent mb-3")
+                span(class="text-[13px] text-gray-500") 기술 문헌을 검색하고 있습니다...
+
+            div(*ngIf="!patentSearching && patentResults.length > 0", class="space-y-3")
+                div(class="text-[12px] text-gray-500 mb-2") {{patentResults.length}}건의 관련 기술 문헌을 찾았습니다.
+                div(*ngFor="let patent of patentResults; let i = index", class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:border-amber-300 hover:shadow-md transition-all")
                     div(class="flex items-start gap-3")
-                        div(class="flex-shrink-0 w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[11px] font-bold") {{i + 1}}
-                        div(class="flex-1")
-                            h3(class="text-[13px] font-semibold text-gray-900 mb-1") {{patent.title || '제목 없음'}}
-                            p(class="text-[12px] text-gray-500 mb-2 line-clamp-3") {{patent.abstract || patent.text || ''}}
-                            div(class="flex items-center gap-3")
-                                span(*ngIf="patent.score", class="text-[11px] text-amber-600 font-mono") 관련도: {{(patent.score * 100).toFixed(1)}}%
-                                span(*ngIf="patent.year", class="text-[11px] text-gray-400") {{patent.year}}
+                        div(class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold", [ngClass]="patent.score > 0.7 ? 'bg-amber-100 text-amber-700' : (patent.score > 0.5 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')") {{i + 1}}
+                        div(class="flex-1 min-w-0")
+                            h3(class="text-[13px] font-semibold text-gray-900 mb-1 leading-snug") {{patent.title || '제목 없음'}}
+                            p(*ngIf="patent.authors", class="text-[11px] text-gray-400 mb-1") {{patent.authors}}
+                                span(*ngIf="patent.year", class="ml-2") ({{patent.year}})
+                            p(class="text-[12px] text-gray-500 mb-3 line-clamp-3 leading-relaxed") {{patent.abstract || patent.text || ''}}
+                            div(class="flex items-center flex-wrap gap-2")
+                                span(class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold", [ngClass]="patent.score > 0.7 ? 'bg-green-100 text-green-700' : (patent.score > 0.5 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')")
+                                    | 관련도 {{(patent.score * 100).toFixed(1)}}%
+                                span(*ngFor="let kw of (patent.tech_keywords || []).slice(0,4)", class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700") {{kw}}
+                                span(*ngIf="patent.filename", class="text-[10px] text-gray-400 font-mono truncate max-w-[200px]") 📄 {{patent.filename}}
+
+            //- 빈 상태
+            div(*ngIf="!patentSearching && patentResults.length === 0 && patentQuery.trim()", class="text-center py-16")
+                div(class="text-4xl mb-3") 🔍
+                p(class="text-[13px] text-gray-500") 검색 결과가 없습니다. 다른 기술 키워드를 시도해 보세요.
 

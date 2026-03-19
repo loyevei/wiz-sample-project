@@ -1,0 +1,35 @@
+:host {
+    display: contents;
+}
+
+/* Bounce animation for loading dots */
+@keyframes bounce {
+    0%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-6px);
+    }
+}
+
+/* Smooth scrollbar */
+.overflow-y-auto {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.15) transparent;
+    &::-webkit-scrollbar {
+        width: 4px;
+    }
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.15);
+        border-radius: 2px;
+    }
+}
+
+/* Auto-resize textarea visual */
+textarea {
+    line-height: 1.5;
+    transition: height 0.1s ease;
+}

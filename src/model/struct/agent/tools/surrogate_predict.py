@@ -92,7 +92,7 @@ class SurrogatePredictTool(BaseTool):
         PARAM_DB_DIR = "/opt/app/data"
 
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
 
         if target_param not in PARAM_PATTERNS or PARAM_PATTERNS[target_param]["category"] != "result":
             available = [k for k, v in PARAM_PATTERNS.items() if v["category"] == "result"]

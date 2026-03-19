@@ -1,4 +1,5 @@
 import { OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { Service } from '@wiz/libs/portal/season/service';
 
 declare const wiz: any;
@@ -38,14 +39,35 @@ export class Component implements OnInit {
     // ===== Activity =====
     public activities: any[] = [];
 
-    constructor(public service: Service) { }
+    constructor(public service: Service, private route: ActivatedRoute) { }
 
     public async ngOnInit() {
         await this.service.init();
         await this.loadProjects();
         await this.loadDiscussions();
         await this.loadActivity();
+        await this.handleQueryParams();
         await this.service.render();
+    }
+
+    private async handleQueryParams() {
+        const params = this.route.snapshot.queryParams;
+        if (!params || Object.keys(params).length === 0) return;
+
+        if (params['tab'] && this.tabs.find((t: any) => t.id === params['tab'])) {
+            this.activeTab = params['tab'];
+        }
+
+        const q = params['q'] || '';
+
+        switch (this.activeTab) {
+            case 'projects':
+                if (q) this.projectSearch = q;
+                break;
+            case 'discussions':
+                if (q) this.discussionSearch = q;
+                break;
+        }
     }
 
     public async switchTab(tabId: string) {

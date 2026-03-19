@@ -41,8 +41,9 @@ class SearchPapersTool(BaseTool):
         if not query.strip():
             return "Error: query is required"
 
+        # Use context collection as default
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
         limit = max(1, min(20, int(limit)))
 
         # 컬렉션 모델 결정

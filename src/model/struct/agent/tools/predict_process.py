@@ -151,7 +151,7 @@ class PredictProcessTool(BaseTool):
         DEFAULT_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
 
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
 
         # Build query
         parts = []

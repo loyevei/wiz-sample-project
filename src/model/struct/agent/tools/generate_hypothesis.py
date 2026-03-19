@@ -47,7 +47,7 @@ class GenerateHypothesisTool(BaseTool):
         if not condition.strip():
             return "Error: condition is required"
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
 
         model_name = DEFAULT_MODEL
         try:

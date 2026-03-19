@@ -37,7 +37,7 @@ class AnalyzeParameterEffectTool(BaseTool):
         if not param_name.strip():
             return "Error: param_name is required."
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
 
         model_name = DEFAULT_MODEL
         try:

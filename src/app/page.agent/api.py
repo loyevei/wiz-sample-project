@@ -16,6 +16,7 @@ def agent_chat():
     # Request Context 내에서 파라미터 추출 (generator 바깥)
     message = wiz.request.query("message", "")
     history_str = wiz.request.query("history", "[]")
+    collection = wiz.request.query("collection", "")
 
     if not message.strip():
         wiz.response.status(400, message="message is required")
@@ -26,8 +27,8 @@ def agent_chat():
     except Exception:
         history = []
 
-    # Agent 인스턴스 생성
-    agent = struct.agent()
+    # Agent 인스턴스 생성 (collection 전달)
+    agent = struct.agent(collection=collection)
 
     # SSE Generator
     def generate():

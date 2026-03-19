@@ -70,7 +70,7 @@ class FailureReasoningTool(BaseTool):
         if not failure_description.strip():
             return "Error: failure_description is required."
         if not collection:
-            collection = "plasma_papers"
+            collection = self.ctx.get("collection", "") or "plasma_papers"
 
         model_name = DEFAULT_MODEL
         try:
