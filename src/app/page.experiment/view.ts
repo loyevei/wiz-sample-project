@@ -25,11 +25,15 @@ export class Component implements OnInit {
     public noteSearch: string = '';
     public showNoteForm: boolean = false;
     public editingNote: any = null;
+    public noteGenerating: boolean = false;
     public noteForm: any = {
         title: '',
         date: '',
         content: '',
-        tags: ''
+        tags: '',
+        source_type: 'manual',
+        source_ref: '',
+        auto_generated: false
     };
 
     // ===== Recipe =====
@@ -150,7 +154,10 @@ export class Component implements OnInit {
                 title: note.title,
                 date: note.date,
                 content: note.content,
-                tags: note.tags || ''
+                tags: note.tags || '',
+                source_type: note.source_type || 'manual',
+                source_ref: note.source_ref || '',
+                auto_generated: !!note.auto_generated
             };
         } else {
             this.editingNote = null;
@@ -158,7 +165,10 @@ export class Component implements OnInit {
                 title: '',
                 date: new Date().toISOString().split('T')[0],
                 content: '',
-                tags: ''
+                tags: '',
+                source_type: 'manual',
+                source_ref: '',
+                auto_generated: false
             };
         }
         this.showNoteForm = true;
@@ -193,6 +203,43 @@ export class Component implements OnInit {
             if (code === 200) await this.loadNotes();
         } catch (e) { }
         await this.service.render();
+    }
+
+    public async generateNoteDraft() {
+        this.noteGenerating = true;
+        await this.service.render();
+        try {
+            const selectedRecipe = this.editingRecipe || this.recipes[0] || {};
+            const { code, data } = await wiz.call("generate_note_template", {
+                title: this.noteForm.title,
+                context: JSON.stringify({
+                    factors: this.factors,
+                    doeMatrix: this.doeMatrix,
+                    recipes: this.recipes,
+                    selectedRecipe: selectedRecipe,
+                    collection: ''
+                })
+            });
+            if (code === 200) {
+                this.showNoteForm = true;
+                this.noteForm = {
+                    ...this.noteForm,
+                    title: data.title || this.noteForm.title,
+                    date: data.date || this.noteForm.date,
+                    content: data.content || this.noteForm.content,
+                    tags: data.tags || this.noteForm.tags,
+                    source_type: 'auto-template',
+                    source_ref: selectedRecipe?.id || '',
+                    auto_generated: true
+                };
+            }
+        } catch (e) { }
+        this.noteGenerating = false;
+        await this.service.render();
+    }
+
+    public openDatasetPage() {
+        this.service.href('/experiment/dataset');
     }
 
     // ===== Recipe Methods =====

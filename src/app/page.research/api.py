@@ -4,7 +4,9 @@ import json
 import traceback
 import numpy as np
 import re
+import uuid
 from collections import Counter
+from datetime import datetime
 
 from sentence_transformers import SentenceTransformer
 from pymilvus import MilvusClient
@@ -16,6 +18,8 @@ import season.lib.exception
 MILVUS_URI = os.environ.get("MILVUS_URI", "/opt/app/data/milvus.db")
 COLLECTION_META_PATH = "/opt/app/data/collection_meta.json"
 DEFAULT_COLLECTION = "plasma_papers"
+DATA_DIR = "/opt/app/data"
+EVIDENCE_TRACE_PATH = os.path.join(DATA_DIR, "research_evidence_traces.json")
 
 # 모델 레지스트리 (page.embedding과 동일)
 MODEL_REGISTRY = {
@@ -103,6 +107,129 @@ def _resolve_collection_and_model():
         collection_name = DEFAULT_COLLECTION
     model_name = _get_collection_model(collection_name)
     return collection_name, model_name
+
+
+def _load_json(path, default=None):
+    if default is None:
+        default = []
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    if isinstance(default, dict):
+        return dict(default)
+    return list(default)
+
+
+def _save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _extract_condition_mentions(text):
+    if not text:
+        return []
+    patterns = [
+        r'\b\d+\.?\d*\s*(?:mTorr|Torr|Pa|kPa|mbar)\b',
+        r'\b\d+\.?\d*\s*(?:W|kW)\b',
+        r'\b\d+\.?\d*\s*(?:sccm|slm)\b',
+        r'\b\d+\.?\d*\s*(?:°C|℃|K)\b',
+        r'\b\d+\.?\d*\s*(?:MHz|kHz|GHz)\b',
+        r'\b(?:Ar|O2|N2|H2|He|CF4|SF6|Cl2|BCl3|HBr|SiH4|C4F8|CHF3)\b'
+    ]
+    items = []
+    seen = set()
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            value = match.group(0).strip()
+            key = value.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append(value)
+            if len(items) >= 8:
+                return items
+    return items
+
+
+def _build_evidence_item(entity, score):
+    text = entity.get("text", "") or ""
+    return {
+        "doc_id": entity.get("doc_id", ""),
+        "filename": entity.get("filename", ""),
+        "chunk_index": entity.get("chunk_index", 0),
+        "text": text[:220],
+        "score": round(score or 0, 4),
+        "conditions": _extract_condition_mentions(text)
+    }
+
+
+def list_evidence_traces():
+    collection_name = wiz.request.query("collection", "").strip()
+    traces = _load_json(EVIDENCE_TRACE_PATH, [])
+    if collection_name:
+        traces = [trace for trace in traces if trace.get("collection") == collection_name]
+    wiz.response.status(200, traces=traces[:50])
+
+
+def save_evidence_trace():
+    trace_type = wiz.request.query("trace_type", "general")
+    title = wiz.request.query("title", "")
+    summary = wiz.request.query("summary", "")
+    keyword = wiz.request.query("keyword", "")
+    collection_name = wiz.request.query("collection", DEFAULT_COLLECTION).strip() or DEFAULT_COLLECTION
+    evidence_raw = wiz.request.query("evidence", "[]")
+    meta_raw = wiz.request.query("meta", "{}")
+
+    if not title.strip():
+        wiz.response.status(400, message="추적 제목이 필요합니다.")
+
+    try:
+        evidence = json.loads(evidence_raw)
+    except Exception:
+        evidence = []
+
+    try:
+        meta = json.loads(meta_raw)
+    except Exception:
+        meta = {}
+
+    extracted_conditions = []
+    seen_conditions = set()
+    normalized_evidence = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        conditions = item.get("conditions", []) or _extract_condition_mentions(item.get("text", ""))
+        normalized = dict(item)
+        normalized["conditions"] = conditions
+        normalized_evidence.append(normalized)
+        for condition in conditions:
+            key = condition.lower()
+            if key in seen_conditions:
+                continue
+            seen_conditions.add(key)
+            extracted_conditions.append(condition)
+
+    traces = _load_json(EVIDENCE_TRACE_PATH, [])
+    trace = {
+        "id": str(uuid.uuid4())[:8],
+        "trace_type": trace_type,
+        "title": title,
+        "summary": summary,
+        "keyword": keyword,
+        "collection": collection_name,
+        "evidence": normalized_evidence,
+        "meta": meta,
+        "extracted_conditions": extracted_conditions,
+        "created_at": datetime.now().isoformat()
+    }
+    traces.insert(0, trace)
+    _save_json(EVIDENCE_TRACE_PATH, traces[:200])
+    wiz.response.status(200, trace=trace)
 
 
 def _extract_terms_from_text(text):
@@ -333,11 +460,7 @@ def recommend():
             evidence_snippets = []
             for h in cross_results[0][:3]:
                 e = h.get("entity", {})
-                evidence_snippets.append({
-                    "filename": e.get("filename", ""),
-                    "text": e.get("text", "")[:200],
-                    "score": round(h.get("distance", 0), 4)
-                })
+                evidence_snippets.append(_build_evidence_item(e, h.get("distance", 0)))
 
             recommendations.append({
                 "type": "cross_topic",
@@ -393,11 +516,7 @@ def recommend():
                 evidence_snippets = []
                 for h in gap_search[0]:
                     e = h.get("entity", {})
-                    evidence_snippets.append({
-                        "filename": e.get("filename", ""),
-                        "text": e.get("text", "")[:200],
-                        "score": round(h.get("distance", 0), 4)
-                    })
+                    evidence_snippets.append(_build_evidence_item(e, h.get("distance", 0)))
 
                 recommendations.append({
                     "type": "research_gap",
@@ -443,11 +562,7 @@ def recommend():
             evidence_snippets = []
             for h in exp_results[0]:
                 e = h.get("entity", {})
-                evidence_snippets.append({
-                    "filename": e.get("filename", ""),
-                    "text": e.get("text", "")[:200],
-                    "score": round(h.get("distance", 0), 4)
-                })
+                evidence_snippets.append(_build_evidence_item(e, h.get("distance", 0)))
 
             recommendations.append({
                 "type": "expansion",
@@ -1177,12 +1292,8 @@ def generate_hypothesis():
             all_texts.append(text)
             doc_id = entity.get("doc_id", "")
             if doc_id not in evidence_docs:
-                evidence_docs[doc_id] = {
-                    "doc_id": doc_id,
-                    "filename": entity.get("filename", ""),
-                    "score": round(hit.get("distance", 0), 4),
-                    "snippet": text[:200]
-                }
+                evidence_docs[doc_id] = dict(_build_evidence_item(entity, hit.get("distance", 0)))
+                evidence_docs[doc_id]["snippet"] = text[:200]
 
         # 공통 용어 추출
         combined_text = " ".join(all_texts)
@@ -1285,11 +1396,7 @@ def generate_hypothesis():
                 confidence = hyp_results[0][0].get("distance", 0)
                 for h in hyp_results[0]:
                     e = h.get("entity", {})
-                    hyp_evidence.append({
-                        "filename": e.get("filename", ""),
-                        "text": e.get("text", "")[:200],
-                        "score": round(h.get("distance", 0), 4)
-                    })
+                    hyp_evidence.append(_build_evidence_item(e, h.get("distance", 0)))
 
             hypotheses.append({
                 "type": template["type"],
@@ -1408,6 +1515,7 @@ def generate_proposal():
 
         references = []
         context_texts = []
+        reference_details = []
 
         if client.has_collection(collection_name):
             results = client.search(
@@ -1429,6 +1537,7 @@ def generate_proposal():
                 ref_str = ref_title
                 references.append(ref_str)
                 context_texts.append((entity.get("text", "") or "")[:300])
+                reference_details.append(_build_evidence_item(entity, hit.get("distance", 0)))
 
         # 키워드 처리
         kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
@@ -1486,6 +1595,7 @@ def generate_proposal():
                 f"• 관련 특허 출원 검토"
             ),
             "references": references,
+            "reference_details": reference_details,
             "keywords": kw_list if kw_list else [kw_str],
             "related_terms": top_terms[:8]
         }

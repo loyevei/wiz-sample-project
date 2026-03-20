@@ -129,7 +129,7 @@ div(class="fixed bottom-6 right-6 z-[9999] transition-all duration-300 origin-bo
             div(class="flex items-end gap-2")
                 div(class="flex-1 relative")
                     textarea(#chatInputEl="", [(ngModel)]="chatInput", (keydown)="onKeydown($event)", placeholder="질문을 입력하세요...", rows="1", class="w-full resize-none rounded-xl border border-gray-300 px-3 py-2 text-[13px] focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none max-h-24 overflow-y-auto", [disabled]="chatLoading")
-                button(*ngIf="!chatLoading", (click)="sendChat()", [disabled]="!chatInput?.trim()", class="flex-shrink-0 w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors")
+                button(*ngIf="!chatLoading", (click)="sendChat()", [disabled]="!chatInput.trim()", class="flex-shrink-0 w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center hover:bg-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors")
                     svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4")
                         path(stroke-linecap="round", stroke-linejoin="round", d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5")
                 button(*ngIf="chatLoading", (click)="cancelChat()", class="flex-shrink-0 w-9 h-9 rounded-xl bg-red-500 text-white flex items-center justify-center hover:bg-red-400 transition-colors")

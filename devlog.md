@@ -29,3 +29,4 @@
 | 2026-03-18 | 003 | 플로팅 챗봇 에이전트 `Te` NameError 수정 및 Tool-Use SSE 응답 복구 | [상세](devlog/2026-03-18/003-floating-chat-agent-fstring-fix.md) |
 | 2026-03-19 | 001 | 플로팅 챗봇 선택 컬렉션을 Research/Prediction/Diagnosis/Theory 페이지와 동기화 | [상세](devlog/2026-03-19/001-floating-chat-collection-sync.md) |
 | 2026-03-19 | 002 | 플로팅 챗봇이 페이지 이동과 함께 에이전트형 handoff 답변을 남기도록 강화 | [상세](devlog/2026-03-19/002-floating-chat-agent-handoff.md) |
+| 2026-03-19 | 003 | 연구자 워크플로우 확장: 근거 추적·실험 데이터셋·연구 노트 자동화·프로젝트 컬렉션·보고서 생성 | [상세](devlog/2026-03-19/003-researcher-workflow-suite.md) |

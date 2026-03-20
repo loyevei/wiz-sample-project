@@ -40,6 +40,9 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                         span(class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium flex-shrink-0", [ngClass]="getStatusClass(project.status)") {{getStatusLabel(project.status)}}
 
                     p(class="text-[12px] text-gray-500 mb-4 line-clamp-2 min-h-[2.5rem]") {{project.description || '설명 없음'}}
+                    div(class="flex flex-wrap gap-1.5 mb-4")
+                        span(*ngIf="project.collection", class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700 border border-sky-200") {{project.collection}}
+                        span(*ngIf="project.tags", class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200") {{project.tags}}
 
                     div(class="flex items-center justify-between pt-3 border-t border-gray-100")
                         div(class="flex items-center gap-3")
@@ -48,6 +51,9 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                                     path(stroke-linecap="round", stroke-linejoin="round", d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z")
                                 span {{project.members?.length || 0}}명
                             span(class="text-[11px] text-gray-400") {{formatDate(project.created)}}
+                        div(class="flex items-center gap-1")
+                            button(*ngIf="project.collection", (click)="openProjectCollection(project); $event.stopPropagation()", class="inline-flex items-center rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-700 hover:bg-sky-100") 컬렉션 열기
+                            button((click)="generateProjectReport(project); $event.stopPropagation()", class="inline-flex items-center rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100") 보고서 생성
                         div(class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity")
                             button((click)="openProjectForm(project); $event.stopPropagation()", class="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-teal-600 transition-colors")
                                 svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4")
@@ -179,6 +185,20 @@ div(*ngIf="showProjectForm", class="fixed inset-0 z-50 flex items-center justify
                 textarea([(ngModel)]="projectForm.description", rows="3", placeholder="프로젝트에 대한 간단한 설명", class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-[13px] text-gray-900 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none resize-none")
 
             div
+                label(class="block text-[13px] font-medium text-gray-700 mb-1") 프로젝트 목표
+                textarea([(ngModel)]="projectForm.objective", rows="3", placeholder="프로젝트 목표, 검증하려는 가설, 기대 결과", class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-[13px] text-gray-900 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none resize-none")
+
+            div(class="grid grid-cols-1 md:grid-cols-2 gap-4")
+                div
+                    label(class="block text-[13px] font-medium text-gray-700 mb-1") 연결 컬렉션
+                    select([(ngModel)]="projectForm.collection", class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-[13px] text-gray-900 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none")
+                        option(value="") 선택 안 함
+                        option(*ngFor="let collection of collections", [value]="collection.name") {{collection.name}}
+                div
+                    label(class="block text-[13px] font-medium text-gray-700 mb-1") 태그
+                    input(type="text", [(ngModel)]="projectForm.tags", placeholder="etching, report, plasma", class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-[13px] text-gray-900 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none")
+
+            div
                 label(class="block text-[13px] font-medium text-gray-700 mb-1") 멤버 (쉼표로 구분)
                 input(type="text", [(ngModel)]="projectForm.members", placeholder="user1, user2, user3", class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-[13px] text-gray-900 focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none")
 
@@ -213,3 +233,22 @@ div(*ngIf="showDiscussionForm", class="fixed inset-0 z-50 flex items-center just
         div(class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-2")
             button((click)="cancelDiscussionForm()", class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-[13px] font-medium text-gray-700 shadow-sm hover:bg-gray-50") 취소
             button((click)="saveDiscussion()", class="inline-flex items-center rounded-lg bg-teal-600 px-4 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-teal-500") {{editingDiscussion ? '수정' : '작성'}}
+
+div(*ngIf="selectedReport", class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm")
+    div(class="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-4 overflow-hidden")
+        div(class="px-6 py-5 border-b border-gray-100 flex items-center justify-between")
+            div
+                h3(class="text-[15px] font-semibold text-gray-900") 프로젝트 보고서 미리보기
+                p(class="text-[13px] text-gray-500 mt-1") {{selectedReport.project_name}}
+            button((click)="closeReport()", class="text-[13px] text-gray-500 hover:text-gray-700") 닫기
+        div(class="grid grid-cols-1 lg:grid-cols-2 gap-0")
+            div(class="p-6 border-r border-gray-100 max-h-[70vh] overflow-y-auto")
+                h4(class="text-[13px] font-semibold text-gray-700 mb-3") 보고서 초안
+                pre(class="whitespace-pre-wrap text-[12px] text-gray-600 leading-relaxed font-sans") {{selectedReport.markdown}}
+            div(class="p-6 max-h-[70vh] overflow-y-auto")
+                h4(class="text-[13px] font-semibold text-gray-700 mb-3") 발표 자료 구성
+                div(class="space-y-3")
+                    div(*ngFor="let slide of selectedReport.slides; let i = index", class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3")
+                        div(class="text-[12px] font-semibold text-gray-900 mb-2") {{i + 1}}. {{slide.title}}
+                        ul(class="space-y-1")
+                            li(*ngFor="let bullet of slide.bullets", class="text-[12px] text-gray-600") • {{bullet}}

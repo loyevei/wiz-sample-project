@@ -74,6 +74,9 @@ def save_note():
     date = wiz.request.query("date", "")
     content = wiz.request.query("content", "")
     tags = wiz.request.query("tags", "")
+    source_type = wiz.request.query("source_type", "manual")
+    source_ref = wiz.request.query("source_ref", "")
+    auto_generated = wiz.request.query("auto_generated", "false") == "true"
 
     if not title.strip():
         wiz.response.status(400, message="Title is required")
@@ -87,6 +90,9 @@ def save_note():
                 note["date"] = date
                 note["content"] = content
                 note["tags"] = tags
+                note["source_type"] = source_type
+                note["source_ref"] = source_ref
+                note["auto_generated"] = auto_generated
                 note["updated_at"] = datetime.now().isoformat()
                 break
     else:
@@ -96,6 +102,9 @@ def save_note():
             "date": date,
             "content": content,
             "tags": tags,
+            "source_type": source_type,
+            "source_ref": source_ref,
+            "auto_generated": auto_generated,
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
         }
@@ -113,6 +122,78 @@ def delete_note():
     notes = [n for n in notes if n["id"] != note_id]
     _save_json("experiment_notes.json", notes)
     wiz.response.status(200, True)
+
+def generate_note_template():
+    title = wiz.request.query("title", "")
+    context_raw = wiz.request.query("context", "{}")
+    try:
+        context = json.loads(context_raw)
+    except Exception:
+        context = {}
+
+    factors = context.get("factors", [])
+    doe_matrix = context.get("doeMatrix", [])
+    recipes = context.get("recipes", [])
+    selected_recipe = context.get("selectedRecipe", {})
+    collection = context.get("collection", "")
+
+    factor_names = [f.get("name", "") for f in factors if f.get("name")]
+    recipe_name = selected_recipe.get("name") or (recipes[0].get("name") if recipes else "")
+    recipe_summary = []
+    if selected_recipe or recipes:
+        recipe = selected_recipe if selected_recipe else recipes[0]
+        recipe_summary = [
+            f"가스: {recipe.get('gas', '-')}",
+            f"압력: {recipe.get('pressure', '-')} mTorr",
+            f"파워: {recipe.get('power', '-')} W",
+            f"온도: {recipe.get('temperature', '-')} °C",
+            f"시간: {recipe.get('time', '-')} s"
+        ]
+
+    note_title = title.strip() or recipe_name or "자동 생성 연구 노트"
+    body = [
+        f"# {note_title}",
+        "",
+        f"- 작성일: {datetime.now().strftime('%Y-%m-%d')}",
+        f"- 컬렉션: {collection or '-'}",
+        f"- DOE 조합 수: {len(doe_matrix)}",
+        f"- 핵심 인자: {', '.join(factor_names) if factor_names else '-'}",
+        "",
+        "## 실험 배경",
+        "- 본 노트는 현재 설정된 실험 인자 및 레시피를 기반으로 자동 생성되었습니다.",
+        "- 변경된 조건과 결과를 하단 관찰 섹션에 이어서 기록하세요.",
+        "",
+        "## 레시피 요약",
+    ]
+    if recipe_summary:
+        body.extend([f"- {item}" for item in recipe_summary])
+    else:
+        body.append("- 등록된 레시피 없음")
+    body.extend([
+        "",
+        "## 관찰 결과",
+        "- 초기 플라즈마 점화 상태:",
+        "- 공정 중 스펙트럼/안정성 변화:",
+        "- 결과물 특성(식각/증착/균일도 등):",
+        "",
+        "## 다음 액션",
+        "- DOE 결과를 데이터셋 페이지에 구조화 저장",
+        "- 재현성 확인을 위한 반복 실험 계획",
+        "- 필요한 경우 연구 근거 추적과 프로젝트 보고서에 연결"
+    ])
+
+    tags = ["auto-note"]
+    if factor_names:
+        tags.extend(factor_names[:3])
+    if recipe_name:
+        tags.append(recipe_name)
+
+    wiz.response.status(200, {
+        "title": note_title,
+        "date": datetime.now().strftime('%Y-%m-%d'),
+        "content": "\n".join(body),
+        "tags": ", ".join(tags)
+    })
 
 def list_recipes():
     recipes = _load_json("experiment_recipes.json", [])

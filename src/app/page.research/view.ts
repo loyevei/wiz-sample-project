@@ -31,6 +31,8 @@ export class Component implements OnInit {
 
     public relatedDocs: any[] = [];
     public relatedSource: string = '';
+    public evidenceTraces: any[] = [];
+    public tracesLoading: boolean = false;
 
     public recommending: boolean = false;
     public recommendations: any[] = [];
@@ -153,6 +155,7 @@ export class Component implements OnInit {
         await this.service.init();
         await this.loadCollections();
         await this.handleQueryParams();
+        await this.loadEvidenceTraces();
     }
 
     private async handleQueryParams() {
@@ -286,9 +289,95 @@ export class Component implements OnInit {
         this.keywordsData = [];
         await this.service.render();
 
+        await this.loadEvidenceTraces();
+
         if (this.selectedCollection && this.activeTab === 'keywords') {
             await this.loadKeywords();
         }
+    }
+
+    public async loadEvidenceTraces() {
+        if (!this.selectedCollection) {
+            this.evidenceTraces = [];
+            return;
+        }
+        this.tracesLoading = true;
+        await this.service.render();
+        try {
+            const { code, data } = await wiz.call("list_evidence_traces", {
+                collection: this.selectedCollection
+            });
+            if (code === 200) {
+                this.evidenceTraces = data.traces || [];
+            }
+        } catch (e) { }
+        this.tracesLoading = false;
+        await this.service.render();
+    }
+
+    public async saveRecommendationTrace(rec: any) {
+        await this.saveEvidenceTrace('recommendation', rec.title, rec.description, this.recommendKeyword || this.searchKeyword, rec.evidence || [], {
+            type: rec.type,
+            category: rec.category || '',
+            relevance: rec.relevance || 0
+        });
+    }
+
+    public async saveHypothesisTrace(hypothesis: any) {
+        await this.saveEvidenceTrace('hypothesis', hypothesis.title, hypothesis.description, this.hypothesisCondition, hypothesis.evidence || [], {
+            type: hypothesis.type,
+            confidence: hypothesis.confidence || 0,
+            experiment_design: hypothesis.experiment_design || ''
+        });
+    }
+
+    public async saveProposalTrace() {
+        if (!this.proposalResult) return;
+        const summary = [
+            this.proposalResult.background || '',
+            this.proposalResult.objective || ''
+        ].filter((item: string) => item && item.trim().length > 0).join('\n\n').slice(0, 1200);
+        await this.saveEvidenceTrace('proposal', this.proposalResult.title || this.proposalTitle, summary, this.proposalKeywords || this.proposalTitle, this.proposalResult.reference_details || [], {
+            related_terms: this.proposalResult.related_terms || [],
+            references: this.proposalResult.references || []
+        });
+    }
+
+    private async saveEvidenceTrace(traceType: string, title: string, summary: string, keyword: string, evidence: any[], meta: any) {
+        try {
+            const { code } = await wiz.call("save_evidence_trace", {
+                trace_type: traceType,
+                title,
+                summary,
+                keyword,
+                collection: this.selectedCollection,
+                evidence: JSON.stringify(evidence || []),
+                meta: JSON.stringify(meta || {})
+            });
+            if (code === 200) {
+                await this.loadEvidenceTraces();
+            }
+        } catch (e) { }
+    }
+
+    public getTraceTypeLabel(type: string): string {
+        switch (type) {
+            case 'recommendation': return '주제 추천';
+            case 'hypothesis': return '가설';
+            case 'proposal': return '제안서';
+            default: return '근거 추적';
+        }
+    }
+
+    public formatTraceDate(dateStr: string): string {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleString('ko-KR', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     }
 
     public getCollectionInfo() {

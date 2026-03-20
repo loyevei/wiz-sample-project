@@ -1,0 +1,12 @@
+{
+    "id": "page.experiment.dataset",
+    "mode": "page",
+    "title": "\uc2e4\ud5d8 \ub370\uc774\ud130\uc14b",
+    "namespace": "experiment.dataset",
+    "category": "tools",
+    "viewuri": "/experiment/dataset",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-experiment-dataset()"
+}

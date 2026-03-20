@@ -12,6 +12,9 @@
                     div
                         h1.text-lg.font-bold.text-gray-900 실험 관리
                         p.text-xs.text-gray-500 DOE 설계 · 실험 노트 · 레시피 관리
+                button.px-4.py-2.text-sm.text-emerald-700.border.border-emerald-200.rounded-lg.bg-emerald-50.hover_bg-emerald-100.transition-colors.font-medium(
+                    (click)="openDatasetPage()")
+                    | 조건-결과 데이터셋
 
     //- 탭 내비게이션
     .max-w-6xl.mx-auto.px-6.pt-4
@@ -99,6 +102,11 @@
                 button.px-4.py-2.text-sm.text-white.bg-emerald-600.rounded-lg.hover_bg-emerald-700.transition-colors.font-medium(
                     (click)="openNoteForm()")
                     | + 새 노트
+                button.px-4.py-2.text-sm.text-emerald-700.border.border-emerald-200.rounded-lg.bg-emerald-50.hover_bg-emerald-100.transition-colors.font-medium(
+                    (click)="generateNoteDraft()",
+                    [disabled]="noteGenerating")
+                    span(*ngIf="!noteGenerating") AI 노트 초안
+                    span(*ngIf="noteGenerating") 초안 생성 중...
 
             //- 노트 폼
             .bg-white.rounded-xl.shadow-sm.border.border-gray-200.p-6.mb-6(*ngIf="showNoteForm")
@@ -126,6 +134,11 @@
                             type="text", placeholder="예: plasma, etching, SiO2",
                             [(ngModel)]="noteForm.tags")
                     .flex.gap-2.justify-end
+                        button.px-4.py-2.text-sm.text-emerald-700.border.border-emerald-200.rounded-lg.bg-emerald-50.hover_bg-emerald-100.font-medium(
+                            (click)="generateNoteDraft()",
+                            [disabled]="noteGenerating")
+                            span(*ngIf="!noteGenerating") 자동 초안 생성
+                            span(*ngIf="noteGenerating") 생성 중...
                         button.px-4.py-2.text-sm.text-gray-600.border.border-gray-300.rounded-lg.hover_bg-gray-50(
                             (click)="cancelNoteForm()") 취소
                         button.px-4.py-2.text-sm.text-white.bg-emerald-600.rounded-lg.hover_bg-emerald-700.font-medium(

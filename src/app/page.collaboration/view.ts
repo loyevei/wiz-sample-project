@@ -21,7 +21,10 @@ export class Component implements OnInit {
         name: '',
         description: '',
         members: '',
-        status: 'active'
+        status: 'active',
+        objective: '',
+        tags: '',
+        collection: ''
     };
 
     // ===== Discussions =====
@@ -38,6 +41,9 @@ export class Component implements OnInit {
 
     // ===== Activity =====
     public activities: any[] = [];
+    public collections: any[] = [];
+    public reports: any[] = [];
+    public selectedReport: any = null;
 
     constructor(public service: Service, private route: ActivatedRoute) { }
 
@@ -46,6 +52,8 @@ export class Component implements OnInit {
         await this.loadProjects();
         await this.loadDiscussions();
         await this.loadActivity();
+        await this.loadCollections();
+        await this.loadReports();
         await this.handleQueryParams();
         await this.service.render();
     }
@@ -100,7 +108,10 @@ export class Component implements OnInit {
                 name: project.name,
                 description: project.description || '',
                 members: (project.members || []).join(', '),
-                status: project.status || 'active'
+                status: project.status || 'active',
+                objective: project.objective || '',
+                tags: project.tags || '',
+                collection: project.collection || ''
             };
         } else {
             this.editingProject = null;
@@ -108,7 +119,10 @@ export class Component implements OnInit {
                 name: '',
                 description: '',
                 members: '',
-                status: 'active'
+                status: 'active',
+                objective: '',
+                tags: '',
+                collection: this.collections[0]?.name || ''
             };
         }
         this.showProjectForm = true;
@@ -128,7 +142,10 @@ export class Component implements OnInit {
                 name: this.projectForm.name,
                 description: this.projectForm.description,
                 members: this.projectForm.members.split(',').map((m: string) => m.trim()).filter((m: string) => m),
-                status: this.projectForm.status
+                status: this.projectForm.status,
+                objective: this.projectForm.objective,
+                tags: this.projectForm.tags,
+                collection: this.projectForm.collection
             };
             if (this.editingProject) payload.id = this.editingProject.id;
             const { code } = await wiz.call("save_project", payload);
@@ -137,6 +154,7 @@ export class Component implements OnInit {
                 this.editingProject = null;
                 await this.loadProjects();
                 await this.loadActivity();
+                await this.loadReports();
             }
         } catch (e) { }
         await this.service.render();
@@ -149,9 +167,48 @@ export class Component implements OnInit {
             if (code === 200) {
                 await this.loadProjects();
                 await this.loadActivity();
+                await this.loadReports();
             }
         } catch (e) { }
         await this.service.render();
+    }
+
+    public async loadCollections() {
+        try {
+            const { code, data } = await wiz.call("list_collections");
+            if (code === 200) this.collections = data || [];
+        } catch (e) { }
+    }
+
+    public async loadReports(projectId?: string) {
+        try {
+            const payload: any = {};
+            if (projectId) payload.project_id = projectId;
+            const { code, data } = await wiz.call("list_reports", payload);
+            if (code === 200) this.reports = data || [];
+        } catch (e) { }
+    }
+
+    public async generateProjectReport(project: any) {
+        try {
+            const { code, data } = await wiz.call("generate_project_report", { project_id: project.id });
+            if (code === 200) {
+                this.selectedReport = data;
+                await this.loadReports(project.id);
+                await this.loadActivity();
+            }
+        } catch (e) { }
+        await this.service.render();
+    }
+
+    public openProjectCollection(project: any) {
+        if (!project?.collection) return;
+        this.service.href(`/research?collection=${encodeURIComponent(project.collection)}`);
+    }
+
+    public closeReport() {
+        this.selectedReport = null;
+        this.service.render();
     }
 
     public getStatusClass(status: string): string {
@@ -292,6 +349,7 @@ export class Component implements OnInit {
             case 'project_created': return 'M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z';
             case 'project_updated': return 'M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10';
             case 'project_deleted': return 'M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0';
+            case 'report_generated': return 'M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9z';
             case 'discussion_created': return 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z';
             case 'reply_added': return 'M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z';
             default: return 'M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z';
@@ -303,6 +361,7 @@ export class Component implements OnInit {
             case 'project_created': return 'bg-teal-100 text-teal-600';
             case 'project_updated': return 'bg-blue-100 text-blue-600';
             case 'project_deleted': return 'bg-red-100 text-red-600';
+            case 'report_generated': return 'bg-indigo-100 text-indigo-600';
             case 'discussion_created': return 'bg-purple-100 text-purple-600';
             case 'reply_added': return 'bg-amber-100 text-amber-600';
             default: return 'bg-gray-100 text-gray-600';
