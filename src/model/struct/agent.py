@@ -82,7 +82,7 @@ class Agent:
     # =========================================================================
     # System Prompt
     # =========================================================================
-    def _build_system_prompt(self):
+    def _build_system_prompt(self, memory_context=None, orchestrator_plan=None):
         tool_descs = []
         for t in self._tools.values():
             tool_descs.append(f"- **{t.name}**: {t.description}")
@@ -92,9 +92,49 @@ class Agent:
         if self.collection:
             collection_info = f"\n## Current Milvus Collection\nThe user has selected the collection **`{self.collection}`**. Use this collection for all vector search operations unless otherwise specified.\nPass `collection=\"{self.collection}\"` to all tools that accept a collection parameter.\n"
 
+        memory_section = ""
+        if memory_context:
+            recent_queries = memory_context.get("recent_user_queries", []) or []
+            recent_queries_text = "\n".join([f"- {item}" for item in recent_queries]) if recent_queries else "- No previous user turns"
+            memory_section = f"""
+## Session Memory
+- Current collection: {memory_context.get('collection', self.collection or 'none')}
+- Conversation turns: {memory_context.get('history_turns', 0)}
+- Latest user topic: {memory_context.get('last_topic', memory_context.get('current_message', ''))}
+- Recent user queries:
+{recent_queries_text}
+"""
+
+        orchestrator_section = ""
+        if orchestrator_plan:
+            plan_lines = "\n".join([f"- {item}" for item in orchestrator_plan.get("plan", [])]) or "- classify → tools → synthesis → navigation"
+            tool_lines = ", ".join(orchestrator_plan.get("recommended_tools", [])) or "none"
+            orchestrator_section = f"""
+## Runtime Orchestrator Plan
+- Classified area: {orchestrator_plan.get('category', 'unknown')}
+- Target page: {orchestrator_plan.get('page', '-')}
+- Target tab: {orchestrator_plan.get('tab', '-')}
+- Recommended tools: {tool_lines}
+- Keywords: {", ".join(orchestrator_plan.get('keywords', [])) or '-'}
+- Execution plan:
+{plan_lines}
+"""
+
         return f"""You are an expert AI research assistant specialized in plasma science and engineering.
 You have access to a vector database of plasma research papers and powerful analysis tools.
 {collection_info}
+{memory_section}
+{orchestrator_section}
+
+## Runtime Answer Pipeline
+The final answer must be produced by combining these five layers:
+1. **Prompt** — system rules, user question, selected collection, and session memory
+2. **Orchestrator** — classify the request, decide the tool order, and plan navigation
+3. **Tools** — run retrieval, analysis, and navigation tools only when needed
+4. **Memory** — reuse conversation history, chosen collection, and prior findings to avoid losing context
+5. **Streaming UI** — structure the response so the frontend can show progress, tools, memory, and final answer clearly
+
+When you answer, ensure these layers are reflected in the execution: prompt context should guide the plan, the orchestrator should decide tools, tools should update memory, and the final answer should be suitable for progressive streaming UI presentation.
 
 ## CRITICAL: Language Rule
 **You MUST detect the language of the user's message and respond in EXACTLY the same language.**
@@ -274,6 +314,89 @@ Extract the most relevant keywords from the user's query and pass them as `query
 You specialize in: plasma etching, deposition (CVD, PVD, ALD, PECVD), sputtering, OES diagnostics, Langmuir probes, plasma modeling/simulation, semiconductor processing, thin films, surface treatment, atmospheric/vacuum plasma, fusion plasma, and related fields.
 """
 
+    def _detect_language(self, message):
+        return "ko" if any('가' <= ch <= '힣' for ch in message or "") else "en"
+
+    def _build_memory_context(self, history, message):
+        history = history or []
+        chat_turns = [item for item in history if item.get("role") in ["user", "assistant"]]
+        recent_user_queries = [item.get("content", "") for item in chat_turns if item.get("role") == "user"][-3:]
+        current_message = (message or "").strip()
+        last_topic = recent_user_queries[-1] if recent_user_queries else current_message
+
+        return {
+            "collection": self.collection or "",
+            "history_turns": len(chat_turns),
+            "recent_user_queries": [q for q in recent_user_queries if q],
+            "current_message": current_message,
+            "last_topic": last_topic,
+        }
+
+    def _build_orchestrator_plan(self, message):
+        text = (message or "").strip()
+        q = text.lower()
+
+        category = "주제 발굴"
+        page = "research"
+        tab = "discover"
+        recommended_tools = ["search_papers", "navigate_to_page"]
+
+        if any(keyword in q for keyword in ["그래프", "차트", "통계", "피팅", "scatter", "plot"]):
+            category, page, tab = "데이터 분석", "analysis", "plotter"
+            recommended_tools = ["navigate_to_page"]
+        elif any(keyword in q for keyword in ["실험", "doe", "레시피", "노트"]):
+            category, page, tab = "실험 관리", "experiment", "doe"
+            recommended_tools = ["navigate_to_page"]
+        elif any(keyword in q for keyword in ["디바이", "paschen", "자이로", "계산", "주파수"]):
+            category, page, tab = "플라즈마 계산기", "calculator", "plasma"
+            recommended_tools = ["navigate_to_page"]
+        elif any(keyword in q for keyword in ["수식", "방정식", "가정", "theory", "이론", "boltzmann"]):
+            category, page, tab = "이론 연구", "theory", "equation"
+            recommended_tools = ["search_equations", "build_theory_graph", "navigate_to_page"]
+        elif any(keyword in q for keyword in ["oes", "랭뮤어", "진단", "스펙트럼", "이상", "고장"]):
+            category, page, tab = "진단 분석", "diagnosis", "detection"
+            recommended_tools = ["search_papers", "compare_diagnostics", "navigate_to_page"]
+        elif any(keyword in q for keyword in ["예측", "etch", "식각", "증착", "rf", "pressure", "power", "icp"]):
+            category, page, tab = "공정 예측", "prediction", "predict"
+            recommended_tools = ["search_papers", "predict_process", "navigate_to_page"]
+        elif any(keyword in q for keyword in ["프로젝트", "협업", "토론", "activity", "공유"]):
+            category, page, tab = "협업", "collaboration", "projects"
+            recommended_tools = ["navigate_to_page"]
+
+        keywords = [item.strip() for item in text.replace(',', ' ').split() if len(item.strip()) > 1][:5]
+        if not keywords and text:
+            keywords = [text[:24]]
+
+        plan = [
+            "사용자 질문을 분류하고 응답 언어를 확정합니다.",
+            "세션 메모리와 선택 컬렉션을 프롬프트 컨텍스트에 주입합니다.",
+            "필요한 검색/분석 도구를 순서대로 실행합니다.",
+            "근거와 도구 결과를 최종 답변으로 통합합니다.",
+            "적절한 페이지와 탭으로 handoff 합니다."
+        ]
+
+        return {
+            "category": category,
+            "page": page,
+            "tab": tab,
+            "keywords": keywords,
+            "recommended_tools": recommended_tools,
+            "plan": plan,
+        }
+
+    def _pipeline_event(self, component, status, detail, **meta):
+        badges = meta.pop("metaBadges", None)
+        event = {
+            "type": "pipeline",
+            "component": component,
+            "status": status,
+            "detail": detail,
+            "meta": meta,
+        }
+        if badges is not None:
+            event["metaBadges"] = badges
+        return event
+
     # =========================================================================
     # Agent Run Loop (OpenAI Function Calling)
     # =========================================================================
@@ -290,8 +413,92 @@ You specialize in: plasma etching, deposition (CVD, PVD, ALD, PECVD), sputtering
             yield {"type": "error", "message": f"OpenAI 클라이언트 생성 실패: {str(e)}"}
             return
 
-        system_prompt = self._build_system_prompt()
+        memory_context = self._build_memory_context(history or [], message)
+        orchestrator_plan = self._build_orchestrator_plan(message)
+
+        yield self._pipeline_event(
+            "prompt",
+            "running",
+            f"시스템 프롬프트와 사용자 질문을 결합해 {self.model} 실행 컨텍스트를 구성하고 있습니다.",
+            language=self._detect_language(message),
+            model=self.model,
+            collection=self.collection or "미선택",
+            metaBadges=[self._detect_language(message), self.model, self.collection or "컬렉션 미선택"]
+        )
+
+        yield self._pipeline_event(
+            "memory",
+            "running",
+            "대화 이력, 최근 질문, 선택 컬렉션을 세션 메모리로 정리하고 있습니다.",
+            history_turns=memory_context.get("history_turns", 0),
+            collection=memory_context.get("collection") or "미선택",
+            last_topic=memory_context.get("last_topic", ""),
+            memoryNote=f"이전 대화 {memory_context.get('history_turns', 0)}턴과 컬렉션 {memory_context.get('collection') or '미선택'}을 메모리로 사용합니다.",
+            metaBadges=[f"이력 {memory_context.get('history_turns', 0)}턴", f"컬렉션 {memory_context.get('collection') or '미선택'}"]
+        )
+
+        yield self._pipeline_event(
+            "orchestrator",
+            "running",
+            f"{orchestrator_plan.get('category')} 흐름으로 분류하고, {', '.join(orchestrator_plan.get('recommended_tools', []))} 순으로 실행을 계획하고 있습니다.",
+            category=orchestrator_plan.get("category"),
+            page=orchestrator_plan.get("page"),
+            tab=orchestrator_plan.get("tab"),
+            plan=orchestrator_plan.get("plan", []),
+            metaBadges=[orchestrator_plan.get("category"), orchestrator_plan.get("page"), orchestrator_plan.get("tab")]
+        )
+
+        system_prompt = self._build_system_prompt(memory_context, orchestrator_plan)
         tool_schemas = self._get_openai_tools()
+
+        yield self._pipeline_event(
+            "prompt",
+            "done",
+            "프롬프트 레이어가 시스템 규칙, 메모리, 오케스트레이션 계획을 포함하도록 확정되었습니다.",
+            language=self._detect_language(message),
+            model=self.model,
+            collection=self.collection or "미선택",
+            metaBadges=[self._detect_language(message), self.model, self.collection or "컬렉션 미선택"]
+        )
+
+        yield self._pipeline_event(
+            "memory",
+            "done",
+            f"세션 메모리에 최근 질문 {len(memory_context.get('recent_user_queries', []))}건과 컬렉션 정보를 반영했습니다.",
+            history_turns=memory_context.get("history_turns", 0),
+            collection=memory_context.get("collection") or "미선택",
+            last_topic=memory_context.get("last_topic", ""),
+            memoryNote=f"최근 질문 {len(memory_context.get('recent_user_queries', []))}건을 요약 메모리로 사용합니다.",
+            metaBadges=[f"이력 {memory_context.get('history_turns', 0)}턴", f"컬렉션 {memory_context.get('collection') or '미선택'}"]
+        )
+
+        yield self._pipeline_event(
+            "orchestrator",
+            "done",
+            f"실행 경로를 {orchestrator_plan.get('page')} / {orchestrator_plan.get('tab')} 중심으로 확정했습니다.",
+            category=orchestrator_plan.get("category"),
+            page=orchestrator_plan.get("page"),
+            tab=orchestrator_plan.get("tab"),
+            plan=orchestrator_plan.get("plan", []),
+            metaBadges=[orchestrator_plan.get("category"), orchestrator_plan.get("page"), orchestrator_plan.get("tab")]
+        )
+
+        yield self._pipeline_event(
+            "tools",
+            "pending",
+            "필요한 검색/분석/이동 도구 실행을 대기하고 있습니다.",
+            tool_count=0,
+            metaBadges=["0개 실행"]
+        )
+
+        yield self._pipeline_event(
+            "streaming",
+            "running",
+            "SSE 스트림을 열고 실행 상태를 프론트 UI에 전달하고 있습니다.",
+            transport="SSE",
+            mode="실시간 UI",
+            metaBadges=["SSE", "실시간 UI"]
+        )
 
         # History 복원
         if history and isinstance(history, list):
@@ -349,20 +556,55 @@ You specialize in: plasma etching, deposition (CVD, PVD, ALD, PECVD), sputtering
 
             # 텍스트 응답이 있으면 yield
             if msg.content:
+                yield self._pipeline_event(
+                    "streaming",
+                    "running",
+                    "LLM이 생성한 최종 답변 초안을 스트리밍 UI로 전달하고 있습니다.",
+                    transport="SSE",
+                    mode="답변 스트리밍",
+                    metaBadges=["SSE", "답변 스트리밍"]
+                )
                 yield {"type": "text", "content": msg.content}
 
             # Tool Call 처리
             if not msg.tool_calls:
+                yield self._pipeline_event(
+                    "tools",
+                    "skipped",
+                    "추가 도구 없이 프롬프트와 메모리만으로 답변을 생성했습니다.",
+                    tool_count=0,
+                    metaBadges=["도구 미사용"]
+                )
+                yield self._pipeline_event(
+                    "streaming",
+                    "done",
+                    "스트리밍 UI에 최종 답변 반영을 완료했습니다.",
+                    transport="SSE",
+                    mode="완료",
+                    metaBadges=["SSE 완료", "최종 답변"]
+                )
                 yield {"type": "done", "content": ""}
                 return
 
             # Tool 순차 실행
+            tool_counter = 0
             for tc in msg.tool_calls:
                 tool_name = tc.function.name
                 try:
                     tool_input = json.loads(tc.function.arguments)
                 except Exception:
                     tool_input = {}
+
+                tool_counter += 1
+
+                yield self._pipeline_event(
+                    "tools",
+                    "running",
+                    f"{tool_name} 도구를 실행해 근거와 후속 액션을 수집하고 있습니다.",
+                    tool_name=tool_name,
+                    tool_count=tool_counter,
+                    metaBadges=[f"{tool_counter}개 실행", tool_name]
+                )
 
                 yield {
                     "type": "tool_use",
@@ -387,8 +629,25 @@ You specialize in: plasma etching, deposition (CVD, PVD, ALD, PECVD), sputtering
                     "result": result
                 }
 
+                yield self._pipeline_event(
+                    "tools",
+                    "running",
+                    f"{tool_name} 결과를 메모리와 최종 답변 컨텍스트에 반영했습니다.",
+                    tool_name=tool_name,
+                    tool_count=tool_counter,
+                    metaBadges=[f"{tool_counter}개 완료", tool_name]
+                )
+
             # finish_reason 확인
             if choice.finish_reason == "stop":
+                yield self._pipeline_event(
+                    "streaming",
+                    "done",
+                    "도구 실행과 최종 답변 생성이 완료되어 스트리밍 UI 반영을 마쳤습니다.",
+                    transport="SSE",
+                    mode="완료",
+                    metaBadges=["SSE 완료", "최종 답변"]
+                )
                 yield {"type": "done", "content": ""}
                 return
 

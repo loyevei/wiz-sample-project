@@ -32,3 +32,6 @@
 | 2026-03-19 | 003 | 연구자 워크플로우 확장: 근거 추적·실험 데이터셋·연구 노트 자동화·프로젝트 컬렉션·보고서 생성 | [상세](devlog/2026-03-19/003-researcher-workflow-suite.md) |
 | 2026-03-20 | 001 | 플로팅 챗봇 14단계 사고과정 UI와 플라즈마 로봇 캐릭터 적용 및 무중단 배포 | [상세](devlog/2026-03-20/001-floating-chatbot-trace-robot-ui.md) |
 | 2026-03-20 | 002 | 플로팅 챗봇 보라/핑크 플라즈마 테마 적용 및 로봇 SVG 아이콘 교체 | [상세](devlog/2026-03-20/002-floating-chatbot-theme-and-robot-icon.md) |
+| 2026-03-20 | 003 | 플로팅 챗봇 최종 답변을 프롬프트·오케스트레이터·도구·메모리·스트리밍 UI 파이프라인으로 명시화 | [상세](devlog/2026-03-20/003-floating-chatbot-answer-pipeline.md) |
+| 2026-03-20 | 004 | 플로팅 챗봇 5요소 답변 파이프라인 전용 QA 체크리스트와 샘플 검수본 정리 | [상세](devlog/2026-03-20/004-floating-chatbot-pipeline-qa-checklist.md) |
+| 2026-03-20 | 005 | 플로팅 챗봇 5요소 파이프라인 실제 검수 기록용 실전 판정본 추가 | [상세](devlog/2026-03-20/005-floating-chatbot-pipeline-live-report.md) |

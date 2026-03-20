@@ -102,6 +102,29 @@ div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all du
                                         p(class="text-[12px] font-semibold text-slate-900") 현재 단계 설명
                                         p(class="text-[11px] text-slate-500") {{msg.currentLabel}}
                                 p(class="mt-3 text-[12px] leading-6 text-slate-700") {{msg.currentDescription}}
+
+                            div(class="rounded-3xl border border-fuchsia-100 bg-fuchsia-50/60 px-4 py-4")
+                                div(class="mb-3 flex items-center gap-2")
+                                    span(class="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-fuchsia-500/10 text-fuchsia-700") ✳️
+                                    div
+                                        p(class="text-[12px] font-semibold text-slate-900") 최종 답변 구성 요소
+                                        p(class="text-[11px] text-slate-500") 프롬프트 + 오케스트레이터 + 도구 + 메모리 + 스트리밍 UI
+                                div(class="grid gap-3 md:grid-cols-2")
+                                    div(*ngFor="let component of getPipelineComponents(msg)", class="rounded-2xl border border-white/80 bg-white/90 px-3 py-3")
+                                        div(class="flex items-start justify-between gap-2")
+                                            div(class="min-w-0")
+                                                div(class="flex items-center gap-2")
+                                                    span(class="text-sm") {{component.icon}}
+                                                    p(class="text-[12px] font-semibold text-slate-900") {{component.title}}
+                                                p(class="mt-1 text-[11px] leading-5 text-slate-500") {{component.summary}}
+                                            span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(component.status)") {{getTraceStatusLabel(component.status)}}
+                                        p(class="mt-3 text-[11px] leading-5 text-slate-700") {{component.detail}}
+                                        div(*ngIf="component.metaBadges?.length > 0", class="mt-3 flex flex-wrap gap-1.5")
+                                            span(*ngFor="let badge of component.metaBadges", class="inline-flex items-center rounded-full border border-fuchsia-100 bg-fuchsia-50 px-2 py-0.5 text-[10px] font-medium text-fuchsia-700") {{badge}}
+                                        div(*ngIf="component.plan?.length > 0", class="mt-3 rounded-xl bg-slate-50 px-3 py-2")
+                                            p(class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400") 오케스트레이션 계획
+                                            div(class="mt-2 space-y-1")
+                                                p(*ngFor="let item of component.plan", class="text-[11px] leading-5 text-slate-600") • {{item}}
                                 div(*ngIf="msg.similaritySummary || msg.references.length > 0", class="mt-4 space-y-3")
                                     div(*ngIf="msg.similaritySummary", class="inline-flex items-center rounded-full border border-cyan-200 bg-white px-3 py-1 text-[11px] font-medium text-cyan-700") {{msg.similaritySummary}}
                                     div(*ngIf="msg.references.length > 0", class="rounded-2xl border border-white/80 bg-white/80 p-3")

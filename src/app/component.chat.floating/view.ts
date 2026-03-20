@@ -176,10 +176,11 @@ export class Component implements OnInit, OnDestroy {
             collapsed: false,
             traceOpen: true,
             traceSteps: this.buildTraceSteps(question),
+            pipelineComponents: this.buildAnswerPipeline(question),
             references: [],
             similaritySummary: '',
-            currentLabel: '검색 전략을 준비하고 있습니다.',
-            currentDescription: '질문을 분류하고 적절한 도구 흐름을 결정하고 있습니다.',
+            currentLabel: '프롬프트 레이어를 구성하고 있습니다.',
+            currentDescription: '시스템 프롬프트, 사용자 질문, 선택 컬렉션을 결합해 에이전트 실행 컨텍스트를 만들고 있습니다.',
             question,
             traceCategory: this.classifyQuestion(question),
             traceLanguage: this.detectLanguage(question),
@@ -208,6 +209,63 @@ export class Component implements OnInit, OnDestroy {
             { id: 12, title: '결과 통합 요약', summary: '도구 결과를 최종 답변으로 통합합니다.', detail: '문헌과 도구 결과를 사람이 읽기 쉬운 설명으로 정리합니다.', status: 'pending' },
             { id: 13, title: '검증 및 신뢰도 점검', summary: '응답 품질과 신뢰도를 점검합니다.', detail: '근거 수, 유사도, 누락 파라미터를 기준으로 응답을 검토합니다.', status: 'pending' },
             { id: 14, title: '최종 안내 및 핸드오프', summary: '관련 페이지로 연결합니다.', detail: '필요 시 적절한 페이지와 탭으로 이동을 준비합니다.', status: 'pending' }
+        ];
+    }
+
+    private buildAnswerPipeline(question: string): any[] {
+        const language = this.detectLanguage(question) === 'ko' ? '한국어' : '영어';
+        const category = this.classifyQuestion(question);
+        const difficulty = this.detectDifficulty(question);
+        const historyTurns = (this.chatHistory || []).filter((item: any) => item.role === 'user' || item.role === 'assistant').length;
+        const collection = this.selectedCollection || '미선택';
+
+        return [
+            {
+                key: 'prompt',
+                title: '프롬프트',
+                icon: '🧠',
+                status: 'running',
+                summary: '시스템 프롬프트와 사용자 질문을 결합합니다.',
+                detail: `${language} 응답 · ${category} 분류 후보 · 선택 컬렉션 ${collection}`,
+                metaBadges: [language, this.selectedCollection ? `컬렉션 ${this.selectedCollection}` : '컬렉션 미선택']
+            },
+            {
+                key: 'orchestrator',
+                title: '오케스트레이터',
+                icon: '🗺️',
+                status: 'pending',
+                summary: '실행 순서와 도구 계획을 수립합니다.',
+                detail: `${difficulty} 수준으로 응답 깊이를 조정하고 후속 단계를 계획합니다.`,
+                metaBadges: [category, difficulty],
+                plan: []
+            },
+            {
+                key: 'tools',
+                title: '도구',
+                icon: '🧰',
+                status: 'pending',
+                summary: '검색·분석·이동 도구를 실행합니다.',
+                detail: '도구 실행을 대기 중입니다.',
+                metaBadges: ['0개 실행']
+            },
+            {
+                key: 'memory',
+                title: '메모리',
+                icon: '🗂️',
+                status: 'pending',
+                summary: '대화 이력과 선택 컬렉션을 컨텍스트에 주입합니다.',
+                detail: `이전 대화 ${historyTurns}턴과 현재 컬렉션 상태를 기반으로 메모리를 구성합니다.`,
+                metaBadges: [historyTurns > 0 ? `이력 ${historyTurns}턴` : '새 대화', `컬렉션 ${collection}`]
+            },
+            {
+                key: 'streaming',
+                title: '스트리밍 UI',
+                icon: '📡',
+                status: 'pending',
+                summary: 'SSE 이벤트로 실행 과정을 화면에 표시합니다.',
+                detail: '실시간 이벤트 스트림 연결을 대기 중입니다.',
+                metaBadges: ['SSE 대기']
+            }
         ];
     }
 
@@ -279,8 +337,12 @@ export class Component implements OnInit, OnDestroy {
         if (!msg) return;
 
         switch (event.type) {
+            case 'pipeline':
+                this.applyPipelineEvent(msg, event);
+                break;
             case 'text':
                 msg.content += event.content || '';
+                this.updatePipelineComponent(msg, 'streaming', 'running', 'LLM 응답을 스트리밍 UI로 전달하고 있습니다.', ['응답 스트리밍']);
                 this.updateTraceStep(msg, 12, 'running', '도구 결과와 참고 문헌을 바탕으로 최종 답변을 작성하고 있습니다.');
                 break;
             case 'tool_use':
@@ -455,6 +517,8 @@ export class Component implements OnInit, OnDestroy {
     private applyToolUseTrace(msg: any, event: any) {
         const input = event.input || {};
         const name = event.name;
+        this.updatePipelineComponent(msg, 'tools', 'running', `${this.getToolLabel(name)} 도구를 실행하고 있습니다.`, [`${msg.toolCalls.filter((item: any) => item.type === 'use').length}개 실행`, this.getToolLabel(name)]);
+        this.updatePipelineComponent(msg, 'orchestrator', 'done', '오케스트레이터가 필요한 도구 순서를 결정하고 실행으로 넘겼습니다.');
 
         if (name === 'get_collections') {
             this.updateTraceStep(msg, 6, 'running', '사용 가능한 컬렉션 목록과 문서 규모를 확인하고 있습니다.');
@@ -478,8 +542,10 @@ export class Component implements OnInit, OnDestroy {
 
     private applyToolResultTrace(msg: any, event: any) {
         const name = event.name;
+        const executedCount = msg.toolCalls.filter((item: any) => item.type === 'result').length;
 
         if (name === 'get_collections') {
+            this.updatePipelineComponent(msg, 'memory', 'done', '컬렉션 메타데이터를 메모리 컨텍스트에 반영했습니다.', [`컬렉션 ${this.selectedCollection || '미선택'}`]);
             this.updateTraceStep(msg, 6, 'done', '검색 가능한 컬렉션 메타데이터를 확보했습니다.');
             return;
         }
@@ -488,6 +554,8 @@ export class Component implements OnInit, OnDestroy {
             const refs = this.parseSearchPapersResults(event.result);
             msg.references = refs;
             msg.similaritySummary = this.buildSimilaritySummary(refs);
+            this.updatePipelineComponent(msg, 'tools', 'running', refs.length > 0 ? `논문 검색과 근거 추출을 완료했습니다. (${refs.length}건)` : '논문 검색 결과를 정리했습니다.', [`${executedCount}개 완료`, refs.length > 0 ? `근거 ${refs.length}건` : '근거 대기']);
+            this.updatePipelineComponent(msg, 'memory', 'done', refs.length > 0 ? '검색 결과를 세션 메모리에 반영했습니다.' : '검색 결과를 메모리와 동기화했습니다.', [msg.similaritySummary || '유사도 요약 없음']);
 
             this.updateTraceStep(msg, 7, 'done', '질문을 연구 검색용 키워드와 도메인 표현으로 확장했습니다.');
             this.updateTraceStep(msg, 8, 'done', refs.length > 0 ? `${refs.length}건의 참고 문헌 후보를 검색했습니다.` : '검색 결과를 확보했습니다.');
@@ -498,10 +566,13 @@ export class Component implements OnInit, OnDestroy {
         }
 
         if (name === 'navigate_to_page') {
+            this.updatePipelineComponent(msg, 'orchestrator', 'done', '오케스트레이터가 후속 페이지와 실행 컨텍스트를 확정했습니다.');
+            this.updatePipelineComponent(msg, 'tools', 'done', '도구 실행과 페이지 핸드오프까지 완료했습니다.', [`${executedCount}개 완료`, '핸드오프 준비']);
             this.updateTraceStep(msg, 14, 'done', '최종 결과를 이어서 실행할 페이지로 연결했습니다.');
             return;
         }
 
+        this.updatePipelineComponent(msg, 'tools', 'running', `${this.getToolLabel(name)} 결과를 반영해 추가 통합을 진행하고 있습니다.`, [`${executedCount}개 완료`, this.getToolLabel(name)]);
         this.updateTraceStep(msg, 11, 'done', `${this.getToolLabel(name)} 결과를 확보했습니다.`);
         this.updateTraceStep(msg, 12, 'running', '도구 결과를 읽기 쉬운 최종 답변으로 정리하고 있습니다.');
     }
@@ -532,6 +603,7 @@ export class Component implements OnInit, OnDestroy {
             }
         }
 
+        this.finalizePipeline(msg);
         this.syncCurrentTrace(msg);
     }
 
@@ -542,6 +614,11 @@ export class Component implements OnInit, OnDestroy {
             running.detail = detail;
         } else {
             this.updateTraceStep(msg, 12, 'error', detail);
+        }
+        const runningPipeline = (msg.pipelineComponents || []).find((item: any) => item.status === 'running');
+        if (runningPipeline) {
+            runningPipeline.status = 'error';
+            runningPipeline.detail = detail;
         }
     }
 
@@ -568,6 +645,73 @@ export class Component implements OnInit, OnDestroy {
         return (msg.traceSteps || []).find((step: any) => step.id === stepId) || null;
     }
 
+    private applyPipelineEvent(msg: any, event: any) {
+        this.updatePipelineComponent(msg, event.component, event.status || 'pending', event.detail || event.summary || '', event.metaBadges || this.buildPipelineBadges(event.component, event.meta || {}), event.plan || event.meta?.plan || []);
+
+        if (event.component === 'memory' && event.meta?.memoryNote) {
+            msg.currentLabel = '메모리 컨텍스트 반영';
+            msg.currentDescription = event.meta.memoryNote;
+        }
+
+        if (event.component === 'orchestrator' && event.detail) {
+            msg.currentLabel = '오케스트레이터 계획 수립';
+            msg.currentDescription = event.detail;
+        }
+    }
+
+    private updatePipelineComponent(msg: any, componentKey: string, status: string, detail?: string, metaBadges?: string[], plan?: string[]) {
+        const component = this.findPipelineComponent(msg, componentKey);
+        if (!component) return;
+        component.status = status;
+        if (detail) component.detail = detail;
+        if (metaBadges && metaBadges.length > 0) component.metaBadges = metaBadges;
+        if (plan) component.plan = plan;
+    }
+
+    private findPipelineComponent(msg: any, componentKey: string): any {
+        return (msg.pipelineComponents || []).find((item: any) => item.key === componentKey) || null;
+    }
+
+    private buildPipelineBadges(component: string, meta: any): string[] {
+        if (!meta) return [];
+
+        switch (component) {
+            case 'prompt':
+                return [meta.language, meta.model, meta.collection].filter(Boolean);
+            case 'orchestrator':
+                return [meta.category, meta.page, meta.tab].filter(Boolean);
+            case 'tools':
+                return [meta.tool_name ? this.getToolLabel(meta.tool_name) : '', meta.tool_count ? `${meta.tool_count}개 실행` : ''].filter(Boolean);
+            case 'memory':
+                return [
+                    Number.isFinite(meta.history_turns) ? `이력 ${meta.history_turns}턴` : '',
+                    meta.collection ? `컬렉션 ${meta.collection}` : '',
+                    meta.last_topic ? `최근 ${this.truncate(meta.last_topic, 24)}` : ''
+                ].filter(Boolean);
+            case 'streaming':
+                return [meta.transport || 'SSE', meta.mode || '실시간 UI'].filter(Boolean);
+            default:
+                return [];
+        }
+    }
+
+    private finalizePipeline(msg: any) {
+        this.updatePipelineComponent(msg, 'prompt', 'done', '시스템 프롬프트와 사용자 질문이 최종 응답 생성에 반영되었습니다.');
+        this.updatePipelineComponent(msg, 'memory', 'done', (msg.references?.length > 0)
+            ? `대화 이력, 선택 컬렉션, 검색 근거 ${msg.references.length}건을 메모리 컨텍스트로 사용했습니다.`
+            : '대화 이력과 선택 컬렉션을 메모리 컨텍스트로 사용했습니다.');
+        this.updatePipelineComponent(msg, 'orchestrator', 'done', '오케스트레이터가 질문 분류, 도구 순서, 핸드오프를 조정했습니다.');
+
+        const tools = this.findPipelineComponent(msg, 'tools');
+        if (tools && tools.status === 'pending') {
+            this.updatePipelineComponent(msg, 'tools', 'skipped', '이번 턴은 추가 도구 없이 답변을 생성했습니다.', ['도구 미사용']);
+        } else if (tools && tools.status === 'running') {
+            this.updatePipelineComponent(msg, 'tools', 'done', '도구 결과를 최종 답변과 핸드오프에 반영했습니다.', tools.metaBadges);
+        }
+
+        this.updatePipelineComponent(msg, 'streaming', 'done', '스트리밍 UI가 단계, 도구, 최종 답변을 모두 화면에 반영했습니다.', ['SSE 완료', '최종 답변 반영']);
+    }
+
     private syncCurrentTrace(msg: any) {
         const current = this.getCurrentTraceStep(msg);
         msg.currentLabel = current?.title || '에이전트 실행';
@@ -581,6 +725,10 @@ export class Component implements OnInit, OnDestroy {
         if (error) return error;
         const reversed = [...(msg.traceSteps || [])].reverse();
         return reversed.find((step: any) => step.status === 'done') || (msg.traceSteps || [])[0] || null;
+    }
+
+    public getPipelineComponents(msg: any): any[] {
+        return msg.pipelineComponents || [];
     }
 
     // ===== Helpers =====
