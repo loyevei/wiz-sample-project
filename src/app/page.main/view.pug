@@ -1,20 +1,28 @@
-div(class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50")
-    nav(class="flex items-center justify-between px-6 lg:px-12 py-5")
-        div(class="flex items-center gap-3")
-            div(class="flex items-center justify-center w-10 h-10 rounded-2xl bg-cyan-600 text-white shadow-sm")
-                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-5")
-                    path(stroke-linecap="round", stroke-linejoin="round", d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456z")
-            div
-                p(class="text-xs font-medium uppercase tracking-[0.24em] text-cyan-600") Plasma Research Hub
-                h1(class="text-lg font-semibold text-zinc-950") 플라즈마 연구 워크스페이스
-        div(class="flex items-center gap-3")
-            div(class="hidden lg:flex items-center gap-2 mr-2")
-                a(href="#workflow", class="inline-flex items-center rounded-lg px-3 py-2 text-[13px] font-medium text-zinc-600 hover:bg-white hover:text-cyan-700 transition-colors") Workflow
-                a(href="#overview", class="inline-flex items-center rounded-lg px-3 py-2 text-[13px] font-medium text-zinc-600 hover:bg-white hover:text-cyan-700 transition-colors") Overview
-                a(href="#preview", class="inline-flex items-center rounded-lg px-3 py-2 text-[13px] font-medium text-zinc-600 hover:bg-white hover:text-cyan-700 transition-colors") Preview
-            a(routerLink="/access", class="inline-flex items-center rounded-lg border border-cyan-200 bg-white px-4 py-2 text-[13px] font-semibold text-cyan-700 hover:bg-cyan-50 transition-colors") 로그인
+div(class="min-h-screen scroll-smooth bg-gradient-to-br from-slate-50 via-white to-cyan-50")
+    nav(class="sticky top-0 z-20 border-b border-white/70 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70")
+        div(class="flex items-center justify-between px-6 lg:px-12 py-4")
+            div(class="flex items-center gap-3")
+                div(class="flex items-center justify-center w-10 h-10 rounded-2xl bg-cyan-600 text-white shadow-sm")
+                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-5")
+                        path(stroke-linecap="round", stroke-linejoin="round", d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456z")
+                div
+                    p(class="text-xs font-medium uppercase tracking-[0.24em] text-cyan-600") Plasma Research Hub
+                    h1(class="text-lg font-semibold text-zinc-950") 플라즈마 연구 워크스페이스
+            div(class="flex items-center gap-3")
+                div(class="hidden lg:flex items-center gap-2 mr-2")
+                    a(href="#workflow", class="inline-flex items-center rounded-lg px-3 py-2 text-[13px] font-medium text-zinc-600 hover:bg-white hover:text-cyan-700 transition-colors") Workflow
+                    a(href="#overview", class="inline-flex items-center rounded-lg px-3 py-2 text-[13px] font-medium text-zinc-600 hover:bg-white hover:text-cyan-700 transition-colors") Overview
+                    a(href="#preview", class="inline-flex items-center rounded-lg px-3 py-2 text-[13px] font-medium text-zinc-600 hover:bg-white hover:text-cyan-700 transition-colors") Preview
+                a(routerLink="/access", class="inline-flex items-center rounded-lg border border-cyan-200 bg-white px-4 py-2 text-[13px] font-semibold text-cyan-700 hover:bg-cyan-50 transition-colors") 로그인
+        div(class="px-6 lg:px-12 pb-4 lg:hidden")
+            div(class="flex items-center gap-2 overflow-x-auto no-scrollbar")
+                a(href="#workflow", class="inline-flex shrink-0 items-center rounded-full border border-cyan-200 bg-cyan-50 px-3 py-2 text-[12px] font-medium text-cyan-700") Workflow
+                a(href="#overview", class="inline-flex shrink-0 items-center rounded-full border border-zinc-200 bg-white px-3 py-2 text-[12px] font-medium text-zinc-600") Overview
+                a(href="#preview", class="inline-flex shrink-0 items-center rounded-full border border-zinc-200 bg-white px-3 py-2 text-[12px] font-medium text-zinc-600") Preview
+                a(href="#top", class="inline-flex shrink-0 items-center rounded-full border border-zinc-200 bg-white px-3 py-2 text-[12px] font-medium text-zinc-600") Top
 
-    section(id="workflow", class="max-w-6xl mx-auto px-6 pt-10 pb-16 lg:pt-16 lg:pb-24 scroll-mt-24")
+    section(id="top", class="sr-only")
+    section(id="workflow", class="max-w-6xl mx-auto px-6 pt-10 pb-16 lg:pt-16 lg:pb-24 scroll-mt-28")
         div(class="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-8 items-center")
             div
                 div(class="inline-flex items-center rounded-full border border-cyan-100 bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-700 mb-5")
@@ -33,6 +41,10 @@ div(class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50")
                         svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4 ml-2")
                             path(stroke-linecap="round", stroke-linejoin="round", d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3")
                     a(routerLink="/research", class="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-6 py-3 text-[13px] font-semibold text-zinc-700 hover:border-cyan-200 hover:bg-cyan-50 transition-colors") 연구 화면 둘러보기
+                div(class="mt-5 flex flex-wrap items-center gap-2")
+                    span(class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700") Evidence Trace Ready
+                    span(class="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-700") DOE Workflow Enabled
+                    span(class="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700") Report Draft Automation
                 div(class="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3")
                     div(class="rounded-2xl border border-white/80 bg-white/80 backdrop-blur px-4 py-4 shadow-sm")
                         p(class="text-xs text-zinc-500") Research
@@ -87,7 +99,7 @@ div(class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50")
                         p(class="text-[11px] uppercase tracking-[0.16em] text-zinc-400") Reports
                         p(class="mt-1 text-lg font-semibold text-zinc-950") 16
 
-    section(id="overview", class="max-w-6xl mx-auto px-6 pb-20 scroll-mt-24")
+    section(id="overview", class="max-w-6xl mx-auto px-6 pb-20 scroll-mt-28")
         div(class="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-6")
             div(class="rounded-3xl bg-zinc-950 text-white p-8")
                 p(class="text-xs uppercase tracking-[0.24em] text-cyan-200") Why this workspace
@@ -132,7 +144,40 @@ div(class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50")
                     h4(class="text-[15px] font-semibold text-zinc-950") 보고서와 발표자료 초안
                     p(class="mt-2 text-[13px] leading-6 text-zinc-600") 진행 상황과 실험 근거를 바탕으로 요약 문서 초안을 자동 생성해 공유 속도를 높입니다.
 
-    section(id="preview", class="max-w-6xl mx-auto px-6 pb-20 scroll-mt-24")
+    section(class="max-w-6xl mx-auto px-6 pb-20")
+        div(class="rounded-[28px] border border-zinc-200 bg-white p-8 lg:p-10 shadow-sm")
+            div(class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4")
+                div
+                    p(class="text-xs uppercase tracking-[0.22em] text-cyan-600") Research Timeline
+                    h3(class="mt-2 text-2xl font-semibold text-zinc-950") 연구 흐름을 단계별로 끊김 없이 이어갑니다.
+                p(class="text-[13px] text-zinc-500 max-w-xl") 탐색에서 끝나지 않고, 근거 저장 → 실험 설계 → 데이터셋화 → 공유 초안까지 하나의 운영 루프로 이어집니다.
+            div(class="mt-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4")
+                div(class="rounded-3xl border border-cyan-100 bg-cyan-50/60 p-5")
+                    div(class="flex items-center justify-between")
+                        span(class="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-cyan-700") Step 01
+                        span(class="text-xs text-cyan-600") Discover
+                    h4(class="mt-4 text-[15px] font-semibold text-zinc-950") 논문 탐색과 근거 후보 수집
+                    p(class="mt-2 text-[13px] leading-6 text-zinc-600") 추천 논문, 키워드, 토픽맵 결과에서 실험에 직접 연결될 근거를 빠르게 선별합니다.
+                div(class="rounded-3xl border border-emerald-100 bg-emerald-50/60 p-5")
+                    div(class="flex items-center justify-between")
+                        span(class="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700") Step 02
+                        span(class="text-xs text-emerald-600") Design
+                    h4(class="mt-4 text-[15px] font-semibold text-zinc-950") DOE 설계와 연구 노트 생성
+                    p(class="mt-2 text-[13px] leading-6 text-zinc-600") 선택된 근거를 바탕으로 실험 조합을 설계하고, 반복 입력 없이 노트 초안을 시작합니다.
+                div(class="rounded-3xl border border-violet-100 bg-violet-50/60 p-5")
+                    div(class="flex items-center justify-between")
+                        span(class="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-violet-700") Step 03
+                        span(class="text-xs text-violet-600") Record
+                    h4(class="mt-4 text-[15px] font-semibold text-zinc-950") 조건·결과 데이터셋 누적
+                    p(class="mt-2 text-[13px] leading-6 text-zinc-600") 실험 결과를 근거·조건·메모와 함께 구조화하여 이후 검색과 재현성 검토에 활용합니다.
+                div(class="rounded-3xl border border-amber-100 bg-amber-50/60 p-5")
+                    div(class="flex items-center justify-between")
+                        span(class="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-700") Step 04
+                        span(class="text-xs text-amber-600") Share
+                    h4(class="mt-4 text-[15px] font-semibold text-zinc-950") 협업 정리와 보고서 초안 공유
+                    p(class="mt-2 text-[13px] leading-6 text-zinc-600") 프로젝트 컬렉션과 실험 기록을 묶어 주간 리뷰, 발표자료, 보고서 초안을 빠르게 만듭니다.
+
+    section(id="preview", class="max-w-6xl mx-auto px-6 pb-20 scroll-mt-28")
         div(class="rounded-[28px] border border-zinc-200 bg-white shadow-sm overflow-hidden")
             div(class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 px-8 py-6 border-b border-zinc-100 bg-zinc-50")
                 div
@@ -210,6 +255,11 @@ div(class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-cyan-50")
                 div(class="flex flex-col sm:flex-row gap-3")
                     a(routerLink="/access", class="inline-flex items-center justify-center rounded-xl bg-white px-6 py-3 text-[13px] font-semibold text-cyan-700 hover:bg-cyan-50 transition-colors") 바로 시작하기
                     a(routerLink="/research", class="inline-flex items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3 text-[13px] font-semibold text-white hover:bg-white/20 transition-colors") 연구 화면 보기
+            div(class="mt-6 flex justify-end")
+                a(href="#top", class="inline-flex items-center gap-2 text-[12px] font-medium text-cyan-50 hover:text-white transition-colors")
+                    span 맨 위로 이동
+                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.8", stroke="currentColor", class="size-4")
+                        path(stroke-linecap="round", stroke-linejoin="round", d="M4.5 15.75 12 8.25l7.5 7.5")
 
     footer(class="border-t border-zinc-200 py-8 text-center")
         p(class="text-xs text-zinc-400") &copy; 2026 Plasma Research Hub. Research workflow workspace.

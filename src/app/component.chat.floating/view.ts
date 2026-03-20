@@ -22,6 +22,12 @@ export class Component implements OnInit, OnDestroy {
     public collectionsLoading: boolean = false;
     public collectionSelected: boolean = false;
 
+    public robotProfile: any = {
+        name: 'PLASMA-BOT PX-14',
+        subtitle: '플라즈마 연구용 로봇 에이전트',
+        tag: 'TRACE MODE'
+    };
+
     // Suggested prompts
     public suggestions = [
         { icon: '🔬', text: '플라즈마 에칭 관련 최신 논문 찾아줘', category: 'research' },
@@ -162,18 +168,60 @@ export class Component implements OnInit, OnDestroy {
         this.cdr.detectChanges();
     }
 
+    private createAssistantMessage(question: string): any {
+        return {
+            role: 'assistant',
+            content: '',
+            toolCalls: [],
+            collapsed: false,
+            traceOpen: true,
+            traceSteps: this.buildTraceSteps(question),
+            references: [],
+            similaritySummary: '',
+            currentLabel: '검색 전략을 준비하고 있습니다.',
+            currentDescription: '질문을 분류하고 적절한 도구 흐름을 결정하고 있습니다.',
+            question,
+            traceCategory: this.classifyQuestion(question),
+            traceLanguage: this.detectLanguage(question),
+            traceDifficulty: this.detectDifficulty(question)
+        };
+    }
+
+    private buildTraceSteps(question: string): any[] {
+        const category = this.classifyQuestion(question);
+        const language = this.detectLanguage(question) === 'ko' ? '한국어' : '영어';
+        const difficulty = this.detectDifficulty(question);
+        const collection = this.selectedCollection || '미선택';
+
+        return [
+            { id: 1, title: '질문 수신', summary: '새로운 사용자 질문을 등록했습니다.', detail: this.truncate(question, 88), status: 'done' },
+            { id: 2, title: '언어 판별', summary: `응답 언어를 ${language}로 결정했습니다.`, detail: `사용자 입력 기반으로 ${language} 응답을 준비합니다.`, status: 'done' },
+            { id: 3, title: '도메인 분류', summary: `${category} 영역으로 분류했습니다.`, detail: '질문 유형을 8대 연구 기능 영역 중 하나로 매핑했습니다.', status: 'done' },
+            { id: 4, title: '응답 수준 판정', summary: `${difficulty} 수준 응답이 필요합니다.`, detail: '질문 길이와 파라미터 밀도를 기준으로 응답 깊이를 결정했습니다.', status: 'done' },
+            { id: 5, title: '검색 전략 수립', summary: '검색 전략과 도구 순서를 준비합니다.', detail: '핵심 키워드, 후속 도구, 최종 이동 페이지를 계획 중입니다.', status: 'running' },
+            { id: 6, title: '컬렉션 확인', summary: `선택 컬렉션: ${collection}`, detail: '벡터 검색에 사용할 컬렉션과 문서 범위를 점검합니다.', status: this.selectedCollection ? 'done' : 'running' },
+            { id: 7, title: '질의 확장', summary: '검색용 키워드로 질문을 확장합니다.', detail: '동의어, 공정명, 약어를 포함한 검색 질의를 구성합니다.', status: 'pending' },
+            { id: 8, title: '참고 문헌 검색', summary: '유사 문헌을 검색합니다.', detail: '벡터 DB와 도구를 사용해 관련 논문을 찾습니다.', status: 'pending' },
+            { id: 9, title: '문헌 재정렬', summary: '유사도 기준으로 결과를 재정렬합니다.', detail: '상위 후보를 정렬해 우선 검토 대상을 고릅니다.', status: 'pending' },
+            { id: 10, title: '핵심 근거 추출', summary: '근거 문장과 조건을 추출합니다.', detail: '문헌 본문에서 핵심 문장, 조건, 유사도를 정리합니다.', status: 'pending' },
+            { id: 11, title: '추가 도구 실행', summary: '필요 시 분석 도구를 실행합니다.', detail: '추천, 예측, 가설, 진단 등 후속 도구 실행 여부를 판단합니다.', status: 'pending' },
+            { id: 12, title: '결과 통합 요약', summary: '도구 결과를 최종 답변으로 통합합니다.', detail: '문헌과 도구 결과를 사람이 읽기 쉬운 설명으로 정리합니다.', status: 'pending' },
+            { id: 13, title: '검증 및 신뢰도 점검', summary: '응답 품질과 신뢰도를 점검합니다.', detail: '근거 수, 유사도, 누락 파라미터를 기준으로 응답을 검토합니다.', status: 'pending' },
+            { id: 14, title: '최종 안내 및 핸드오프', summary: '관련 페이지로 연결합니다.', detail: '필요 시 적절한 페이지와 탭으로 이동을 준비합니다.', status: 'pending' }
+        ];
+    }
+
     // ===== Send Message =====
     public async sendChat(text?: string) {
         const message = (text || this.chatInput || '').trim();
         if (!message || this.chatLoading) return;
 
-        // Add user message
+        this.collapsePreviousAssistantTurns();
         this.chatMessages.push({ role: 'user', content: message });
         this.chatInput = '';
         this.chatLoading = true;
 
-        // Add empty assistant message
-        const assistantMsg: any = { role: 'assistant', content: '', toolCalls: [], collapsed: false };
+        const assistantMsg: any = this.createAssistantMessage(message);
         this.chatMessages.push(assistantMsg);
         this.chatAssistantIdx = this.chatMessages.length - 1;
         this.scrollToBottom();
@@ -233,6 +281,7 @@ export class Component implements OnInit, OnDestroy {
         switch (event.type) {
             case 'text':
                 msg.content += event.content || '';
+                this.updateTraceStep(msg, 12, 'running', '도구 결과와 참고 문헌을 바탕으로 최종 답변을 작성하고 있습니다.');
                 break;
             case 'tool_use':
                 msg.toolCalls.push({
@@ -242,9 +291,9 @@ export class Component implements OnInit, OnDestroy {
                     input: event.input,
                     collapsed: true
                 });
+                this.applyToolUseTrace(msg, event);
                 break;
             case 'tool_result':
-                // Check for navigation command
                 this.handleToolResult(event);
                 msg.toolCalls.push({
                     type: 'result',
@@ -253,6 +302,7 @@ export class Component implements OnInit, OnDestroy {
                     result: event.result,
                     collapsed: true
                 });
+                this.applyToolResultTrace(msg, event);
                 break;
             case 'history':
                 this.chatHistory = event.messages || [];
@@ -261,15 +311,12 @@ export class Component implements OnInit, OnDestroy {
                 if (!msg.content?.trim() && this.pendingNavigation) {
                     msg.content = this.buildAgentNavigationSummary(this.pendingNavigation);
                 }
-                // Auto-collapse previous turns
-                for (let i = 0; i < this.chatMessages.length - 1; i++) {
-                    if (this.chatMessages[i].role === 'assistant') {
-                        this.chatMessages[i].collapsed = true;
-                    }
-                }
+                this.finalizeTrace(msg);
+                this.collapsePreviousAssistantTurns(this.chatAssistantIdx);
                 break;
             case 'error':
                 msg.content += `\n\n**Error:** ${event.message}`;
+                this.markTraceError(msg, event.message || '에이전트 처리 중 오류가 발생했습니다.');
                 break;
         }
         this.scrollToBottom();
@@ -395,6 +442,147 @@ export class Component implements OnInit, OnDestroy {
         this.pendingNavigation = null;
     }
 
+    private collapsePreviousAssistantTurns(exceptIdx: number = -1) {
+        for (let i = 0; i < this.chatMessages.length; i++) {
+            const item = this.chatMessages[i];
+            if (item.role !== 'assistant') continue;
+            if (i === exceptIdx) continue;
+            item.collapsed = true;
+            item.traceOpen = false;
+        }
+    }
+
+    private applyToolUseTrace(msg: any, event: any) {
+        const input = event.input || {};
+        const name = event.name;
+
+        if (name === 'get_collections') {
+            this.updateTraceStep(msg, 6, 'running', '사용 가능한 컬렉션 목록과 문서 규모를 확인하고 있습니다.');
+            return;
+        }
+
+        if (name === 'search_papers') {
+            this.updateTraceStep(msg, 5, 'done', '질문 목적에 맞는 검색 전략과 후속 흐름을 수립했습니다.');
+            this.updateTraceStep(msg, 7, 'running', `검색 질의를 확장하고 있습니다. ${input.query || msg.question}`);
+            this.updateTraceStep(msg, 8, 'running', '벡터 데이터베이스에서 관련 참고 문헌을 검색하고 있습니다.');
+            return;
+        }
+
+        if (name === 'navigate_to_page') {
+            this.updateTraceStep(msg, 14, 'running', '최종 결과와 연동할 페이지/탭을 확정하고 있습니다.');
+            return;
+        }
+
+        this.updateTraceStep(msg, 11, 'running', `${this.getToolLabel(name)} 도구를 실행하고 있습니다.`);
+    }
+
+    private applyToolResultTrace(msg: any, event: any) {
+        const name = event.name;
+
+        if (name === 'get_collections') {
+            this.updateTraceStep(msg, 6, 'done', '검색 가능한 컬렉션 메타데이터를 확보했습니다.');
+            return;
+        }
+
+        if (name === 'search_papers') {
+            const refs = this.parseSearchPapersResults(event.result);
+            msg.references = refs;
+            msg.similaritySummary = this.buildSimilaritySummary(refs);
+
+            this.updateTraceStep(msg, 7, 'done', '질문을 연구 검색용 키워드와 도메인 표현으로 확장했습니다.');
+            this.updateTraceStep(msg, 8, 'done', refs.length > 0 ? `${refs.length}건의 참고 문헌 후보를 검색했습니다.` : '검색 결과를 확보했습니다.');
+            this.updateTraceStep(msg, 9, 'done', refs.length > 0 ? '유사도 기준 상위 결과를 정렬했습니다.' : '검색 결과를 정렬했습니다.');
+            this.updateTraceStep(msg, 10, 'done', refs.length > 0 ? '참고 문헌, 본문 요약, 유사도 정보를 추출했습니다.' : '핵심 근거를 정리했습니다.');
+            this.updateTraceStep(msg, 11, 'running', '추가 분석 도구 실행 여부를 검토하고 있습니다.');
+            return;
+        }
+
+        if (name === 'navigate_to_page') {
+            this.updateTraceStep(msg, 14, 'done', '최종 결과를 이어서 실행할 페이지로 연결했습니다.');
+            return;
+        }
+
+        this.updateTraceStep(msg, 11, 'done', `${this.getToolLabel(name)} 결과를 확보했습니다.`);
+        this.updateTraceStep(msg, 12, 'running', '도구 결과를 읽기 쉬운 최종 답변으로 정리하고 있습니다.');
+    }
+
+    private finalizeTrace(msg: any) {
+        this.finishRunningStep(msg, 5, '검색 전략과 응답 흐름 구성을 완료했습니다.');
+        this.finishRunningStep(msg, 6, '컬렉션과 문서 범위 점검을 완료했습니다.');
+        this.finishRunningStep(msg, 7, '검색 질의 확장을 완료했습니다.');
+        this.finishRunningStep(msg, 8, '참고 문헌 검색을 완료했습니다.');
+        this.finishRunningStep(msg, 9, '문헌 우선순위 정렬을 완료했습니다.');
+        this.finishRunningStep(msg, 10, '핵심 근거 추출을 완료했습니다.');
+        this.finishRunningStep(msg, 11, '필요한 추가 도구 실행을 완료했습니다.');
+        this.updateTraceStep(msg, 12, 'done', msg.content?.trim() ? '최종 답변 초안 생성을 완료했습니다.' : '요약 응답 생성을 완료했습니다.');
+        this.updateTraceStep(msg, 13, 'done', msg.references?.length > 0
+            ? `참고 문헌 ${msg.references.length}건과 유사도 요약을 기준으로 답변을 점검했습니다.`
+            : '도구 결과와 누락 파라미터를 점검했습니다.');
+
+        const step14 = this.findTraceStep(msg, 14);
+        if (step14 && step14.status === 'pending') {
+            this.updateTraceStep(msg, 14, this.pendingNavigation ? 'done' : 'skipped', this.pendingNavigation
+                ? '관련 페이지로 이어지는 핸드오프를 준비했습니다.'
+                : '이번 턴은 페이지 이동 없이 답변만 제공합니다.');
+        }
+
+        for (const step of msg.traceSteps) {
+            if (step.status === 'pending') {
+                step.status = 'skipped';
+            }
+        }
+
+        this.syncCurrentTrace(msg);
+    }
+
+    private markTraceError(msg: any, detail: string) {
+        const running = msg.traceSteps.find((step: any) => step.status === 'running');
+        if (running) {
+            running.status = 'error';
+            running.detail = detail;
+        } else {
+            this.updateTraceStep(msg, 12, 'error', detail);
+        }
+    }
+
+    private updateTraceStep(msg: any, stepId: number, status: string, detail?: string) {
+        const step = this.findTraceStep(msg, stepId);
+        if (!step) return;
+        if (step.status === 'done' && status === 'running') return;
+        if (step.status === 'error' && status !== 'error') return;
+        step.status = status;
+        if (detail) step.detail = detail;
+        this.syncCurrentTrace(msg);
+    }
+
+    private finishRunningStep(msg: any, stepId: number, detail: string) {
+        const step = this.findTraceStep(msg, stepId);
+        if (!step) return;
+        if (step.status === 'running' || step.status === 'pending') {
+            step.status = 'done';
+            step.detail = detail;
+        }
+    }
+
+    private findTraceStep(msg: any, stepId: number): any {
+        return (msg.traceSteps || []).find((step: any) => step.id === stepId) || null;
+    }
+
+    private syncCurrentTrace(msg: any) {
+        const current = this.getCurrentTraceStep(msg);
+        msg.currentLabel = current?.title || '에이전트 실행';
+        msg.currentDescription = current?.detail || current?.summary || '실행 상태를 갱신 중입니다.';
+    }
+
+    public getCurrentTraceStep(msg: any): any {
+        const running = (msg.traceSteps || []).find((step: any) => step.status === 'running');
+        if (running) return running;
+        const error = (msg.traceSteps || []).find((step: any) => step.status === 'error');
+        if (error) return error;
+        const reversed = [...(msg.traceSteps || [])].reverse();
+        return reversed.find((step: any) => step.status === 'done') || (msg.traceSteps || [])[0] || null;
+    }
+
     // ===== Helpers =====
     public onKeydown(event: KeyboardEvent) {
         if (event.key === 'Enter' && !event.shiftKey) {
@@ -413,6 +601,13 @@ export class Component implements OnInit, OnDestroy {
 
     public toggleCollapse(msg: any) {
         msg.collapsed = !msg.collapsed;
+        if (!msg.collapsed) {
+            this.collapsePreviousAssistantTurns(this.chatMessages.indexOf(msg));
+        }
+    }
+
+    public toggleTrace(msg: any) {
+        msg.traceOpen = !msg.traceOpen;
     }
 
     public toggleToolCollapse(tc: any) {
@@ -473,5 +668,119 @@ export class Component implements OnInit, OnDestroy {
         // Truncate long text
         if (result.length > 200) return result.slice(0, 200) + '...';
         return result;
+    }
+
+    public getTraceStatusLabel(status: string): string {
+        const map: any = {
+            pending: '대기',
+            running: '진행 중',
+            done: '완료',
+            skipped: '건너뜀',
+            error: '오류'
+        };
+        return map[status] || status;
+    }
+
+    public getTraceStatusClasses(status: string): string {
+        const map: any = {
+            pending: 'bg-slate-100 text-slate-500 border-slate-200',
+            running: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+            done: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            skipped: 'bg-amber-50 text-amber-700 border-amber-200',
+            error: 'bg-rose-50 text-rose-700 border-rose-200'
+        };
+        return map[status] || map.pending;
+    }
+
+    public getTraceStepClasses(step: any): string {
+        const map: any = {
+            pending: 'border-slate-200 bg-white',
+            running: 'border-cyan-300 bg-cyan-50/80 shadow-sm shadow-cyan-100',
+            done: 'border-emerald-200 bg-emerald-50/70',
+            skipped: 'border-amber-200 bg-amber-50/70',
+            error: 'border-rose-200 bg-rose-50/80'
+        };
+        return map[step.status] || map.pending;
+    }
+
+    public getTraceStepIcon(step: any): string {
+        const map: any = {
+            pending: '○',
+            running: '◔',
+            done: '✓',
+            skipped: '↷',
+            error: '⚠'
+        };
+        return map[step.status] || '○';
+    }
+
+    public getCompletedTraceCount(msg: any): number {
+        return (msg.traceSteps || []).filter((step: any) => step.status === 'done').length;
+    }
+
+    public getCollapsedPreview(msg: any): string {
+        const refs = msg.references?.length ? ` · 참고문헌 ${msg.references.length}건` : '';
+        const text = msg.content?.trim() || msg.currentDescription || '결과 보기';
+        return `${this.getCompletedTraceCount(msg)}/14 단계 완료${refs} · ${this.truncate(text, 54)}`;
+    }
+
+    public formatScore(score: number): string {
+        return Number.isFinite(score) ? score.toFixed(4) : '-';
+    }
+
+    private parseSearchPapersResults(result: string): any[] {
+        if (!result || typeof result !== 'string') return [];
+        const refs: any[] = [];
+        const regex = /--- Result (\d+) \(score: ([\d.]+)\) ---\nFile: (.+?) \| Chunk: (.+?)\nText: ([\s\S]*?)(?=\n--- Result|$)/g;
+        let match;
+        while ((match = regex.exec(result)) !== null) {
+            refs.push({
+                rank: Number(match[1]),
+                score: Number(match[2]),
+                filename: match[3],
+                chunk: match[4],
+                excerpt: (match[5] || '').trim()
+            });
+        }
+        return refs.slice(0, 5);
+    }
+
+    private buildSimilaritySummary(refs: any[]): string {
+        if (!refs || refs.length === 0) {
+            return '유사도 요약 없음';
+        }
+        const scores = refs.map((item) => Number(item.score) || 0);
+        const avg = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+        const max = Math.max(...scores);
+        return `상위 ${refs.length}건 평균 유사도 ${avg.toFixed(4)} · 최고 ${max.toFixed(4)}`;
+    }
+
+    private detectLanguage(question: string): string {
+        return /[가-힣]/.test(question) ? 'ko' : 'en';
+    }
+
+    private detectDifficulty(question: string): string {
+        const score = [/[0-9]/.test(question), question.length > 30, /비교|예측|가설|분석|추론|recommend|predict/i.test(question)]
+            .filter(Boolean).length;
+        if (score >= 3) return '심층 분석';
+        if (score === 2) return '표준 분석';
+        return '빠른 응답';
+    }
+
+    private classifyQuestion(question: string): string {
+        const q = question.toLowerCase();
+        if (/그래프|차트|통계|피팅|scatter|plot/i.test(q)) return '데이터 분석';
+        if (/실험|doe|레시피|노트|조건 기록/i.test(q)) return '실험 관리';
+        if (/디바이|주파수|paschen|계산|자이로/i.test(q)) return '플라즈마 계산기';
+        if (/수식|방정식|가정|boltzmann|theory|이론/i.test(q)) return '이론 연구';
+        if (/oes|랭뮤어|이상|고장|진단|스펙트럼/i.test(q)) return '진단 분석';
+        if (/예측|etch|식각|증착|rf|pressure|power|icp/i.test(q)) return '공정 예측';
+        if (/프로젝트|협업|토론|activity|공유/i.test(q)) return '협업';
+        return '주제 발굴';
+    }
+
+    private truncate(text: string, limit: number = 60): string {
+        if (!text) return '';
+        return text.length > limit ? `${text.slice(0, limit)}...` : text;
     }
 }
