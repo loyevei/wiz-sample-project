@@ -18,17 +18,8 @@ COLLECTION_META_PATH = "/opt/app/data/collection_meta.json"
 PARAM_DB_DIR = "/opt/app/data"
 DEFAULT_COLLECTION = "plasma_papers"
 
-MODEL_REGISTRY = {
-    "snunlp/KR-SBERT-V40K-klueNLI-augSTS": {"dim": 768, "short_name": "KR-SBERT"},
-    "BM-K/KoSimCSE-roberta-multitask": {"dim": 768, "short_name": "KoSimCSE"},
-    "jhgan/ko-sroberta-multitask": {"dim": 768, "short_name": "ko-sroberta"},
-    "sentence-transformers/all-MiniLM-L6-v2": {"dim": 384, "short_name": "MiniLM-L6"},
-    "sentence-transformers/all-mpnet-base-v2": {"dim": 768, "short_name": "MPNet"},
-    "BAAI/bge-base-en-v1.5": {"dim": 768, "short_name": "BGE-base"},
-    "intfloat/multilingual-e5-large": {"dim": 1024, "short_name": "mE5-Large"},
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {"dim": 384, "short_name": "MiniLM-L12"}
-}
-DEFAULT_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
+MODEL_REGISTRY = wiz.model("modelregistry").compact()
+DEFAULT_MODEL = wiz.model("modelregistry").default_model()
 
 # ==============================================================================
 # 파라미터 추출 패턴 (FN-0001)
@@ -146,17 +137,12 @@ GAS_SPECIES = [
 # 인프라 함수
 # ==============================================================================
 def _load_collection_meta():
-    if os.path.exists(COLLECTION_META_PATH):
-        try:
-            with open(COLLECTION_META_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    meta_helper = wiz.model("collectionmeta")
+    return meta_helper.load(COLLECTION_META_PATH)
 
 def _get_collection_model(collection_name):
-    meta = _load_collection_meta()
-    return meta.get(collection_name, {}).get("model", DEFAULT_MODEL)
+    meta_helper = wiz.model("collectionmeta")
+    return meta_helper.get_model(COLLECTION_META_PATH, collection_name, DEFAULT_MODEL)
 
 def _get_model(model_name=None):
     if model_name is None:
@@ -390,9 +376,10 @@ def collections():
         client = _get_client()
         col_names = client.list_collections()
         meta = _load_collection_meta()
+        meta_helper = wiz.model("collectionmeta")
         result = []
         for name in col_names:
-            info = meta.get(name, {})
+            info = meta_helper.normalize_info(meta.get(name, {}))
             if not info or info.get("short_name") == "Unknown":
                 try:
                     col_info = client.describe_collection(name)
@@ -440,80 +427,95 @@ def predict():
         target_property = wiz.request.query("target_property", "")
 
         collection_name, model_name = _resolve_collection_and_model()
-        client = _get_client()
-        if not client.has_collection(collection_name):
-            wiz.response.status(200, predictions=[], message="컬렉션이 없습니다.")
-            return
-
-        query_parts = []
-        if process_type:
-            query_parts.append(f"{process_type} 공정")
-        if gas_type:
-            query_parts.append(f"{gas_type} 가스")
-        if pressure:
-            query_parts.append(f"압력 {pressure}")
-        if power:
-            query_parts.append(f"전력 {power}")
-        if temperature:
-            query_parts.append(f"온도 {temperature}")
-        if substrate:
-            query_parts.append(f"{substrate} 기판")
-        if target_property:
-            query_parts.append(f"{target_property}")
-
-        if not query_parts:
-            wiz.response.status(400, message="최소 하나의 공정 조건을 입력하세요.")
-            return
-
-        query_text = " ".join(query_parts)
-        model = _get_model(model_name)
-        query_vec = model.encode([query_text], normalize_embeddings=True)[0].tolist()
-
-        search_results = client.search(
-            collection_name=collection_name,
-            data=[query_vec], limit=30,
-            output_fields=["doc_id", "filename", "chunk_index", "text"],
-            search_params={"metric_type": "COSINE"}
+        result = run_predict_data(
+            process_type=process_type,
+            gas_type=gas_type,
+            pressure=pressure,
+            power=power,
+            temperature=temperature,
+            substrate=substrate,
+            target_property=target_property,
+            collection_name=collection_name
         )
-
-        predictions = []
-        seen_docs = set()
-        for hit in search_results[0]:
-            entity = hit.get("entity", {})
-            doc_id = entity.get("doc_id", "")
-            if doc_id in seen_docs:
-                continue
-            seen_docs.add(doc_id)
-            text = entity.get("text", "")
-            params = _extract_parameters_from_text(text)
-            extracted_values = []
-            for pk, pdata in params.items():
-                if pk == "gas_species":
-                    continue
-                for v in pdata.get("values", [])[:3]:
-                    extracted_values.append(f"{v['raw_value']} {v['raw_unit']}")
-
-            predictions.append({
-                "doc_id": doc_id,
-                "filename": entity.get("filename", ""),
-                "chunk_index": entity.get("chunk_index", 0),
-                "relevance": round(hit.get("distance", 0), 4),
-                "text": text[:400],
-                "extracted_values": extracted_values[:8],
-                "params": {k: v for k, v in params.items() if k != "gas_species"}
-            })
-            if len(predictions) >= 10:
-                break
-
-        wiz.response.status(200,
-            query=query_text,
-            predictions=predictions,
-            total_searched=len(search_results[0]))
+        wiz.response.status(200, **result)
     except season.lib.exception.ResponseException:
         raise
     except Exception as e:
         traceback.print_exc()
         wiz.response.status(500, message=str(e))
+
+
+def run_predict_data(process_type="", gas_type="", pressure="", power="", temperature="", substrate="", target_property="", collection_name=None):
+    collection_name = (collection_name or DEFAULT_COLLECTION).strip() or DEFAULT_COLLECTION
+    client = _get_client()
+    if not client.has_collection(collection_name):
+        return {"predictions": [], "message": "컬렉션이 없습니다."}
+
+    query_parts = []
+    if process_type:
+        query_parts.append(f"{process_type} 공정")
+    if gas_type:
+        query_parts.append(f"{gas_type} 가스")
+    if pressure:
+        query_parts.append(f"압력 {pressure}")
+    if power:
+        query_parts.append(f"전력 {power}")
+    if temperature:
+        query_parts.append(f"온도 {temperature}")
+    if substrate:
+        query_parts.append(f"{substrate} 기판")
+    if target_property:
+        query_parts.append(f"{target_property}")
+
+    if not query_parts:
+        raise ValueError("최소 하나의 공정 조건을 입력하세요.")
+
+    model_name = _get_collection_model(collection_name)
+    query_text = " ".join(query_parts)
+    model = _get_model(model_name)
+    query_vec = model.encode([query_text], normalize_embeddings=True)[0].tolist()
+
+    search_results = client.search(
+        collection_name=collection_name,
+        data=[query_vec], limit=30,
+        output_fields=["doc_id", "filename", "chunk_index", "text"],
+        search_params={"metric_type": "COSINE"}
+    )
+
+    predictions = []
+    seen_docs = set()
+    for hit in search_results[0]:
+        entity = hit.get("entity", {})
+        doc_id = entity.get("doc_id", "")
+        if doc_id in seen_docs:
+            continue
+        seen_docs.add(doc_id)
+        text = entity.get("text", "")
+        params = _extract_parameters_from_text(text)
+        extracted_values = []
+        for pk, pdata in params.items():
+            if pk == "gas_species":
+                continue
+            for v in pdata.get("values", [])[:3]:
+                extracted_values.append(f"{v['raw_value']} {v['raw_unit']}")
+
+        predictions.append({
+            "doc_id": doc_id,
+            "filename": entity.get("filename", ""),
+            "chunk_index": entity.get("chunk_index", 0),
+            "relevance": round(hit.get("distance", 0), 4),
+            "text": text[:400],
+            "extracted_values": extracted_values[:8],
+            "params": {k: v for k, v in params.items() if k != "gas_species"}
+        })
+        if len(predictions) >= 10:
+            break
+
+    return {
+        "query": query_text,
+        "predictions": predictions,
+        "total_searched": len(search_results[0])
+    }
 
 
 def analyze_params():

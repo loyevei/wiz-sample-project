@@ -5,15 +5,43 @@
     width: 100%;
 }
 
-pre code {
-    font-family: 'Courier New', Courier, monospace;
+@keyframes journeyReveal {
+    0% { opacity: 0; transform: translateY(12px) scale(0.97); }
+    60% { opacity: 1; transform: translateY(-2px) scale(1.005); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.animate-bounce {
-    animation: bounce 1s infinite;
+@keyframes journeyGlow {
+    0%, 100% { box-shadow: 0 0 0 rgba(34, 211, 238, 0); }
+    50% { box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.10); }
 }
 
-@keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
+@keyframes cardSlideUp {
+    0% { opacity: 0; transform: translateY(18px) scale(0.96); }
+    50% { opacity: 0.9; transform: translateY(-3px) scale(1.008); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+.journey-reveal {
+    opacity: 0;
+    animation: cardSlideUp 0.48s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    will-change: transform, opacity;
+}
+
+.journey-reveal-current {
+    animation: journeyReveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+               journeyGlow 1.8s ease-in-out infinite;
+}
+
+.overflow-y-auto {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(168,85,247,0.35) transparent;
+    &::-webkit-scrollbar { width: 4px; }
+    &::-webkit-scrollbar-track { background: transparent; }
+    &::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(168,85,247,0.7), rgba(217,70,239,0.7)); border-radius: 2px; }
+}
+
+textarea { line-height: 1.5; transition: height 0.1s ease; }
+img[alt="Plasma robot"] { user-select: none; pointer-events: none; }
+
+pre code { font-family: 'Courier New', Courier, monospace; }

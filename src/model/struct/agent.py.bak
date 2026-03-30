@@ -1,0 +1,3540 @@
+# =============================================================================
+# Agent Struct — Tool-Use 기반 AI Agent (OpenAI GPT)
+# =============================================================================
+# 호출 예시:
+#   struct = wiz.model("struct")
+#   agent = struct.agent()
+#   for event in agent.run("플라즈마 에칭 관련 논문 찾아줘"):
+#       print(event)
+# =============================================================================
+
+import os
+import sys
+import json
+import re
+import importlib
+import importlib.util
+import traceback
+from collections import Counter
+
+class Agent:
+    MAX_ITERATIONS = 20
+
+    def __init__(self, struct, collection=""):
+        self.struct = struct
+        self.config = wiz.config("season")
+        self.collection = collection or ""
+
+        # LLM 설정 (OpenAI)
+        self.api_key = getattr(self.config, "openai_api_key", "")
+        self.model = getattr(self.config, "openai_model", "gpt-4o")
+
+        # Tool Context — 모든 Tool에 주입되는 공유 컨텍스트
+        self._tool_context = {
+            "wiz": wiz,
+            "config": self.config,
+            "struct": struct,
+            "collection": self.collection,
+        }
+
+        self._tools = {}
+        self._messages = []
+        self._evidence_bank = []
+        self._tool_result_bank = []
+        self._page_result_bank = []
+        self._last_navigation = None
+        self._quality_report = {}
+        self._goal_state = {}
+        self._orchestrator_plan = {}
+        self._last_user_message = ""
+        self._load_tools()
+
+    # =========================================================================
+    # Tool Auto-Discovery
+    # =========================================================================
+    def _load_tools(self):
+        project_root = wiz.project.fs().abspath()
+        tools_dir = None
+        for candidate in ["src", "build", "bundle"]:
+            path = os.path.join(project_root, candidate,
+                                "model", "struct", "agent", "tools")
+            if os.path.isdir(path):
+                tools_dir = path
+                break
+
+        if tools_dir is None:
+            return
+
+        if tools_dir not in sys.path:
+            sys.path.insert(0, tools_dir)
+
+        for fname in sorted(os.listdir(tools_dir)):
+            if not fname.endswith(".py"):
+                continue
+            if fname.startswith("_") or fname == "base_tool.py":
+                continue
+
+            filepath = os.path.join(tools_dir, fname)
+            module_name = fname[:-3]
+
+            try:
+                spec = importlib.util.spec_from_file_location(
+                    f"agent_tool_{module_name}", filepath)
+                mod = importlib.util.module_from_spec(spec)
+                mod.wiz = wiz
+                spec.loader.exec_module(mod)
+
+                if hasattr(mod, "Tool"):
+                    instance = mod.Tool(self._tool_context)
+                    if instance.name:
+                        self._tools[instance.name] = instance
+            except Exception:
+                pass
+
+    # =========================================================================
+    # System Prompt
+    # =========================================================================
+    def _build_system_prompt(self, memory_context=None, orchestrator_plan=None, active_cluster=None, goal_progress=None):
+        tool_descs = []
+        for t in self._tools.values():
+            tool_descs.append(f"- **{t.name}**: {t.description}")
+        tool_list = "\n".join(tool_descs) if tool_descs else "none"
+
+        collection_info = ""
+        if self.collection:
+            collection_info = f"\n## Current Milvus Collection\nThe user has selected the collection **`{self.collection}`**. Use this collection for all vector search operations unless otherwise specified.\nPass `collection=\"{self.collection}\"` to all tools that accept a collection parameter.\n"
+
+        memory_section = ""
+        if memory_context:
+            recent_queries = memory_context.get("recent_user_queries", []) or []
+            recent_queries_text = "\n".join([f"- {item}" for item in recent_queries]) if recent_queries else "- No previous user turns"
+            memory_section = f"""
+## Session Memory
+- Current collection: {memory_context.get('collection', self.collection or 'none')}
+- Conversation turns: {memory_context.get('history_turns', 0)}
+- Latest user topic: {memory_context.get('last_topic', memory_context.get('current_message', ''))}
+- Recent user queries:
+{recent_queries_text}
+"""
+
+        orchestrator_section = ""
+        if orchestrator_plan:
+            plan_lines = "\n".join([f"- {item}" for item in orchestrator_plan.get("plan", [])]) or "- classify → tools → synthesis → navigation"
+            tool_lines = ", ".join(orchestrator_plan.get("recommended_tools", [])) or "none"
+            cluster_lines = "\n".join([
+                f"- {item.get('name')}: {item.get('role')}"
+                for item in orchestrator_plan.get("agent_clusters", [])
+            ]) or "- planner: classify and choose next step"
+            goal_progress_section = ""
+            if goal_progress:
+                goal_progress_section = f"""
+- Current active cluster: {active_cluster or goal_progress.get('current_cluster', '-')}
+- Goal status: {goal_progress.get('status', 'running')}
+- Missing items: {', '.join(goal_progress.get('missing', [])) or '-'}
+- Completed tools: {', '.join(goal_progress.get('completed_tools', [])) or '-'}
+"""
+            orchestrator_section = f"""
+## Runtime Orchestrator Plan
+- Classified area: {orchestrator_plan.get('category', 'unknown')}
+- Target page: {orchestrator_plan.get('page', '-')}
+- Target tab: {orchestrator_plan.get('tab', '-')}
+- Goal: {orchestrator_plan.get('goal', 'produce a grounded answer and page handoff')}
+- Recommended tools: {tool_lines}
+- Keywords: {", ".join(orchestrator_plan.get('keywords', [])) or '-'}
+- Clustered agents:
+{cluster_lines}
+- Goal progress:
+{goal_progress_section or '- Current active cluster: -'}
+- Execution plan:
+{plan_lines}
+"""
+
+        cluster_prompt = self._build_cluster_prompt(active_cluster, goal_progress, orchestrator_plan)
+
+        return f"""You are an expert AI research assistant specialized in plasma science and engineering.
+You have access to a vector database of plasma research papers and powerful analysis tools.
+{collection_info}
+{memory_section}
+{orchestrator_section}
+
+## Runtime Answer Pipeline
+The final answer must be produced by combining these five layers:
+1. **Prompt** — system rules, user question, selected collection, and session memory
+2. **Orchestrator** — classify the request, decide the tool order, and plan navigation
+3. **Tools** — run retrieval, analysis, and navigation tools only when needed
+4. **Memory** — reuse conversation history, chosen collection, and prior findings to avoid losing context
+5. **Streaming UI** — structure the response so the frontend can show progress, tools, memory, and final answer clearly
+
+When you answer, ensure these layers are reflected in the execution: prompt context should guide the plan, the orchestrator should decide tools, tools should update memory, and the final answer should be suitable for progressive streaming UI presentation.
+
+## Clustered Agent Loop Rule
+Operate as a clustered agent system until the goal is reached:
+- Planner cluster: classify the request, define the goal, and choose the next action.
+- Retriever cluster: collect page results and search evidence.
+- Analyst cluster: compare, extract, predict, or reason over the gathered evidence.
+- Synthesizer cluster: rebuild the final answer in the user's language.
+- Navigator cluster: prepare page handoff and next-step execution context.
+
+For every iteration, repeat this loop:
+1. check current goal progress
+2. identify what is still missing
+3. choose the next cluster/tool action
+4. execute and re-evaluate
+
+Do not stop early if the goal is not yet satisfied and additional tool use is available.
+
+## Active Cluster Instruction
+{cluster_prompt}
+
+## Evidence Synthesis & Quality Rule
+When tool results contain Milvus search hits, paper excerpts, or analysis summaries:
+- NEVER dump raw DB chunks as the final answer.
+- First compress them into evidence units: claim, condition, numeric fact, limitation, source.
+- Merge overlapping evidence, remove duplicates, and explain consensus / differences.
+- Prefer 2~4 synthesized findings over long raw lists.
+- Explicitly mention uncertainty, missing parameters, or weak evidence when relevant.
+- Produce a high-quality answer in this order whenever possible:
+    1. one-line conclusion
+    2. 핵심 근거 / key findings
+    3. 조건 / 예외 / 한계
+    4. 다음 액션 또는 page handoff
+
+## CRITICAL: Language Rule
+**Always answer in the user's language regardless of the context language.**
+- All summaries, tool result explanations, handoff guidance, preview text, and final answers must follow the user's language.
+- If tool outputs or retrieved evidence use another language, summarize them in the user's language.
+- Do not let the context language override the language of the final answer.
+
+## Available Tools
+{tool_list}
+
+## 8대 핵심 기능 영역 & 도구 조합 가이드
+
+### 1. 주제 발굴 (Research Discovery) → Page: /research
+사용자가 새로운 연구 주제, 트렌드, 공백을 탐색할 때:
+- 페이지 결과 읽기: `read_page_results` → discover 탭이 실제로 보여줄 논문 결과를 JSON으로 읽기
+- 기본 검색: `search_papers` → 관련 논문 탐색
+- 주제 추천: `recommend_topics` → 교차 주제 / 연구 공백 / 확장 방향 추천
+- 공백 탐지: `detect_research_gaps` → 키워드 밀도 분석으로 미개척 영역 발견
+- 가설 생성: `generate_hypothesis` → 템플릿 기반 연구 가설 자동 생성
+- 키워드 분석: `analyze_keywords` → 주요 용어 빈도 분석
+- 논문 추천: navigate_to_page(page="research", tab="recommend") → 관심 분야 기반 추천
+- 제안서 생성: navigate_to_page(page="research", tab="proposal") → 연구 제안서 초안 생성
+- 특허 검색: navigate_to_page(page="research", tab="patent") → 기술 문헌 검색
+- 조합 예시: search_papers → recommend_topics → generate_hypothesis → navigate_to_page
+
+### 2. 공정 예측 (Process Prediction) → Page: /prediction
+사용자가 공정 조건/결과를 예측하거나 파라미터를 분석할 때:
+- 페이지 결과 읽기: `read_page_results` → predict 탭이 실제로 보여줄 예측 결과를 JSON으로 읽기
+- 조건 기반 검색: `predict_process` → 공정 조건으로 유사 문헌 + 파라미터 추출
+- 파라미터 효과: `analyze_parameter_effect` → 특정 파라미터의 효과 분석
+- 역탐색: `inverse_search` → 목표 결과에서 조건 범위 역추적
+- 수치 예측: `surrogate_predict` → Ridge 회귀 기반 결과 예측 + 신뢰구간
+- 조합 예시: predict_process → surrogate_predict
+
+### 3. 진단 분석 (Diagnostics Analysis) → Page: /diagnosis
+사용자가 플라즈마 진단 방법, 이상 현상, 고장을 분석할 때:
+- 페이지 결과 읽기: `read_page_results` → search/compare/detection/failure 탭이 실제로 보여줄 결과를 JSON으로 읽기
+- 진단 비교: `compare_diagnostics` → 두 진단 방법의 키워드/문헌 비교
+- 이상 검색: `search_anomaly` → 이상 현상/고장 증상 관련 문헌 검색
+- 고장 추론: `failure_reasoning` → 증상 기반 원인-해결 추론
+- 고장/증상 질문은 가능하면 `read_page_results(page="diagnosis", tab="failure", ...)`를 먼저 사용
+- 조합 예시: failure 질문 → read_page_results(failure) → failure_reasoning → navigate_to_page
+- 조합 예시: compare 질문 → read_page_results(compare) → compare_diagnostics → navigate_to_page
+
+### 4. 이론 연구 (Theory Analysis) → Page: /theory
+사용자가 수식, 가정, 이론적 관계를 분석할 때:
+- 페이지 결과 읽기: `read_page_results` → equation 탭이 실제로 보여줄 수식 검색 결과를 JSON으로 읽기
+- 수식 추출: `extract_equations` → 전체 문서에서 수식 추출 + 도메인 분류
+- 수식 검색: `search_equations` → 특정 수식/공식 관련 문서 검색
+- 가정 분석: `extract_assumptions` → 이론적 가정 추출 + 상충 검사
+- 이론 그래프: `build_theory_graph` → Knowledge Graph + 영향 추적
+- 조합 예시: extract_equations → extract_assumptions → build_theory_graph
+
+### 5. 플라즈마 계산기 (Plasma Calculator) → Page: /calculator
+사용자가 플라즈마 물리량을 계산하려 할 때:
+- 디바이 길이, 플라즈마 주파수, 자이로 반경, 평균 자유 경로 등
+- navigate_to_page에 page=calculator, tab=plasma 전달
+- params에 계산 입력값 포함: Te(eV), ne(m^-3), gas(Ar/N2/O2 등), pressure(mTorr), B(T)
+- Paschen 곡선 → tab=paschen, params에 gas 전달
+- 키워드: 디바이, 주파수, 자이로, 평균자유경로, 랭뮤어, 온도, 밀도, 전자질량, 계산
+
+### 6. 실험 관리 (Experiment Management) → Page: /experiment
+사용자가 실험 계획, 진행, 기록, 레시피를 관리할 때:
+- DOE 실험 설계 → tab=doe
+- 실험 노트 → tab=notebook
+- 레시피 관리 → tab=recipe, params에 gas/pressure/power/temperature/time 전달
+- 키워드: 실험, DOE, 실험설계, 노트, 기록, 레시피, 공정조건
+
+### 7. 데이터 분석 (Data Analysis) → Page: /analysis
+사용자가 데이터 시각화, 통계 분석, 커브 피팅을 수행할 때:
+- 데이터 플로팅 → tab=plotter, params에 chart_type(line/bar/scatter/pie/histogram/boxplot/heatmap) 전달
+- 통계 분석 → tab=statistics
+- 커브 피팅 → tab=fitting, params에 fitting_model(linear/quadratic/exponential/power/gaussian) 전달
+- 키워드: 그래프, 차트, 통계, 평균, 표준편차, 피팅, 회귀, 히스토그램, 시각화
+
+### 8. 협업 (Collaboration) → Page: /collaboration
+사용자가 프로젝트 공유, 팀 토론, 활동 내역을 볼 때:
+- 프로젝트 관리 → tab=projects
+- 토론 → tab=discussions
+- 활동/알림 → tab=activity
+- 키워드: 프로젝트, 팀, 공유, 메시지, 협업, 토론, 알림
+
+## Page Navigation (IMPORTANT — MANDATORY)
+After analyzing the user's question and completing relevant tool calls, you MUST call `navigate_to_page` to direct the user to the appropriate page. This is MANDATORY for every domain-specific question.
+However, you must NOT end the turn with only tool calls or only navigation metadata.
+
+**Category Classification Guide:**
+Analyze the user's question and classify it into one of the 8 categories:
+- **주제 발굴**: 논문 검색, 연구 트렌드, 주제 추천, 연구 공백, 가설, 논문 추천, 제안서, 특허 → research
+- **공정 예측**: 에칭/증착 공정, 파라미터, 예측, 시뮬레이션, RF 파워, 압력 → prediction
+- **진단 분석**: OES, 랭뮤어 프로브, 이상 현상, 고장, 진단 비교, 스펙트럼 → diagnosis
+- **이론 연구**: 수식, 방정식, 가정, 이론 관계, Knowledge Graph, Boltzmann → theory
+- **플라즈마 계산기**: 디바이 길이, 플라즈마 주파수, 자이로 반경, 물리량 계산, 단위 변환, Paschen → calculator
+- **실험 관리**: 실험 계획, DOE, 실험 노트, 레시피, 공정 조건 기록 → experiment
+- **데이터 분석**: 그래프, 차트, 통계, 피팅, 시각화, 히스토그램, 평균, 회귀 → analysis
+- **협업**: 프로젝트, 팀, 공유, 메시지, 토론, 활동 → collaboration
+
+**Keyword Extraction & Parameter Mapping (CRITICAL):**
+Extract the most relevant keywords from the user's query and pass them as `query` and `params` to `navigate_to_page`.
+- For **calculator**: extract numeric values for Te, ne, gas type, pressure, B field
+    Example: "전자온도 3eV, 밀도 1e16인 아르곤 플라즈마 디바이 길이" → params: {{"Te": "3", "ne": "1e16", "gas": "Ar", "pressure": "100"}}
+- For **prediction**: extract process_type, gas_type, pressure, power, temperature, substrate, target_property
+    Example: "ICP 에칭에서 CF4 가스 50mTorr에서 식각속도" → params: {{"process_type": "ICP etching", "gas_type": "CF4", "pressure": "50"}}
+- For **diagnosis**: extract diagType, symptom, methodA, methodB
+    Example: "OES와 랭뮤어 프로브 비교" → params: {{"methodA": "OES", "methodB": "Langmuir probe"}}
+    Example: "아킹 발생 원인 분석" → tab: "failure", params: {{"symptom": "아킹 발생"}}
+- For **analysis**: extract chart_type, fitting_model
+    Example: "산점도 그래프 그려줘" → params: {{"chart_type": "scatter"}}
+- For **experiment**: extract gas, pressure, power, temperature, time
+    Example: "Ar 100mTorr 300W 레시피" → tab: "recipe", params: {{"gas": "Ar", "pressure": "100", "power": "300"}}
+
+## Workflow (STRICT — Follow every step)
+1. **Classify** — determine which of the 8 categories the question belongs to
+2. **Extract keywords** — identify key terms, parameters, and numeric values
+3. **Execute tools** — run relevant analysis tools (search_papers, predict_process, etc.)
+3-1. **Read page results when supported** — call `read_page_results` before navigation whenever the chosen page/tab is supported, so the final answer summarizes what the page will actually display.
+4. **Synthesize** — summarize results clearly in Korean
+5. **Navigate (MANDATORY)** — You MUST call `navigate_to_page` as the FINAL tool call. NEVER skip this step. Pass extracted keywords as `query` and specific parameters as `params`.
+6. **Final agent handoff message** — After `navigate_to_page` completes, provide a final human-readable assistant message in Korean that includes:
+    - the classified work area
+    - the main keywords or extracted parameters
+    - 2~4 key findings from the executed tools
+    - the target page/tab and what will be executed there
+    - the current Milvus collection name
+
+**Never finish with only a redirect.** The user must receive an agent-style answer plus navigation guidance.
+
+### End-to-End Examples:
+
+**Example 1**: User: "플라즈마 에칭 관련 논문 검색해줘"
+→ Classify: 주제 발굴 (research)
+→ Extract: keywords="플라즈마 에칭"
+→ Tool: read_page_results(page="research", tab="discover", query="플라즈마 에칭")
+→ Tool: search_papers(query="플라즈마 에칭")
+→ Synthesize: 결과 요약
+→ Navigate: navigate_to_page(page="research", tab="discover", query="플라즈마 에칭")
+
+**Example 2**: User: "전자온도 3eV, 밀도 1e16 아르곤 디바이 길이 계산"
+→ Classify: 플라즈마 계산기 (calculator)
+→ Extract: Te=3, ne=1e16, gas=Ar
+→ Navigate: navigate_to_page(page="calculator", tab="plasma", query="디바이 길이", params={{"Te": "3", "ne": "1e16", "gas": "Ar"}})
+
+**Example 3**: User: "ICP 에칭에서 CF4 50mTorr 식각속도 예측"
+→ Classify: 공정 예측 (prediction)
+→ Extract: process_type="ICP etching", gas_type="CF4", pressure="50"
+→ Tool: read_page_results(page="prediction", tab="predict", query="CF4 ICP 식각속도", params={{"process_type": "ICP etching", "gas_type": "CF4", "pressure": "50"}})
+→ Tool: predict_process(query="ICP CF4 etching etch rate", process_type="ICP etching", gas_type="CF4")
+→ Navigate: navigate_to_page(page="prediction", tab="predict", query="CF4 ICP 식각속도", params={{"process_type": "ICP etching", "gas_type": "CF4", "pressure": "50"}})
+
+**Example 4**: User: "OES 스펙트럼 분석하고 이상 탐지해줘"
+→ Classify: 진단 분석 (diagnosis)
+→ Tool: read_page_results(page="diagnosis", tab="detection", query="OES 이상 탐지")
+→ Navigate: navigate_to_page(page="diagnosis", tab="detection", query="OES 이상 탐지")
+
+**Example 4-1**: User: "아킹 발생하고 전력 반사가 커졌는데 원인 분석해줘"
+→ Classify: 진단 분석 (diagnosis)
+→ Extract: symptom="아킹 발생 전력 반사 증가"
+→ Tool: read_page_results(page="diagnosis", tab="failure", query="아킹 발생 전력 반사 증가", params={{"symptom": "아킹 발생 전력 반사 증가"}})
+→ Tool: failure_reasoning(symptom="아킹 발생 전력 반사 증가")
+→ Navigate: navigate_to_page(page="diagnosis", tab="failure", query="아킹 발생 전력 반사 증가", params={{"symptom": "아킹 발생 전력 반사 증가"}})
+
+**Example 5**: User: "산점도 그래프 그려줘"
+→ Classify: 데이터 분석 (analysis)
+→ Navigate: navigate_to_page(page="analysis", tab="plotter", params={{"chart_type": "scatter"}})
+
+**Example 6**: User: "플라즈마 에칭 관련 논문 추천해줘"
+→ Classify: 주제 발굴 (research)
+→ Tool: search_papers(query="플라즈마 에칭")
+→ Synthesize: 관련 논문 요약
+→ Navigate: navigate_to_page(page="research", tab="recommend", query="플라즈마 에칭")
+
+**Example 7**: User: "PECVD 박막 증착 연구 제안서 작성해줘"
+→ Classify: 주제 발굴 (research)
+→ Tool: search_papers(query="PECVD 박막 증착")
+→ Navigate: navigate_to_page(page="research", tab="proposal", query="PECVD 박막 증착", params={{"title": "PECVD 박막 증착 연구", "keywords": "PECVD, 박막, 증착"}})
+
+**Example 8**: User: "플라즈마 식각 관련 특허 찾아줘"
+→ Classify: 주제 발굴 (research)
+→ Navigate: navigate_to_page(page="research", tab="patent", query="플라즈마 식각")
+
+## Guidelines
+- Always search the database first before answering domain-specific questions
+- When `read_page_results` supports the chosen page/tab, use it so the final answer reflects the actual page result set
+- When presenting search results, summarize key findings rather than just listing documents
+- Do not expose raw PDF filenames, paper titles, or source snippets in the final answer; summarize their meaning in Korean instead
+- For equation queries, present equations in LaTeX format when available
+- If the user asks about a topic not in the database, clearly state that and provide general knowledge
+- **Always answer in the user's language regardless of the context language.**
+- Be concise but thorough — provide actionable research insights
+- When comparing topics, use multiple searches to gather comprehensive data
+- For process prediction, extract and present numerical parameters clearly
+- For diagnostics, clearly distinguish between different methods and their characteristics
+- For failure/symptom questions, prefer `diagnosis/failure` over `diagnosis/detection` unless the user explicitly asks for anomaly detection or baseline comparison
+
+## Domain Knowledge
+You specialize in: plasma etching, deposition (CVD, PVD, ALD, PECVD), sputtering, OES diagnostics, Langmuir probes, plasma modeling/simulation, semiconductor processing, thin films, surface treatment, atmospheric/vacuum plasma, fusion plasma, and related fields.
+"""
+
+    def _detect_language(self, message):
+        text = (message or "").strip()
+        if re.search(r"[가-힣]", text):
+            return "ko"
+        return "en"
+
+    def _detect_difficulty(self, message):
+        score = [
+            any(ch.isdigit() for ch in (message or "")),
+            len((message or "").strip()) > 30,
+            bool(re.search(r"비교|예측|가설|분석|추론|recommend|predict", message or "", re.IGNORECASE))
+        ]
+        score = len([item for item in score if item])
+        if score >= 3:
+            return "심층 분석"
+        if score == 2:
+            return "표준 분석"
+        return "빠른 응답"
+
+    def _build_trace_steps(self, orchestrator_plan, language, difficulty):
+        collection = self.collection or "미선택"
+        category = orchestrator_plan.get("category", "주제 발굴")
+        page = orchestrator_plan.get("page", "research")
+        tab = orchestrator_plan.get("tab", "discover")
+        keywords = ", ".join(orchestrator_plan.get("keywords", [])[:5]) or "없음"
+
+        return [
+            {"id": 1, "title": "질문 수신", "summary": "새로운 사용자 질문을 등록했습니다.", "detail": "사용자 질문을 실행 컨텍스트에 적재했습니다.", "status": "done"},
+            {"id": 2, "title": "언어 판별", "summary": f"응답 언어를 {'한국어' if language == 'ko' else '영어'}로 결정했습니다.", "detail": "Always answer in the user's language regardless of the context language. 규칙으로 최종답변 언어를 고정합니다.", "status": "done"},
+            {"id": 3, "title": "도메인 분류", "summary": f"{category} 영역으로 분류했습니다.", "detail": f"후속 페이지는 {page}/{tab} 중심으로 계획합니다.", "status": "done"},
+            {"id": 4, "title": "질문 난이도 판정", "summary": f"{difficulty} 수준 응답을 준비합니다.", "detail": "질문 길이와 파라미터 밀도를 기준으로 응답 깊이를 정했습니다.", "status": "done"},
+            {"id": 5, "title": "키워드 추출", "summary": "질문 핵심 키워드를 추출합니다.", "detail": f"추출 키워드: {keywords}", "status": "done"},
+            {"id": 6, "title": "파라미터 매핑", "summary": "페이지 실행용 파라미터를 구성합니다.", "detail": "query 및 params에 들어갈 값을 정리합니다.", "status": "running"},
+            {"id": 7, "title": "목표 페이지 선정", "summary": "질문에 맞는 페이지와 탭을 고릅니다.", "detail": f"대상 후보: {page}/{tab}", "status": "pending"},
+            {"id": 8, "title": "오케스트레이션 계획", "summary": "도구 순서와 핸드오프 경로를 설계합니다.", "detail": ", ".join(orchestrator_plan.get("recommended_tools", [])) or "도구 계획 없음", "status": "pending"},
+            {"id": 9, "title": "컬렉션 확인", "summary": f"선택 컬렉션: {collection}", "detail": "검색과 페이지 실행에 사용할 컬렉션을 확인합니다.", "status": "done" if self.collection else "running"},
+            {"id": 10, "title": "페이지 결과 추출", "summary": "페이지가 실제로 보여줄 결과를 읽습니다.", "detail": "read_page_results 지원 시 결과 JSON을 먼저 확보합니다.", "status": "pending"},
+            {"id": 11, "title": "문헌·근거 수집", "summary": "문헌·도구 결과에서 핵심 근거를 모읍니다.", "detail": "유사도, 조건, 수치, 예외를 추출합니다.", "status": "pending"},
+            {"id": 12, "title": "메모리 반영", "summary": "수집된 근거를 세션 메모리에 반영합니다.", "detail": "이전 대화와 현재 결과를 연결합니다.", "status": "pending"},
+            {"id": 13, "title": "추가 도구 실행", "summary": "후속 분석 도구를 실행합니다.", "detail": "추천, 예측, 비교, 추론 도구를 선택적으로 실행합니다.", "status": "pending"},
+            {"id": 14, "title": "답변 통합", "summary": "도구 결과를 읽기 쉬운 답변으로 통합합니다.", "detail": "최종답변 형식은 유지하되 내용은 오케스트레이션 결과로 채웁니다.", "status": "pending"},
+            {"id": 15, "title": "품질 검증", "summary": "근거 정합성과 표현 품질을 점검합니다.", "detail": "근거 부족 여부와 파라미터 누락을 확인합니다.", "status": "pending"},
+            {"id": 16, "title": "페이지 핸드오프", "summary": "연관 페이지로 이어지는 실행 컨텍스트를 준비합니다.", "detail": f"대상 페이지는 {page}/{tab} 입니다.", "status": "pending"}
+        ]
+
+    def _build_pipeline_components(self, orchestrator_plan, language, difficulty, memory_context):
+        collection = self.collection or "미선택"
+        history_turns = memory_context.get("history_turns", 0)
+        category = orchestrator_plan.get("category", "주제 발굴")
+        page = orchestrator_plan.get("page", "research")
+        tab = orchestrator_plan.get("tab", "discover")
+
+        return [
+            {
+                "key": "prompt",
+                "title": "프롬프트",
+                "icon": "🧠",
+                "status": "running",
+                "summary": "시스템 프롬프트와 사용자 질문을 결합합니다.",
+                "detail": f"{'한국어' if language == 'ko' else '영어'} 응답 · 선택 컬렉션 {collection}",
+                "metaBadges": [language, self.model, collection]
+            },
+            {
+                "key": "orchestrator",
+                "title": "오케스트레이터",
+                "icon": "🗺️",
+                "status": "running",
+                "summary": "실행 순서와 도구 계획을 수립합니다.",
+                "detail": f"{category} → {page}/{tab} 흐름으로 계획합니다.",
+                "metaBadges": [category, difficulty],
+                "plan": orchestrator_plan.get("plan", [])
+            },
+            {
+                "key": "tools",
+                "title": "도구",
+                "icon": "🧰",
+                "status": "pending",
+                "summary": "검색·분석·이동 도구를 실행합니다.",
+                "detail": "도구 실행을 대기 중입니다.",
+                "metaBadges": ["0개 실행"]
+            },
+            {
+                "key": "memory",
+                "title": "메모리",
+                "icon": "🗂️",
+                "status": "pending",
+                "summary": "대화 이력과 컬렉션을 컨텍스트에 반영합니다.",
+                "detail": f"이전 대화 {history_turns}턴과 컬렉션 {collection}을 사용합니다.",
+                "metaBadges": [f"이력 {history_turns}턴", f"컬렉션 {collection}"]
+            },
+            {
+                "key": "streaming",
+                "title": "스트리밍 UI",
+                "icon": "📡",
+                "status": "pending",
+                "summary": "SSE 이벤트로 실행 과정을 표시합니다.",
+                "detail": "실시간 에이전트 실행 상태를 기다리는 중입니다.",
+                "metaBadges": ["SSE 대기"]
+            }
+        ]
+
+    def _build_orchestration_snapshot(self, memory_context, orchestrator_plan, language, difficulty):
+        return {
+            "type": "orchestration",
+            "category": orchestrator_plan.get("category"),
+            "page": orchestrator_plan.get("page"),
+            "tab": orchestrator_plan.get("tab"),
+            "keywords": orchestrator_plan.get("keywords", []),
+            "recommended_tools": orchestrator_plan.get("recommended_tools", []),
+            "plan": orchestrator_plan.get("plan", []),
+            "execution_plan": {
+                "category": orchestrator_plan.get("category"),
+                "page": orchestrator_plan.get("page"),
+                "tab": orchestrator_plan.get("tab"),
+                "goal": orchestrator_plan.get("goal"),
+                "keywords": orchestrator_plan.get("keywords", []),
+                "agent_clusters": orchestrator_plan.get("agent_clusters", []),
+                "recommended_tools": orchestrator_plan.get("recommended_tools", []),
+                "plan_lines": orchestrator_plan.get("plan", []),
+                "collection": self.collection or "",
+                "params": {},
+                "goal_status": "running",
+                "goal_summary": "목표 달성 전까지 필요한 근거와 다음 액션을 반복 관리합니다.",
+                "evaluation_status": "pending",
+                "evaluation_summary": "각 cluster 실행 뒤 결과 품질을 평가하고 필요하면 planner로 되돌립니다."
+            },
+            "language": language,
+            "difficulty": difficulty,
+            "collection": self.collection or "",
+            "trace_steps": self._build_trace_steps(orchestrator_plan, language, difficulty),
+            "pipeline_components": self._build_pipeline_components(orchestrator_plan, language, difficulty, memory_context),
+            "currentLabel": "오케스트레이션 계획 수립",
+            "currentDescription": f"{orchestrator_plan.get('category')} 흐름으로 질문을 분류하고 키워드·파라미터·페이지 이동·결과 추출 순서를 계획했습니다."
+        }
+
+    def _build_memory_context(self, history, message):
+        history = history or []
+        chat_turns = [item for item in history if item.get("role") in ["user", "assistant"]]
+        recent_user_queries = [item.get("content", "") for item in chat_turns if item.get("role") == "user"][-3:]
+        current_message = (message or "").strip()
+        last_topic = recent_user_queries[-1] if recent_user_queries else current_message
+
+        return {
+            "collection": self.collection or "",
+            "history_turns": len(chat_turns),
+            "recent_user_queries": [q for q in recent_user_queries if q],
+            "current_message": current_message,
+            "last_topic": last_topic,
+        }
+
+    def _sanitize_openai_history(self, history):
+        sanitized = []
+        items = list(history or [])
+        idx = 0
+
+        while idx < len(items):
+            item = items[idx]
+            if not isinstance(item, dict):
+                idx += 1
+                continue
+
+            role = item.get("role")
+            if role != "assistant":
+                if role != "tool":
+                    sanitized.append(dict(item))
+                idx += 1
+                continue
+
+            tool_calls = item.get("tool_calls")
+            if not isinstance(tool_calls, list) or len(tool_calls) == 0:
+                sanitized.append(dict(item))
+                idx += 1
+                continue
+
+            expected_ids = []
+            for tool_call in tool_calls:
+                if isinstance(tool_call, dict) and tool_call.get("id"):
+                    expected_ids.append(tool_call.get("id"))
+
+            if len(expected_ids) == 0:
+                assistant_copy = dict(item)
+                assistant_copy.pop("tool_calls", None)
+                if assistant_copy.get("content"):
+                    sanitized.append(assistant_copy)
+                idx += 1
+                continue
+
+            matched_tools = []
+            seen_ids = set()
+            probe = idx + 1
+            while probe < len(items):
+                next_item = items[probe]
+                if not isinstance(next_item, dict) or next_item.get("role") != "tool":
+                    break
+                tool_call_id = next_item.get("tool_call_id")
+                if tool_call_id in expected_ids and tool_call_id not in seen_ids:
+                    matched_tools.append(dict(next_item))
+                    seen_ids.add(tool_call_id)
+                probe += 1
+
+            if len(seen_ids) == len(expected_ids):
+                sanitized.append(dict(item))
+                sanitized.extend(matched_tools)
+            else:
+                assistant_copy = dict(item)
+                assistant_copy.pop("tool_calls", None)
+                if assistant_copy.get("content"):
+                    sanitized.append(assistant_copy)
+
+            idx = probe if probe > idx else idx + 1
+
+        return sanitized
+
+    def _build_orchestrator_plan(self, message):
+        text = (message or "").strip()
+        q = text.lower()
+
+        category = "주제 발굴"
+        page = "research"
+        tab = "discover"
+        recommended_tools = ["read_page_results", "search_papers", "navigate_to_page"]
+
+        # ============================
+        # 논문 추천/검색 요청 우선 처리
+        # - '논문 찾아줘/추천해줘/최신 논문' 같은 요청은 UI의 논문 추천 탭으로 handoff
+        # - (기존 기본값: research/discover)로 떨어지는 경우를 줄인다
+        # ============================
+        paper_intent = (
+            any(k in q for k in ["논문", "paper", "papers", "publication", "journal", "arxiv"]) and
+            any(k in q for k in ["찾아", "검색", "추천", "리스트", "목록", "latest", "recent", "최신", "추천해"])
+        )
+        if paper_intent:
+            category, page, tab = "논문 추천", "research", "recommend"
+            recommended_tools = ["read_page_results", "navigate_to_page"]
+
+        elif any(keyword in q for keyword in ["그래프", "차트", "통계", "피팅", "scatter", "plot"]):
+            category, page, tab = "데이터 분석", "analysis", "plotter"
+            recommended_tools = ["navigate_to_page"]
+        elif any(keyword in q for keyword in ["실험", "doe", "레시피", "노트"]):
+            category, page, tab = "실험 관리", "experiment", "doe"
+            recommended_tools = ["navigate_to_page"]
+        elif any(keyword in q for keyword in ["디바이", "paschen", "자이로", "계산", "주파수"]):
+            category, page, tab = "플라즈마 계산기", "calculator", "plasma"
+            recommended_tools = ["navigate_to_page"]
+        elif any(keyword in q for keyword in ["수식", "방정식", "가정", "theory", "이론", "boltzmann"]):
+            category, page, tab = "이론 연구", "theory", "equation"
+            recommended_tools = ["read_page_results", "search_equations", "build_theory_graph", "navigate_to_page"]
+        elif any(keyword in q for keyword in ["비교", "compare"]) and any(keyword in q for keyword in ["oes", "랭뮤어", "probe", "진단"]):
+            category, page, tab = "진단 분석", "diagnosis", "compare"
+            recommended_tools = ["read_page_results", "compare_diagnostics", "search_papers", "navigate_to_page"]
+        elif any(keyword in q for keyword in ["고장", "원인", "해결", "증상", "아킹", "불안정", "반사", "파티클"]):
+            category, page, tab = "진단 분석", "diagnosis", "failure"
+            recommended_tools = ["read_page_results", "failure_reasoning", "search_anomaly", "navigate_to_page"]
+        elif any(keyword in q for keyword in ["oes", "랭뮤어", "진단", "스펙트럼", "이상"]):
+            category, page, tab = "진단 분석", "diagnosis", "detection"
+            recommended_tools = ["read_page_results", "search_papers", "compare_diagnostics", "navigate_to_page"]
+        elif any(keyword in q for keyword in ["예측", "etch", "식각", "증착", "rf", "pressure", "power", "icp"]):
+            category, page, tab = "공정 예측", "prediction", "predict"
+            recommended_tools = ["read_page_results", "search_papers", "predict_process", "navigate_to_page"]
+        elif any(keyword in q for keyword in ["프로젝트", "협업", "토론", "activity", "공유"]):
+            category, page, tab = "협업", "collaboration", "projects"
+            recommended_tools = ["navigate_to_page"]
+
+        keywords = [item.strip() for item in text.replace(',', ' ').split() if len(item.strip()) > 1][:5]
+        if not keywords and text:
+            keywords = [text[:24]]
+
+        agent_clusters = [
+            {"name": "planner", "role": "질문 분류, 목표 정의, 다음 액션 결정"},
+            {"name": "retriever", "role": "페이지 결과와 검색 근거 수집"},
+            {"name": "analyst", "role": "비교·예측·추론 등 후속 분석"},
+            {"name": "synthesizer", "role": "근거를 최종 한국어 답변으로 재구성"},
+            {"name": "navigator", "role": "페이지 handoff와 후속 실행 연결"},
+        ]
+
+        goal = f"{page}/{tab} 결과를 근거로 최종답변과 handoff를 완성"
+        plan = [
+            "Planner가 질문을 분류하고 응답 언어와 최종 목표를 고정합니다.",
+            "Retriever가 선택 컬렉션과 페이지 파라미터를 맞춰 실제 페이지 결과를 먼저 읽습니다.",
+            "필요하면 Analyst가 검색·비교·예측·추론 도구로 부족한 근거를 보강합니다.",
+            "Synthesizer가 페이지 결과와 근거를 합쳐 최종 답변을 재구성합니다.",
+            "Navigator가 목표 페이지 handoff를 준비하고 목표 달성 여부를 다시 점검합니다."
+        ]
+
+        return {
+            "category": category,
+            "page": page,
+            "tab": tab,
+            "keywords": keywords,
+            "goal": goal,
+            "agent_clusters": agent_clusters,
+            "recommended_tools": recommended_tools,
+            "plan": plan,
+        }
+
+    def _build_goal_state(self, orchestrator_plan):
+        required_tools = list(orchestrator_plan.get("recommended_tools", []))
+        missing = ["page_result", "final_answer"]
+        if "navigate_to_page" in required_tools:
+            missing.append("handoff")
+        return {
+            "goal": orchestrator_plan.get("goal", "grounded answer"),
+            "status": "running",
+            "iteration": 0,
+            "required_tools": required_tools,
+            "recommended_tools": list(orchestrator_plan.get("recommended_tools", [])),
+            "completed_tools": [],
+            "missing": missing,
+            "summary": "목표 달성 전까지 부족한 근거와 다음 행동을 반복 점검합니다.",
+        }
+
+    def _assess_goal_progress(self, orchestrator_plan, final_answer_ready=False):
+        required_tools = set(orchestrator_plan.get("recommended_tools", []))
+        tool_names = [item.get("tool") for item in self._tool_result_bank if item.get("tool")]
+        completed_tools = []
+        for name in required_tools:
+            if name in tool_names or (name == "navigate_to_page" and self._last_navigation):
+                completed_tools.append(name)
+
+        missing = []
+        if "read_page_results" in required_tools and len(self._page_result_bank) == 0:
+            missing.append("page_result")
+        if any(name in required_tools for name in ["search_papers", "predict_process", "compare_diagnostics", "failure_reasoning", "search_equations"]) and len(self._tool_result_bank) == 0:
+            missing.append("supporting_evidence")
+        if "navigate_to_page" in required_tools and not self._last_navigation:
+            missing.append("handoff")
+        if not final_answer_ready:
+            missing.append("final_answer")
+
+        status = "done" if len(missing) == 0 else "running"
+        summary = "페이지 결과를 확보했고, 남은 항목을 기준으로 다음 행동을 재계산합니다." if len(self._page_result_bank) > 0 else "실제 페이지 결과를 먼저 확보한 뒤 부족한 근거를 보강합니다."
+
+        self._goal_state.update({
+            "goal": orchestrator_plan.get("goal", self._goal_state.get("goal", "grounded answer")),
+            "status": status,
+            "recommended_tools": self._goal_state.get("recommended_tools", list(orchestrator_plan.get("recommended_tools", []))),
+            "completed_tools": completed_tools,
+            "missing": missing,
+            "summary": summary,
+        })
+        return dict(self._goal_state)
+
+    def _goal_event(self, stage, detail, orchestrator_plan=None, status="running"):
+        state = dict(self._goal_state or {})
+        event = self._pipeline_event(
+            "goal_manager",
+            status,
+            detail,
+            stage=stage,
+            goal=state.get("goal", ""),
+            current_cluster=state.get("current_cluster", "planner"),
+            allowed_tools=state.get("allowed_tools", []),
+            recommended_tools=state.get("recommended_tools", (orchestrator_plan or {}).get("recommended_tools", [])),
+            evaluation_status=state.get("evaluation_status", "pending"),
+            evaluation_summary=state.get("evaluation_summary", ""),
+            recovery_strategy=state.get("recovery_strategy", ""),
+            recovery_hint=state.get("recovery_hint", ""),
+            recovery_query=state.get("recovery_query", ""),
+            recovery_params=state.get("recovery_params", {}),
+            missing=state.get("missing", []),
+            completed_tools=state.get("completed_tools", []),
+            iteration=state.get("iteration", 0),
+            metaBadges=[
+                f"iteration {state.get('iteration', 0)}",
+                f"missing {len(state.get('missing', []))}",
+                status,
+            ]
+        )
+        if orchestrator_plan:
+            event["meta"]["page"] = orchestrator_plan.get("page")
+            event["meta"]["tab"] = orchestrator_plan.get("tab")
+        return event
+
+    def _reprioritize_tools(self, tools, preferred):
+        ordered = []
+        for name in (preferred or []) + list(tools or []):
+            if name in self._tools and name not in ordered:
+                ordered.append(name)
+        return ordered
+
+    def _get_recovery_recommended_tools(self, orchestrator_plan=None, strategy_label=""):
+        plan = orchestrator_plan or {}
+        current = list(plan.get("recommended_tools", []))
+        page = plan.get("page", "")
+        tab = plan.get("tab", "")
+        strategy = strategy_label or ""
+
+        preferred = []
+        if strategy == "retriever 강화":
+            preferred = ["read_page_results", "search_papers"]
+            if page == "theory":
+                preferred.append("search_equations")
+            if page == "diagnosis":
+                preferred.append("search_anomaly")
+        elif strategy == "analyst 도구 교체":
+            if page == "prediction":
+                preferred = ["predict_process", "analyze_parameter_effect", "surrogate_predict"]
+            elif page == "theory":
+                preferred = ["build_theory_graph", "extract_equations", "extract_assumptions"]
+            elif page == "diagnosis" and tab == "compare":
+                preferred = ["compare_diagnostics", "failure_reasoning"]
+            elif page == "diagnosis":
+                preferred = ["failure_reasoning", "compare_diagnostics"]
+            else:
+                preferred = ["compare_diagnostics", "predict_process"]
+        elif strategy == "synthesizer 재작성":
+            preferred = ["read_page_results", "search_papers"]
+        elif strategy == "navigator 재시도":
+            preferred = ["navigate_to_page"]
+
+        return self._reprioritize_tools(current, preferred)
+
+    def _find_number_unit(self, text, unit_patterns):
+        for pattern in unit_patterns:
+            match = re.search(pattern, text)
+            if match:
+                return match.group(1)
+        return None
+
+    def _extract_gas(self, text):
+        gas_map = {
+            "argon": "Ar", "아르곤": "Ar", "ar": "Ar",
+            "nitrogen": "N2", "질소": "N2", "n2": "N2",
+            "oxygen": "O2", "산소": "O2", "o2": "O2",
+            "cf4": "CF4", "sf6": "SF6", "cl2": "Cl2", "hbr": "HBr",
+            "helium": "He", "헬륨": "He", "he": "He",
+            "neon": "Ne", "네온": "Ne", "ne": "Ne",
+            "xenon": "Xe", "제논": "Xe", "xe": "Xe",
+        }
+        for key, value in gas_map.items():
+            if key in text:
+                return value
+        return None
+
+    def _extract_diag_methods(self, text):
+        methods = []
+        method_map = [
+            ("oes", "OES"),
+            ("랭뮤어", "Langmuir probe"),
+            ("langmuir", "Langmuir probe"),
+            ("vi probe", "VI probe"),
+            ("vi 프로브", "VI probe"),
+            ("mass", "Mass spectrometry"),
+            ("질량분석", "Mass spectrometry"),
+            ("xps", "XPS"),
+            ("sem", "SEM"),
+        ]
+        for key, label in method_map:
+            if key in text and label not in methods:
+                methods.append(label)
+        return methods[:2]
+
+    def _extract_chart_type(self, text):
+        chart_map = [
+            (["scatter", "산점도"], "scatter"),
+            (["heatmap", "히트맵"], "heatmap"),
+            (["histogram", "히스토그램"], "histogram"),
+            (["boxplot", "박스플롯", "box plot"], "boxplot"),
+            (["line", "선 그래프", "라인차트"], "line"),
+            (["bar", "막대", "바 차트"], "bar"),
+            (["pie", "파이차트"], "pie"),
+        ]
+        for keys, value in chart_map:
+            if any(key in text for key in keys):
+                return value
+        return None
+
+    def _extract_fitting_model(self, text):
+        fitting_map = [
+            (["linear", "선형"], "linear"),
+            (["quadratic", "이차"], "quadratic"),
+            (["exponential", "지수"], "exponential"),
+            (["power law", "power", "멱법칙"], "power"),
+            (["gaussian", "가우시안"], "gaussian"),
+        ]
+        for keys, value in fitting_map:
+            if any(key in text for key in keys):
+                return value
+        return None
+
+    def _extract_recovery_query_params(self, message, orchestrator_plan=None, strategy_label=""):
+        plan = orchestrator_plan or {}
+        page = plan.get("page", "")
+        tab = plan.get("tab", "")
+        keywords = list(plan.get("keywords", []))
+        text = (message or "").strip()
+        normalized = text.lower()
+
+        query = " ".join(keywords[:2]).strip() or (text[:48] if text else "")
+        params = {}
+
+        gas = self._extract_gas(normalized)
+        pressure = self._find_number_unit(normalized, [r"(\d+(?:\.\d+)?)\s*mtorr", r"(\d+(?:\.\d+)?)\s*torr"])
+        power = self._find_number_unit(normalized, [r"(\d+(?:\.\d+)?)\s*w\b", r"(\d+(?:\.\d+)?)\s*kw\b"])
+        tev = self._find_number_unit(normalized, [r"(\d+(?:\.\d+)?)\s*ev", r"te\s*(\d+(?:\.\d+)?)"])
+        density_match = re.search(r"(\d+(?:\.\d+)?e[+\-]?\d+)", normalized)
+        temperature = self._find_number_unit(normalized, [r"(\d+(?:\.\d+)?)\s*°c", r"(\d+(?:\.\d+)?)\s*c\b", r"(\d+(?:\.\d+)?)\s*k\b"])
+        time_value = self._find_number_unit(normalized, [r"(\d+(?:\.\d+)?)\s*min", r"(\d+(?:\.\d+)?)\s*s(ec)?\b"])
+        bfield = self._find_number_unit(normalized, [r"(\d+(?:\.\d+)?)\s*t\b", r"b\s*=\s*(\d+(?:\.\d+)?)"])
+        freq = self._find_number_unit(normalized, [r"(\d+(?:\.\d+)?)\s*mhz", r"(\d+(?:\.\d+)?)\s*ghz"])
+        chart_type = self._extract_chart_type(normalized)
+        fitting_model = self._extract_fitting_model(normalized)
+        diag_methods = self._extract_diag_methods(normalized)
+
+        if page == "diagnosis" and tab == "failure":
+            params["symptom"] = query or text[:80]
+        elif page == "diagnosis" and tab == "compare":
+            if len(diag_methods) > 0:
+                params["methodA"] = diag_methods[0]
+            if len(diag_methods) > 1:
+                params["methodB"] = diag_methods[1]
+            elif "비교" in text and "methodA" in params:
+                params["methodB"] = "Langmuir probe" if params["methodA"] != "Langmuir probe" else "OES"
+        elif page == "diagnosis":
+            if diag_methods:
+                params["diagType"] = diag_methods[0]
+            if "이상" in text or "anomaly" in normalized:
+                params["symptom"] = query or text[:80]
+        elif page == "prediction":
+            if gas:
+                params["gas_type"] = gas
+            if pressure:
+                params["pressure"] = pressure
+            if power:
+                params["power"] = power
+            if temperature:
+                params["temperature"] = temperature
+            if "etch" in normalized or "식각" in text:
+                params["process_type"] = "ICP etching" if "icp" in normalized else "etching"
+            elif "증착" in text or "deposition" in normalized or "pecvd" in normalized:
+                params["process_type"] = "PECVD deposition" if "pecvd" in normalized else "deposition"
+            if "식각속도" in text or "etch rate" in normalized:
+                params["target_property"] = "etch_rate"
+            elif "uniformity" in normalized or "균일도" in text:
+                params["target_property"] = "uniformity"
+            elif "selectivity" in normalized or "선택비" in text:
+                params["target_property"] = "selectivity"
+            if "si" in normalized or "silicon" in normalized:
+                params["substrate"] = "Si"
+            elif "sio2" in normalized:
+                params["substrate"] = "SiO2"
+        elif page == "calculator":
+            if tev:
+                params["Te"] = tev
+            if density_match and "e" in density_match.group(1).lower():
+                params["ne"] = density_match.group(1)
+            if gas:
+                params["gas"] = gas
+            if pressure:
+                params["pressure"] = pressure
+            if bfield:
+                params["B"] = bfield
+            if freq:
+                params["frequency"] = freq
+            if tab == "paschen" and gas:
+                params["gas"] = gas
+        elif page == "analysis":
+            if chart_type:
+                params["chart_type"] = chart_type
+            if fitting_model:
+                params["fitting_model"] = fitting_model
+        elif page == "experiment":
+            if gas:
+                params["gas"] = gas
+            if pressure:
+                params["pressure"] = pressure
+            if power:
+                params["power"] = power
+            if temperature:
+                params["temperature"] = temperature
+            if time_value:
+                params["time"] = time_value
+        elif page == "theory":
+            if any(keyword in normalized for keyword in ["boltzmann", "볼츠만"]):
+                query = query or "Boltzmann equation"
+            elif any(keyword in normalized for keyword in ["drude", "드루드"]):
+                query = query or "Drude model"
+            elif any(keyword in normalized for keyword in ["paschen", "파셴"]):
+                query = query or "Paschen law"
+            if gas:
+                params["gas"] = gas
+        elif page == "research" and tab == "proposal":
+            params["title"] = query or text[:32]
+            params["keywords"] = ", ".join(keywords[:3])
+
+        if strategy_label == "retriever 강화" and not query and text:
+            query = text[:48]
+        if strategy_label == "navigator 재시도" and not params and query:
+            params["query_hint"] = query
+
+        return {
+            "query": query,
+            "params": params,
+        }
+
+    def _determine_active_cluster(self, progress, final_phase=False):
+        missing = progress.get("missing", []) if isinstance(progress, dict) else []
+        if final_phase:
+            return "synthesizer"
+        if "page_result" in missing or "supporting_evidence" in missing:
+            return "retriever"
+        if any(item in missing for item in ["analysis", "derived_insight"]):
+            return "analyst"
+        if "handoff" in missing:
+            return "navigator"
+        if "final_answer" in missing:
+            return "synthesizer"
+        return "planner"
+
+    def _build_cluster_prompt(self, active_cluster, goal_progress=None, orchestrator_plan=None):
+        cluster = active_cluster or "planner"
+        missing = ", ".join((goal_progress or {}).get("missing", [])) or "none"
+        page = orchestrator_plan.get("page", "-") if orchestrator_plan else "-"
+        tab = orchestrator_plan.get("tab", "-") if orchestrator_plan else "-"
+        recovery_hint = (goal_progress or {}).get("recovery_hint", "")
+        recovery_strategy = (goal_progress or {}).get("recovery_strategy", "")
+
+        prompts = {
+            "planner": (
+                "You are acting as the planner cluster. "
+                "Review the current goal state, identify what is still missing, and decide the next best tool/cluster action. "
+                f"Target page/tab is {page}/{tab}. Missing items: {missing}. "
+                "If the goal is incomplete, prefer another tool call over a premature final answer."
+            ),
+            "retriever": (
+                "You are acting as the retriever cluster. "
+                "Prioritize read_page_results and retrieval tools to gather the actual page result set and supporting evidence. "
+                f"Target page/tab is {page}/{tab}. Missing items: {missing}. "
+                "Collect grounded results before attempting synthesis."
+            ),
+            "analyst": (
+                "You are acting as the analyst cluster. "
+                "Use comparison, prediction, failure reasoning, or theory tools only when the existing page result is insufficient. "
+                f"Target page/tab is {page}/{tab}. Missing items: {missing}. "
+                "Transform raw evidence into derived insight."
+            ),
+            "synthesizer": (
+                "You are acting as the synthesizer cluster. "
+                "Use the gathered page result and evidence to produce the final answer in the user's language. "
+                f"Target page/tab is {page}/{tab}. Missing items: {missing}. "
+                "Do not invent facts; structure the answer clearly and completely."
+            ),
+            "navigator": (
+                "You are acting as the navigator cluster. "
+                "Ensure the handoff page, tab, query, and params are prepared so the user can continue from the answer. "
+                f"Target page/tab is {page}/{tab}. Missing items: {missing}. "
+                "If navigation context is missing, call navigate_to_page before finishing."
+            ),
+        }
+        prompt = prompts.get(cluster, prompts["planner"])
+        if recovery_strategy or recovery_hint:
+            prompt += f" Recovery strategy: {recovery_strategy or 'planner 재계획'}. {recovery_hint}".strip()
+        if cluster == "planner":
+            prioritized_tools = (goal_progress or {}).get("recommended_tools", (orchestrator_plan or {}).get("recommended_tools", []))
+            if prioritized_tools:
+                prompt += f" Prioritize tools in this order: {', '.join(prioritized_tools)}."
+        return prompt
+
+    def _get_cluster_allowed_tools(self, cluster, orchestrator_plan=None):
+        recommended = list((orchestrator_plan or {}).get("recommended_tools", []))
+        if cluster == "planner" and self._goal_state.get("recommended_tools"):
+            recommended = list(self._goal_state.get("recommended_tools", []))
+        all_tools = set(self._tools.keys())
+        policy = {
+            "planner": set(recommended) if recommended else set(all_tools),
+            "retriever": {"read_page_results", "search_papers", "get_collections", "search_equations", "search_anomaly"},
+            "analyst": {"compare_diagnostics", "failure_reasoning", "predict_process", "analyze_parameter_effect", "inverse_search", "surrogate_predict", "build_theory_graph", "extract_assumptions", "extract_equations", "recommend_topics", "generate_hypothesis", "detect_research_gaps", "analyze_keywords"},
+            "synthesizer": set(),
+            "navigator": {"navigate_to_page"},
+        }
+        allowed = policy.get(cluster or "planner", set(recommended) if recommended else set(all_tools)).intersection(all_tools)
+        if cluster == "planner" and recommended:
+            return [name for name in recommended if name in allowed]
+        return sorted(list(allowed))
+
+    def _get_openai_tools_for_cluster(self, cluster, orchestrator_plan=None):
+        allowed = self._get_cluster_allowed_tools(cluster, orchestrator_plan)
+        tools = []
+        for name in allowed:
+            if name in self._tools:
+                tools.append(self._tools[name].to_openai_tool())
+        return tools
+
+    def _mark_self_correction(self, status, detail, fallback_cluster="planner"):
+        self._goal_state["evaluation_status"] = status
+        self._goal_state["evaluation_summary"] = detail
+        if status == "passed":
+            self._goal_state["recovery_strategy"] = ""
+            self._goal_state["recovery_hint"] = ""
+            self._goal_state["recovery_query"] = ""
+            self._goal_state["recovery_params"] = {}
+        if fallback_cluster:
+            self._goal_state["current_cluster"] = fallback_cluster
+
+    def _select_recovery_strategy(self, cluster, detail):
+        text = (detail or "").lower()
+        strategy = {
+            "label": "planner 재계획",
+            "reason": detail,
+            "target_cluster": "planner",
+            "prompt_hint": "현재 실패 원인을 반영해 다음 행동을 다시 설계합니다.",
+        }
+
+        if cluster == "retriever":
+            strategy.update({
+                "label": "retriever 강화",
+                "target_cluster": "planner",
+                "prompt_hint": "페이지 결과 또는 문헌 근거가 약하므로 다른 수집 경로와 검색 조합을 선택합니다.",
+            })
+        elif cluster == "analyst":
+            strategy.update({
+                "label": "analyst 도구 교체",
+                "target_cluster": "planner",
+                "prompt_hint": "분석 신호가 약하므로 다른 분석 도구나 보조 근거를 선택합니다.",
+            })
+        elif cluster == "navigator":
+            strategy.update({
+                "label": "navigator 재시도",
+                "target_cluster": "planner",
+                "prompt_hint": "handoff 정보가 부족하므로 이동 파라미터를 다시 계산합니다.",
+            })
+        elif cluster == "synthesizer":
+            strategy.update({
+                "label": "synthesizer 재작성",
+                "target_cluster": "planner",
+                "prompt_hint": "최종답변 구조가 약하므로 근거를 다시 묶어 재작성 전략을 선택합니다.",
+            })
+
+        if "page result" in text or "페이지 결과" in detail:
+            strategy["label"] = "retriever 강화"
+            strategy["prompt_hint"] = "실제 페이지 결과를 다시 확보하거나 다른 query/params 조합을 시도합니다."
+        elif "문헌" in detail or "evidence" in text:
+            strategy["label"] = "retriever 강화"
+            strategy["prompt_hint"] = "검색 근거를 늘리기 위해 다른 retrieval 조합을 선택합니다."
+        elif "분석" in detail or "analysis" in text:
+            strategy["label"] = "analyst 도구 교체"
+            strategy["prompt_hint"] = "분석 도구를 바꾸거나 추가 분석 근거를 확보합니다."
+        elif "handoff" in text or "이동" in detail:
+            strategy["label"] = "navigator 재시도"
+            strategy["prompt_hint"] = "페이지 이동 파라미터와 handoff 경로를 다시 계산합니다."
+        elif "답변" in detail or "answer" in text:
+            strategy["label"] = "synthesizer 재작성"
+            strategy["prompt_hint"] = "최종답변 품질을 높이기 위해 synthesis 전략을 다시 선택합니다."
+
+        return strategy
+
+    def _evaluate_cluster_outcome(self, cluster, tool_name=None, result=None, evidence_rows=None, final_answer=None):
+        evidence_rows = evidence_rows or []
+        if cluster == "retriever":
+            if tool_name == "read_page_results":
+                if len(self._page_result_bank) == 0:
+                    return False, "retriever 평가: 실제 페이지 결과가 비어 있어 planner가 다른 수집 전략을 다시 선택합니다."
+                last = self._page_result_bank[-1] if self._page_result_bank else {}
+                if isinstance(last, dict) and last.get("error"):
+                    return False, f"retriever 평가: 페이지 결과 추출 오류({last.get('error')})로 인해 재계획이 필요합니다."
+                return True, "retriever 평가: 실제 페이지 결과를 확보해 다음 단계로 진행합니다."
+            if tool_name == "search_papers" and len(evidence_rows) == 0:
+                return False, "retriever 평가: 문헌 근거가 충분하지 않아 planner가 다른 수집 경로를 검토합니다."
+            return True, "retriever 평가: 수집 결과가 다음 단계로 넘길 수 있는 수준입니다."
+
+        if cluster == "analyst":
+            normalized = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+            if not normalized or normalized.startswith("Error"):
+                return False, "analyst 평가: 분석 결과가 부족해 planner가 다른 분석 전략을 선택합니다."
+            if len(normalized.strip()) < 40:
+                return False, "analyst 평가: 분석 신호가 약해 추가 근거나 다른 도구가 필요합니다."
+            return True, "analyst 평가: 분석 결과가 충분해 synthesis 단계로 진행합니다."
+
+        if cluster == "navigator":
+            if not self._last_navigation:
+                return False, "navigator 평가: handoff 정보가 부족해 planner가 이동 전략을 다시 계산합니다."
+            return True, "navigator 평가: handoff 컨텍스트가 준비되었습니다."
+
+        if cluster == "synthesizer":
+            answer = (final_answer or "").strip()
+            if len(answer) < 80:
+                return False, "synthesizer 평가: 최종답변이 충분히 구조화되지 않아 planner가 보강 루프를 다시 실행합니다."
+            return True, "synthesizer 평가: 최종답변 품질이 목표 수준에 도달했습니다."
+
+        return True, "planner 평가: 다음 행동 선택을 계속 진행합니다."
+
+    def _pipeline_event(self, component, status, detail, **meta):
+        badges = meta.pop("metaBadges", None)
+        event = {
+            "type": "pipeline",
+            "component": component,
+            "status": status,
+            "detail": detail,
+            "meta": meta,
+        }
+        if badges is not None:
+            event["metaBadges"] = badges
+        return event
+
+    def _extract_search_references(self, result):
+        if not result or not isinstance(result, str):
+            return []
+
+        refs = []
+        seen = set()
+        pattern = re.compile(r"--- Result (\d+) \(score: ([\d.]+)\) ---\nFile: (.+?) \| Chunk: (.+?)\nText: ([\s\S]*?)(?=\n--- Result|$)")
+
+        for match in pattern.finditer(result):
+            filename = (match.group(3) or "").strip()
+            chunk = (match.group(4) or "").strip()
+            excerpt = " ".join(((match.group(5) or "").strip()).split())
+            key = (filename, chunk)
+            if key in seen:
+                continue
+            seen.add(key)
+            refs.append({
+                "rank": int(match.group(1)),
+                "score": float(match.group(2)),
+                "filename": filename,
+                "chunk": chunk,
+                "excerpt": excerpt,
+            })
+
+        return refs[:8]
+
+    def _truncate_text(self, text, limit=220):
+        text = " ".join((text or "").split())
+        if len(text) <= limit:
+            return text
+        return text[:limit].rstrip() + "..."
+
+    def _collect_tool_output(self, tool_name, tool_input, result):
+        if tool_name == "navigate_to_page":
+            try:
+                parsed = json.loads(result) if isinstance(result, str) else result
+                if isinstance(parsed, dict) and parsed.get("action") == "navigate":
+                    self._last_navigation = parsed
+            except Exception:
+                pass
+            return
+
+        normalized = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+        normalized = self._truncate_text(normalized, 900)
+        if not normalized:
+            return
+
+        if tool_name == "read_page_results":
+            try:
+                parsed = json.loads(result) if isinstance(result, str) else result
+                if isinstance(parsed, dict):
+                    collection = (parsed.get("collection") or "").strip()
+                    if collection:
+                        self.collection = collection
+                        self._tool_context["collection"] = collection
+                    if not hasattr(self, "_page_result_bank") or self._page_result_bank is None:
+                        self._page_result_bank = []
+                    self._page_result_bank.append(parsed)
+                    self._page_result_bank = self._page_result_bank[-4:]
+            except Exception:
+                pass
+
+        summary = {
+            "tool": tool_name,
+            "input": tool_input if isinstance(tool_input, dict) else {},
+            "result": normalized,
+        }
+        self._tool_result_bank.append(summary)
+        self._tool_result_bank = self._tool_result_bank[-8:]
+
+    def _collect_evidence(self, tool_name, tool_input, result):
+        if tool_name != "search_papers":
+            return []
+
+        query = ""
+        if isinstance(tool_input, dict):
+            query = tool_input.get("query", "")
+
+        existing_keys = set((item.get("filename"), item.get("chunk")) for item in self._evidence_bank)
+        for ref in self._extract_search_references(result):
+            key = (ref.get("filename"), ref.get("chunk"))
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            ref["query"] = query
+            ref["excerpt"] = self._truncate_text(ref.get("excerpt", ""), 240)
+            self._evidence_bank.append(ref)
+
+        self._evidence_bank = sorted(self._evidence_bank, key=lambda item: item.get("score", 0), reverse=True)[:8]
+        return list(self._evidence_bank)
+
+    def _build_quality_report(self, language=None, stage="evidence", detail=None, answer_style=None, confidence=None, synthesis_points=None, verification_checks=None):
+        language = language or "ko"
+        evidence = list(self._evidence_bank[:5])
+        tool_outputs = list(self._tool_result_bank[-5:])
+        page_results = list(getattr(self, "_page_result_bank", [])[-3:])
+        scores = [item.get("score", 0) for item in evidence if isinstance(item.get("score", 0), (int, float))]
+        avg_score = round(sum(scores) / len(scores), 4) if scores else None
+        sources = [item.get("filename") for item in evidence if item.get("filename")]
+
+        if answer_style is None:
+            answer_style = "근거 통합 응답" if language == "ko" else "Grounded synthesis answer"
+        if confidence is None:
+            confidence = "중간" if language == "ko" else "Medium"
+        if synthesis_points is None:
+            if page_results:
+                page_summaries = []
+                for item in page_results:
+                    page = item.get("page", "-")
+                    tab = item.get("tab", "-")
+                    total = item.get("total", item.get("total_hits", item.get("total_searched", 0)))
+                    page_summaries.append(f"{page}/{tab} 결과 {total}건" if language == "ko" else f"{page}/{tab} results: {total}")
+                synthesis_points = [
+                    (f"페이지 결과를 우선 근거로 사용했습니다: {', '.join(page_summaries)}" if language == "ko" else f"Used page results as the primary grounding source: {', '.join(page_summaries)}"),
+                    ("페이지가 실제로 보여줄 핵심 결과를 중심으로 답변을 재구성했습니다." if language == "ko" else "Rebuilt the answer around the actual result set the page would display."),
+                ]
+            elif evidence:
+                synthesis_points = [
+                    (f"상위 {len(evidence)}건 근거를 중복 제거 후 통합했습니다." if language == "ko" else f"Merged and deduplicated {len(evidence)} top evidence items."),
+                    (f"조건·수치·예외를 분리해 답변 구조에 반영합니다." if language == "ko" else "Separated conditions, numeric facts, and caveats into the answer structure."),
+                ]
+            elif tool_outputs:
+                synthesis_points = [
+                    (f"도구 결과 {len(tool_outputs)}건을 읽기 쉬운 설명으로 재구성했습니다." if language == "ko" else f"Reorganized {len(tool_outputs)} tool outputs into a readable answer."),
+                    (f"질문 키워드와 파라미터를 기준으로 핵심 결과만 압축했습니다." if language == "ko" else "Compressed only the most relevant findings around the extracted keywords and parameters."),
+                ]
+            else:
+                synthesis_points = [
+                    "직접 검색 근거 없이 메모리와 질문 맥락으로 답변을 정리합니다." if language == "ko" else "No direct retrieval evidence; answer relies on prompt and conversation context."
+                ]
+        if verification_checks is None:
+            verification_checks = [
+                "근거 없는 단정 표현을 줄이고 불확실성을 표시했습니다." if language == "ko" else "Reduced unsupported claims and marked uncertainty.",
+                "검색 근거와 최종 문장 사이의 의미 불일치를 점검했습니다." if language == "ko" else "Checked semantic alignment between evidence and final statements.",
+                "후속 실행 페이지와 컬렉션 맥락이 유지되는지 확인했습니다." if language == "ko" else "Verified handoff page and collection context consistency.",
+            ]
+
+        return {
+            "stage": stage,
+            "detail": detail or ("검색 근거를 조합해 답변 품질을 보강하고 있습니다." if language == "ko" else "Synthesizing retrieved evidence into a higher-quality answer."),
+            "answerStyle": answer_style,
+            "confidence": confidence,
+            "evidenceCount": len(evidence),
+            "avgScore": avg_score,
+            "synthesisPoints": [item for item in synthesis_points if item],
+            "verificationChecks": [item for item in verification_checks if item],
+            "sources": sources[:3],
+        }
+
+    def _extract_json_object(self, text):
+        if not text:
+            return None
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            return json.loads(text[start:end + 1])
+        except Exception:
+            return None
+
+    def _collect_page_result_highlights(self, page_result, language="ko"):
+        if not isinstance(page_result, dict):
+            return []
+
+        highlights = []
+        page = page_result.get("page")
+        tab = page_result.get("tab")
+
+        if page == "research" and tab == "discover":
+            total = page_result.get("total_hits", 0)
+            clusters = page_result.get("clusters", [])[:3]
+            if total:
+                highlights.append(f"연구 탐색 결과 {total}건을 찾았습니다.")
+            if clusters:
+                highlights.append(f"상위 결과는 서로 다른 세부 주제 {len(clusters)}개 묶음으로 정리됐습니다.")
+
+        elif page == "research" and tab == "recommend":
+            total = page_result.get("total", 0)
+            recs = page_result.get("recommendations", [])[:3]
+            papers = page_result.get("papers", [])[:3]
+            types = [item.get("type") for item in recs if item.get("type")]
+            pub_years = [str(item.get("publication_year")) for item in papers if str(item.get("publication_year", "")).isdigit()]
+            online_years = [str(item.get("online_year")) for item in papers if str(item.get("online_year", "")).isdigit()]
+            accepted_years = [str(item.get("accepted_year")) for item in papers if str(item.get("accepted_year", "")).isdigit()]
+            received_years = [str(item.get("received_year")) for item in papers if str(item.get("received_year", "")).isdigit()]
+            years = [str(item.get("year")) for item in papers if str(item.get("year", "")).isdigit()]
+            if total:
+                highlights.append(f"추천 후보 {total}건 중 핵심 항목을 추렸습니다.")
+            if types:
+                highlights.append(f"추천 결과는 {', '.join(types[:3])} 유형 중심으로 정리됐습니다.")
+            elif papers:
+                highlights.append(f"논문 추천 결과 {len(papers)}건의 대표 문헌을 정리했습니다.")
+            if pub_years:
+                highlights.append(f"확인된 추천 문헌 중 가장 최신 출판연도는 {max(pub_years)}년 입니다.")
+            if online_years:
+                highlights.append(f"온라인 공개연도 기준 최신 문헌은 {max(online_years)}년 입니다.")
+            if accepted_years:
+                highlights.append(f"채택연도 기준 최신 문헌은 {max(accepted_years)}년 입니다.")
+            if received_years:
+                highlights.append(f"접수연도 기준 최신 문헌은 {max(received_years)}년 입니다.")
+            elif years and not pub_years:
+                highlights.append(f"확인된 추천 문헌 중 가장 최신 연도는 {max(years)}년 입니다.")
+
+        elif page == "prediction" and tab == "predict":
+            total = page_result.get("total_searched", 0)
+            predictions = page_result.get("predictions", [])[:2]
+            if total:
+                highlights.append(f"유사 조건 문헌 {total}건을 기반으로 예측 근거를 모았습니다.")
+            extracted_values = []
+            for item in predictions:
+                extracted_values.extend(item.get("extracted_values", [])[:2])
+            values = []
+            for item in extracted_values[:4]:
+                value = item.get("value")
+                unit = item.get("unit", "")
+                label = item.get("label") or item.get("name") or "조건"
+                if value is not None:
+                    values.append(f"{label} {value}{unit}")
+            if values:
+                highlights.append(f"추출된 핵심 수치는 {', '.join(values)} 입니다.")
+
+        elif page == "theory" and tab == "equation":
+            total = page_result.get("total", 0)
+            results = page_result.get("results", [])[:3]
+            eq_count = sum(len(item.get("equations", []) or []) for item in results)
+            if total:
+                highlights.append(f"이론 수식 후보 {total}건을 찾았습니다.")
+            if eq_count:
+                highlights.append(f"상위 결과에서 수식 {eq_count}개를 직접 확인했습니다.")
+
+        elif page == "diagnosis" and tab == "compare":
+            common_doc_count = page_result.get("common_doc_count", 0)
+            analysis = page_result.get("analysis", {}) or {}
+            if common_doc_count:
+                highlights.append(f"공통 비교 문헌 {common_doc_count}건을 기준으로 진단법 차이를 정리했습니다.")
+            if analysis.get("summary"):
+                highlights.append(str(analysis.get("summary")))
+
+        elif page == "diagnosis" and tab == "failure":
+            matched = page_result.get("matched_patterns", [])[:2]
+            summary = page_result.get("summary", {}) or {}
+            if summary.get("top_cause"):
+                highlights.append(f"가장 가능성 높은 원인은 {summary.get('top_cause')} 입니다.")
+            for item in matched:
+                name = item.get("name")
+                score = item.get("match_score")
+                if name:
+                    highlights.append(f"매칭 패턴 {name} (score {score})를 확인했습니다.")
+
+        elif page == "diagnosis" and tab in ["search", "detection"]:
+            total = page_result.get("total", 0)
+            stats = page_result.get("stats", {}) or {}
+            if total:
+                highlights.append(f"진단 결과 {total}건을 찾았습니다.")
+            if stats:
+                highlights.append(f"진단 통계와 이력 정보를 함께 확보했습니다.")
+
+        return [item for item in highlights if item]
+
+    def _format_compact_number(self, value):
+        try:
+            numeric = float(value)
+            if numeric.is_integer():
+                return str(int(numeric))
+            return f"{numeric:.4f}".rstrip("0").rstrip(".")
+        except Exception:
+            return str(value)
+
+    def _format_inline_key_values(self, data, preferred_keys=None, max_items=3):
+        if not isinstance(data, dict):
+            return []
+
+        preferred_keys = preferred_keys or list(data.keys())
+        items = []
+        for key in preferred_keys:
+            if key not in data:
+                continue
+            value = data.get(key)
+            if value in [None, "", [], {}]:
+                continue
+            if isinstance(value, (int, float)):
+                rendered = self._format_compact_number(value)
+            elif isinstance(value, list):
+                rendered = ", ".join([str(v) for v in value[:3] if str(v).strip()])
+            else:
+                rendered = str(value).strip()
+            if not rendered:
+                continue
+            items.append(f"{key}={rendered}")
+            if len(items) >= max_items:
+                break
+        return items
+
+    def _collect_page_result_value_lines(self, page_result):
+        if not isinstance(page_result, dict):
+            return []
+
+        lines = []
+        page = page_result.get("page")
+        tab = page_result.get("tab")
+
+        if page == "research" and tab == "discover":
+            clusters = page_result.get("clusters", [])[:3]
+            scores = []
+            for item in clusters:
+                score = item.get("score")
+                if score is not None:
+                    scores.append(self._format_compact_number(score))
+            if scores:
+                lines.append(f"상위 문헌 묶음의 대표 유사도는 {', '.join(scores)} 입니다.")
+            if clusters:
+                lines.append(f"상위 결과는 문헌 묶음 {len(clusters)}개 기준으로 정리됐습니다.")
+
+        elif page == "research" and tab == "recommend":
+            recommendations = page_result.get("recommendations", [])[:3]
+            papers = page_result.get("papers", [])[:3]
+            typed = []
+            for item in recommendations:
+                rec_type = item.get("type")
+                relevance = item.get("relevance")
+                if rec_type:
+                    suffix = f"(적합도 {self._format_compact_number(relevance)})" if relevance is not None else ""
+                    typed.append(f"{rec_type}{suffix}")
+            if typed:
+                lines.append(f"추천 결과의 핵심 유형은 {', '.join(typed)} 입니다.")
+            elif papers:
+                scores = []
+                years = []
+                pub_years = []
+                online_years = []
+                accepted_years = []
+                received_years = []
+                for item in papers:
+                    score = item.get("score")
+                    year = item.get("year")
+                    publication_year = item.get("publication_year")
+                    online_year = item.get("online_year")
+                    accepted_year = item.get("accepted_year")
+                    received_year = item.get("received_year")
+                    if score is not None:
+                        scores.append(self._format_compact_number(score))
+                    if str(year).isdigit():
+                        years.append(str(year))
+                    if str(publication_year).isdigit():
+                        pub_years.append(str(publication_year))
+                    if str(online_year).isdigit():
+                        online_years.append(str(online_year))
+                    if str(accepted_year).isdigit():
+                        accepted_years.append(str(accepted_year))
+                    if str(received_year).isdigit():
+                        received_years.append(str(received_year))
+                if pub_years:
+                    lines.append(f"추천 후보의 출판연도는 {', '.join(sorted(set(pub_years), reverse=True)[:3])} 입니다.")
+                if online_years:
+                    lines.append(f"온라인 공개연도는 {', '.join(sorted(set(online_years), reverse=True)[:3])} 입니다.")
+                if accepted_years:
+                    lines.append(f"채택연도는 {', '.join(sorted(set(accepted_years), reverse=True)[:3])} 입니다.")
+                if received_years:
+                    lines.append(f"접수연도는 {', '.join(sorted(set(received_years), reverse=True)[:3])} 입니다.")
+                elif years and not pub_years:
+                    lines.append(f"추천 후보의 확인 연도는 {', '.join(sorted(set(years), reverse=True)[:3])} 입니다.")
+                if scores:
+                    lines.append(f"상위 추천 문헌의 대표 유사도는 {', '.join(scores[:3])} 입니다.")
+
+        elif page == "prediction" and tab == "predict":
+            predictions = page_result.get("predictions", [])[:2]
+            extracted = []
+            for item in predictions:
+                for value_item in item.get("extracted_values", [])[:3]:
+                    value = value_item.get("value")
+                    if value is None:
+                        continue
+                    label = value_item.get("label") or value_item.get("name") or "결과값"
+                    unit = value_item.get("unit", "")
+                    extracted.append(f"{label} {self._format_compact_number(value)}{unit}")
+                    if len(extracted) >= 4:
+                        break
+                if len(extracted) >= 4:
+                    break
+            if extracted:
+                lines.append(f"페이지가 읽은 대표 수치는 {', '.join(extracted)} 입니다.")
+            relevance = [item.get("relevance") for item in predictions if item.get("relevance") is not None]
+            if relevance:
+                lines.append(f"상위 예측 후보의 적합도는 {', '.join([self._format_compact_number(v) for v in relevance[:2]])} 입니다.")
+
+        elif page == "theory" and tab == "equation":
+            equations = []
+            for result in page_result.get("results", [])[:2]:
+                for equation in result.get("equations", [])[:2]:
+                    if equation and str(equation).strip():
+                        equations.append(str(equation).strip())
+                    if len(equations) >= 2:
+                        break
+                if len(equations) >= 2:
+                    break
+            if equations:
+                lines.append(f"상위 결과에서 확인된 대표 수식은 {', '.join(equations)} 입니다.")
+
+        elif page == "diagnosis" and tab == "search":
+            results = page_result.get("results", [])[:3]
+            scores = [self._format_compact_number(item.get("score")) for item in results if item.get("score") is not None]
+            if scores:
+                lines.append(f"상위 진단 검색 결과의 유사도는 {', '.join(scores)} 입니다.")
+
+        elif page == "diagnosis" and tab == "compare":
+            analysis = page_result.get("analysis", {}) or {}
+            summary = analysis.get("summary")
+            if summary:
+                lines.append(str(summary))
+            key_values = self._format_inline_key_values(analysis, max_items=3)
+            if key_values:
+                lines.append(f"비교 분석 값은 {', '.join(key_values)} 입니다.")
+
+        elif page == "diagnosis" and tab == "detection":
+            stats = page_result.get("stats", {}) or {}
+            key_values = self._format_inline_key_values(stats, max_items=3)
+            if key_values:
+                lines.append(f"이상 탐지 통계는 {', '.join(key_values)} 입니다.")
+            history = page_result.get("history", [])
+            if history:
+                lines.append(f"비교 가능한 이력 데이터는 최근 {len(history)}건입니다.")
+
+        elif page == "diagnosis" and tab == "failure":
+            summary = page_result.get("summary", {}) or {}
+            top_cause = summary.get("top_cause") or summary.get("cause")
+            if top_cause:
+                lines.append(f"페이지가 제시한 최우선 원인은 {top_cause} 입니다.")
+            matched = page_result.get("matched_patterns", [])[:1]
+            if matched:
+                first = matched[0]
+                causes = first.get("causes", [])[:2]
+                solutions = first.get("solutions", [])[:2]
+                if causes:
+                    lines.append(f"연관 원인 후보는 {', '.join([str(item) for item in causes])} 입니다.")
+                if solutions:
+                    lines.append(f"우선 점검할 조치는 {', '.join([str(item) for item in solutions])} 입니다.")
+
+        cleaned = []
+        for line in lines:
+            text = str(line).strip()
+            if text and text not in cleaned:
+                cleaned.append(text)
+            if len(cleaned) >= 3:
+                break
+        return cleaned
+
+    def _format_page_result_params(self, params):
+        if not isinstance(params, dict):
+            return []
+
+        labels = {
+            "process_type": "공정",
+            "gas_type": "가스",
+            "pressure": "압력",
+            "power": "전력",
+            "temperature": "온도",
+            "substrate": "기판",
+            "target_property": "목표 특성",
+            "diagType": "진단 유형",
+            "methodA": "비교 대상 A",
+            "methodB": "비교 대상 B",
+            "symptom": "증상",
+            "equationQuery": "수식 질의",
+            "gas": "가스",
+            "Te": "전자온도",
+            "ne": "전자밀도",
+            "B": "자기장",
+            "chart_type": "차트 유형",
+            "fitting_model": "피팅 모델",
+            "time": "시간",
+        }
+
+        items = []
+        for key, value in params.items():
+            if key == "collection" or value is None:
+                continue
+            text = str(value).strip()
+            if len(text) == 0:
+                continue
+            items.append(f"{labels.get(key, key)}={text}")
+        return items[:5]
+
+    def _build_evidence_items_from_page_results(self, page_results):
+        """Extract per-document evidence items from page_results for the accordion UI."""
+        evidence_items = []
+        if not page_results:
+            return evidence_items
+        for pr in page_results:
+            if not isinstance(pr, dict):
+                continue
+            # Try various result structures
+            for key in ("results", "clusters", "predictions", "matched_patterns", "items", "data"):
+                items_list = pr.get(key)
+                if not isinstance(items_list, list):
+                    continue
+                for idx, item in enumerate(items_list):
+                    if not isinstance(item, dict):
+                        continue
+                    doc_id = item.get("doc_id") or item.get("id") or item.get("_id") or str(idx + 1)
+                    filename = item.get("filename") or item.get("title") or item.get("name") or item.get("doc_id") or f"문서 {idx + 1}"
+                    score = item.get("score") or item.get("max_score") or item.get("relevance") or item.get("match_score")
+                    # Collect snippet text
+                    snippets = []
+                    for skey in ("snippet", "text", "excerpt", "abstract", "content", "description"):
+                        val = item.get(skey)
+                        if val and isinstance(val, str):
+                            snippets.append(val[:300])
+                            break
+                    snippet_list = item.get("snippets")
+                    if isinstance(snippet_list, list) and not snippets:
+                        snippets = [str(s)[:300] for s in snippet_list[:3] if s]
+                    # Extracted values
+                    extracted = item.get("extracted_values") or item.get("values") or []
+                    if extracted and isinstance(extracted, list):
+                        vals_str = ", ".join([
+                            f"{v.get('label', '')} {v.get('value', '')}{v.get('unit', '')}"
+                            for v in extracted[:5] if isinstance(v, dict) and v.get('value') is not None
+                        ])
+                        if vals_str:
+                            snippets.append(f"핵심 수치: {vals_str}")
+                    # Causes for matched_patterns
+                    causes = item.get("causes")
+                    if isinstance(causes, list) and causes:
+                        snippets.append(f"원인: {', '.join([str(c) for c in causes[:5]])}")
+
+                    evidence_items.append({
+                        "doc_id": str(doc_id),
+                        "filename": str(filename),
+                        "score": float(score) if score is not None else None,
+                        "snippets": snippets,
+                    })
+        return evidence_items
+
+    def _collect_text_snippets_from_page_results(self, page_results, max_items=40, max_chars=6000):
+        """Collect text-like fields from page_results to help the LLM synthesize richer conclusions.
+
+        NOTE: This is used only as internal synthesis signal; final answer must not reveal raw filenames.
+        """
+        snippets = []
+        total_chars = 0
+
+        def add(text):
+            nonlocal total_chars
+            if not text:
+                return
+            if not isinstance(text, str):
+                text = str(text)
+            t = text.strip()
+            if not t:
+                return
+            # Avoid leaking filenames/paths into synthesis prompts
+            if ".pdf" in t.lower():
+                return
+            t = t.replace("\u00a0", " ")
+            if t in snippets:
+                return
+            # Keep each snippet reasonably short
+            t = t[:400]
+            if total_chars + len(t) > max_chars:
+                return
+            snippets.append(t)
+            total_chars += len(t)
+
+        def walk(node):
+            if len(snippets) >= max_items or total_chars >= max_chars:
+                return
+            if isinstance(node, str):
+                add(node)
+                return
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    # Never pass raw identifiers to the synthesizer
+                    if k in ("filename", "file", "path", "doc_id", "id"):
+                        continue
+                    # Prefer semantic text-like keys
+                    if k in ("text", "snippet", "excerpt", "abstract", "content", "description", "summary"):
+                        if isinstance(v, str):
+                            add(v)
+                            continue
+                    if k in ("title", "topic") and isinstance(v, str):
+                        add(v)
+                        continue
+                    # discover clusters: chunks list contains text
+                    if k == "chunks" and isinstance(v, list):
+                        for ch in v[:5]:
+                            if isinstance(ch, dict):
+                                add(ch.get("text"))
+                        continue
+                    # recommend papers: snippets may be a list of strings
+                    if k == "snippets" and isinstance(v, list):
+                        for s in v[:5]:
+                            if isinstance(s, str):
+                                add(s)
+                        continue
+                    walk(v)
+            elif isinstance(node, list):
+                for it in node[:30]:
+                    walk(it)
+
+        for pr in (page_results or [])[-3:]:
+            if isinstance(pr, dict):
+                walk(pr)
+
+        return snippets
+
+    def _extract_top_keywords(self, texts, limit=10):
+        if not texts:
+            return []
+        stop_ko = {
+            "있습니다", "합니다", "됩니다", "확인", "기반", "관련", "결과", "문헌", "페이지", "키워드",
+            "상위", "대표", "유사도", "분석", "검색", "추가", "가능", "필요", "수", "등",
+        }
+        stop_en = {
+            "the", "and", "for", "with", "from", "that", "this", "into", "are", "was", "were",
+            "can", "could", "should", "may", "might", "using", "use", "used", "based", "results",
+        }
+
+        counter = Counter()
+        for t in texts[:60]:
+            if not t:
+                continue
+            # keep both Korean and English tokens
+            for token in re.findall(r"[A-Za-z]{3,}|[가-힣]{2,}", t):
+                tok = token.strip().lower()
+                if not tok:
+                    continue
+                if tok in stop_en or tok in stop_ko:
+                    continue
+                if tok.isdigit():
+                    continue
+                counter[tok] += 1
+
+        # Prefer higher frequency, then longer tokens
+        items = sorted(counter.items(), key=lambda x: (-x[1], -len(x[0])))
+        return [w for w, _ in items[:limit]]
+
+    def _split_answer_sections_ko(self, answer_text):
+        """Return (conclusion, evidence, has_headers)."""
+        text = (answer_text or "").strip()
+        if not text:
+            return "", "", False
+        if "핵심 결론" not in text or "근거" not in text:
+            return text, "", False
+        try:
+            after = text.split("핵심 결론", 1)[1]
+            conclusion = after.split("근거", 1)[0].strip()
+            evidence = after.split("근거", 1)[1].strip()
+            return conclusion, evidence, True
+        except Exception:
+            return text, "", False
+
+    def _count_paragraphs(self, text):
+        if not text:
+            return 0
+        paras = [p.strip() for p in str(text).split("\n\n") if p.strip()]
+        return len(paras)
+
+    def _compose_page_summary_text(self, page_result, value_lines=None, highlights=None):
+        value_lines = value_lines or []
+        highlights = highlights or []
+        page = page_result.get("page", "") if isinstance(page_result, dict) else ""
+        tab = page_result.get("tab", "") if isinstance(page_result, dict) else ""
+
+        if page == "research" and tab == "recommend":
+            papers = page_result.get("papers", [])[:4] if isinstance(page_result, dict) else []
+            pub_years = []
+            online_years = []
+            accepted_years = []
+            received_years = []
+            scores = []
+            for item in papers:
+                publication_year = item.get("publication_year")
+                online_year = item.get("online_year")
+                accepted_year = item.get("accepted_year")
+                received_year = item.get("received_year")
+                score = item.get("score")
+                if str(publication_year).isdigit():
+                    pub_years.append(str(publication_year))
+                if str(online_year).isdigit():
+                    online_years.append(str(online_year))
+                if str(accepted_year).isdigit():
+                    accepted_years.append(str(accepted_year))
+                if str(received_year).isdigit():
+                    received_years.append(str(received_year))
+                if score is not None:
+                    scores.append(self._format_compact_number(score))
+
+            summary_lines = []
+            if pub_years:
+                summary_lines.append(f"추천 후보의 출판연도는 {', '.join(sorted(set(pub_years), reverse=True)[:3])} 입니다.")
+            if online_years:
+                summary_lines.append(f"온라인 공개연도는 {', '.join(sorted(set(online_years), reverse=True)[:3])} 입니다.")
+            if accepted_years:
+                summary_lines.append(f"채택연도는 {', '.join(sorted(set(accepted_years), reverse=True)[:3])} 입니다.")
+            if received_years:
+                summary_lines.append(f"접수연도는 {', '.join(sorted(set(received_years), reverse=True)[:3])} 입니다.")
+            if scores:
+                summary_lines.append(f"상위 추천 문헌의 대표 유사도는 {', '.join(scores[:3])} 입니다.")
+
+            if not summary_lines:
+                for line in value_lines[:4]:
+                    if not line or line in summary_lines:
+                        continue
+                    summary_lines.append(line)
+            if summary_lines:
+                return " ".join(summary_lines)
+
+        if value_lines:
+            return value_lines[0]
+        if highlights:
+            return highlights[0]
+        return ""
+
+    def _ensure_rich_korean_conclusion(self, answer_text, user_message, page_results):
+        """Ensure '핵심 결론' has multiple paragraphs when page_results exist.
+
+        This is a safety net for cases where the LLM returns a shallow single-paragraph conclusion.
+        It must not leak raw filenames.
+        """
+        if not page_results:
+            return answer_text
+
+        conclusion, evidence, has_headers = self._split_answer_sections_ko(answer_text)
+        # If the answer already looks rich AND does not leak raw filenames, keep it.
+        # If any filename-like artifact exists, force rebuild.
+        lower_all = (answer_text or "").lower()
+        has_filename_artifact = any(tok in lower_all for tok in [".pdf", "filename=", "file=", "sandbox:/"])
+        # Raw excerpt artifacts: long English sequences and dash-like excerpt lines
+        has_raw_excerpt_artifact = bool(re.search(r"[A-Za-z]{20,}", answer_text or "")) and ("—" in (answer_text or "") or "received" in lower_all)
+        if has_headers and (not has_filename_artifact) and (not has_raw_excerpt_artifact) and self._count_paragraphs(conclusion) >= 4 and len(conclusion) >= 260:
+            return answer_text
+
+        latest = page_results[-1] if isinstance(page_results[-1], dict) else {}
+        page = latest.get("page", "-")
+        tab = latest.get("tab", "-")
+        query = latest.get("query") or user_message
+        params = latest.get("params", {}) or {}
+        total = latest.get("total", latest.get("total_hits", latest.get("total_searched", 0)))
+
+        value_lines = self._collect_page_result_value_lines(latest)
+        param_lines = self._format_page_result_params(params)
+        page_summary = self._compose_page_summary_text(latest, value_lines=value_lines)
+
+        # Derived signals from page results
+        derived_snips = self._collect_text_snippets_from_page_results(page_results)
+        derived_terms = self._extract_top_keywords(derived_snips, limit=8)
+
+        def build_keyword_suggestions(query_text, limit=5):
+            q = (query_text or "").strip()
+            # Keep it simple & actionable: suggest adding facets users can control
+            facets = [
+                "가스 조성(예: CF4/CHF3/SF6/Cl2)",
+                "압력(mTorr/Pa)",
+                "RF power/바이어스", 
+                "기판/재료(예: Si/SiO2/SiN/폴리머)",
+                "목표 지표(균일도 %, 선택비, 프로파일)",
+                "공정 타입(RIE/ICP/DRIE)",
+                "온도/냉각 조건",
+            ]
+            # If query already includes a facet keyword, rotate list to avoid repetition
+            lower = q.lower()
+            filtered = []
+            for f in facets:
+                key = re.sub(r"[^A-Za-z가-힣0-9]+", "", f).lower()
+                if key and key in lower:
+                    continue
+                filtered.append(f)
+            base = filtered if filtered else facets
+            # Render as short suggestions
+            out = []
+            for f in base:
+                out.append(f"{q} {f}".strip())
+                if len(out) >= limit:
+                    break
+            return out
+
+        # Paragraph 1: overview
+        count_phrase = f"{total}건" if total else "다수의 결과"
+        particle = "을" if total else "를"
+        p1 = f"'{query}' 키워드로 {page}/{tab} 페이지를 실행해 관련 결과 {count_phrase}{particle} 확인했습니다."
+        if page_summary:
+            p1 += f" {page_summary}"
+
+        # Paragraph 2: interpretation (grounded, no invention)
+        p2_parts = []
+        if value_lines:
+            p2_parts.append("상위 유사도 분포는 검색어가 현재 컬렉션의 어떤 주제들과 가까운지(또는 멀리 있는지)를 보여줍니다.")
+        if derived_terms:
+            p2_parts.append(f"페이지 결과 텍스트에서 함께 자주 등장한 용어는 {', '.join(derived_terms)} 입니다.")
+            p2_parts.append("이는 해당 키워드가 연관되는 하위 주제/변수 후보를 좁히는 데 도움이 됩니다.")
+        else:
+            p2_parts.append("현재 페이지 결과에는 실험 조건/핵심 변수 텍스트가 제한적으로 포함되어 있어, 상세 해석은 추가 검색이 필요합니다.")
+        p2 = " ".join(p2_parts).strip()
+
+        # Paragraph 3: themes / key points (use top_terms when available)
+        if derived_terms:
+            p3 = (
+                f"이 결과를 더 의미 있게 읽기 위해서는, 우선 {', '.join(derived_terms[:6])} 같은 동반 용어를 중심으로 "
+                f"‘어떤 공정 조건/메커니즘/평가 지표’ 축에서 유사도가 형성되는지 분해해 보는 것이 좋습니다. "
+                f"즉, 현재 검색어를 이 용어들과 조합해 재검색하면 관련 문헌 묶음의 주제성이 더 뚜렷해지고, 결론의 근거도 더 촘촘해집니다."
+            )
+        else:
+            suggestions = build_keyword_suggestions(query, limit=5)
+            p3 = (
+                "현재 페이지 결과 텍스트 신호(요약/스니펫)가 약해, 단일 키워드만으로는 주제 분해가 어렵습니다. "
+                "아래처럼 ‘조건/변수 축’을 붙여 재검색하면, 동일한 페이지 결과라도 훨씬 해석 가능한 근거가 모입니다: "
+                + "; ".join(suggestions)
+            )
+
+        # Paragraph 4: next steps (action plan)
+        p4_steps = []
+        if param_lines:
+            p4_steps.append(f"적용 인자값({', '.join(param_lines)})을 조정해 조건을 좁히면 더 높은 정합도의 결과를 얻을 수 있습니다.")
+        else:
+            p4_steps.append("검색어를 ‘재료/가스/전력/압력/온도/공정 타입/목표 지표’처럼 조절 가능한 축으로 쪼개서 넣으면, 유사도 숫자에 그치지 않고 ‘왜 관련 있는지’를 설명할 근거가 생깁니다.")
+        p4_steps.append("상위 3개 묶음(또는 문헌)에서 반복되는 용어를 1~2개 선택해 AND 조합으로 재검색한 뒤, 그때의 유사도 변화와 스니펫을 비교하면 핵심 메커니즘 후보를 더 빠르게 좁힐 수 있습니다.")
+        p4 = " ".join(p4_steps)
+
+        new_conclusion = "\n\n".join([p1, p2, p3, p4]).strip()
+
+        # Evidence section: keep existing if present, otherwise create minimal one.
+        if not evidence:
+            page_summary = page_summary or f"{page}/{tab} 페이지 결과를 기준으로 질문과 직접 연결되는 항목을 확인했습니다."
+            evidence_lines = [
+                f"- 페이지 결과 요약: {page_summary}",
+                f"- 질문 키워드 '{query}'를 {page}/{tab} 페이지에 적용해 결과를 확인했습니다.",
+            ]
+            if param_lines:
+                evidence_lines.append(f"- 적용 인자값은 {', '.join(param_lines)} 입니다.")
+            evidence = "\n".join(evidence_lines[:3])
+
+        return "\n".join([
+            "핵심 결론",
+            "",
+            new_conclusion,
+            "",
+            "근거",
+            evidence.strip(),
+        ]).strip()
+
+    def _build_page_grounded_fallback_answer(self, user_message, page_results, navigation=None, language="ko"):
+        if language != "ko" or not page_results:
+            return None
+
+        page_result = page_results[-1] if isinstance(page_results[-1], dict) else None
+        if not page_result:
+            return None
+
+        highlights = self._collect_page_result_highlights(page_result, language=language)
+        page = page_result.get("page", "-")
+        tab = page_result.get("tab", "-")
+        query = page_result.get("query", user_message)
+        params = page_result.get("params", {}) or {}
+        collection = page_result.get("collection", self.collection or "")
+        navigation = navigation if isinstance(navigation, dict) else None
+        total = page_result.get("total", page_result.get("total_hits", page_result.get("total_searched", 0)))
+        param_lines = self._format_page_result_params(params)
+        value_lines = self._collect_page_result_value_lines(page_result)
+        page_summary = self._compose_page_summary_text(page_result, value_lines=value_lines, highlights=highlights)
+        if not page_summary and total:
+            page_summary = f"{page}/{tab} 페이지에서 질문 관련 결과 {total}건을 확인했습니다."
+        elif not page_summary:
+            page_summary = f"{page}/{tab} 페이지 결과를 기준으로 질문과 직접 연결되는 항목을 확인했습니다."
+
+        # Build paragraph-style conclusion
+        conclusion_paragraphs = []
+        # Paragraph 1: overview
+        count_text = f"{total}건" if total is not None else "다수"
+        overview = f"'{query}' 키워드로 {page}/{tab} 페이지를 실행한 결과, 관련 문헌 {count_text}을 확인했습니다."
+        if page_summary:
+            overview += f" {page_summary}"
+        elif highlights:
+            overview += f" {highlights[0]}"
+        conclusion_paragraphs.append(overview)
+
+        # Paragraph 2+: per-cluster / per-topic detail
+        clusters = page_result.get("clusters", []) or []
+        predictions = page_result.get("predictions", []) or []
+        results_list = page_result.get("results", []) or []
+        matched_patterns = page_result.get("matched_patterns", []) or []
+
+        if clusters:
+            for idx, cluster in enumerate(clusters[:5], start=1):
+                score = cluster.get("score") or cluster.get("max_score")
+                # Do NOT expose raw filenames in the final answer.
+                fname = f"상위 문헌 묶음 {idx}"
+                snippets = cluster.get("snippets", [])[:2]
+                score_text = f"(유사도 {self._format_compact_number(score)})" if score is not None else ""
+                snippet_text = " ".join([str(s)[:120] for s in snippets if s]).strip()
+                para = f"{fname} {score_text}"
+                if snippet_text:
+                    para += f" — {snippet_text}"
+                conclusion_paragraphs.append(para)
+        elif predictions:
+            for idx, pred in enumerate(predictions[:5], start=1):
+                fname = f"예측 결과 {idx}"
+                relevance = pred.get("relevance")
+                text_snippet = (pred.get("text") or "")[:150]
+                values = pred.get("extracted_values", [])[:3]
+                value_strs = [f"{v.get('label', '')} {v.get('value', '')}{v.get('unit', '')}" for v in values if v.get('value') is not None]
+                para = f"{fname}"
+                if relevance is not None:
+                    para += f" (적합도 {self._format_compact_number(relevance)})"
+                if value_strs:
+                    para += f" — 핵심 수치: {', '.join(value_strs)}"
+                elif text_snippet:
+                    para += f" — {text_snippet}"
+                conclusion_paragraphs.append(para)
+        elif results_list:
+            for idx, res in enumerate(results_list[:5], start=1):
+                fname = f"결과 {idx}"
+                score = res.get("score")
+                snippet = (res.get("snippet") or "")[:150]
+                para = f"{fname}"
+                if score is not None:
+                    para += f" (유사도 {self._format_compact_number(score)})"
+                if snippet:
+                    para += f" — {snippet}"
+                conclusion_paragraphs.append(para)
+        elif matched_patterns:
+            for idx, pat in enumerate(matched_patterns[:5], start=1):
+                name = pat.get("name") or f"패턴 {idx}"
+                match_score = pat.get("match_score")
+                causes = pat.get("causes", [])[:3]
+                para = f"{name}"
+                if match_score is not None:
+                    para += f" (매칭 {self._format_compact_number(match_score)})"
+                if causes:
+                    para += f" — 원인: {', '.join([str(c) for c in causes])}"
+                conclusion_paragraphs.append(para)
+        else:
+            for vl in value_lines:
+                if vl and vl not in conclusion_paragraphs:
+                    conclusion_paragraphs.append(vl)
+
+        # Final paragraph: implications
+        implication = "더 구체적인 키워드나 실험 조건을 좁혀 검색하면 정밀도 높은 결과를 얻을 수 있습니다."
+        if param_lines:
+            implication = f"적용된 인자값({', '.join(param_lines)})을 조정하면 다른 조건의 결과도 확인할 수 있습니다."
+        conclusion_paragraphs.append(implication)
+
+        # Evidence bullets (brief)
+        evidence_lines = []
+        evidence_lines.append(f"페이지 결과 요약: {page_summary}")
+        ev_count = f"결과 {total}건" if total else "결과 집합"
+        evidence_lines.append(f"질문 키워드 '{query}'를 {page}/{tab} 페이지에 적용해 {ev_count}를 확인했습니다.")
+        if param_lines:
+            evidence_lines.append(f"적용 인자값은 {', '.join(param_lines)} 입니다.")
+        evidence_lines = evidence_lines[:3]
+
+        lines = ["핵심 결론"]
+        for para in conclusion_paragraphs:
+            lines.append(para)
+            lines.append("")
+        lines.append("근거")
+        lines.extend([f"- {item}" for item in evidence_lines])
+        return "\n".join(lines).strip()
+
+    def _build_fast_final_answer(self, user_message, draft_answer, page_results, navigation=None, language="ko"):
+        if language != "ko":
+            return (draft_answer or "").strip()
+
+        page_grounded = self._build_page_grounded_fallback_answer(user_message, page_results, navigation, language=language)
+        if page_grounded:
+            return page_grounded
+
+        draft = (draft_answer or "").strip()
+        if draft and self._has_korean(draft):
+            lines = [line.strip().lstrip("- ") for line in draft.splitlines() if line.strip() and line.strip() not in ["핵심 결론", "근거"]]
+            summary = lines[0] if lines else "현재 수집된 결과를 기준으로 핵심 내용을 우선 정리했습니다."
+            evidence = []
+            for item in lines[1:]:
+                if item and item != summary and item not in evidence:
+                    evidence.append(item)
+                if len(evidence) >= 3:
+                    break
+            if len(evidence) == 0:
+                evidence.append("페이지 결과와 도구 실행 결과를 함께 반영해 요약했습니다.")
+            return "\n".join([
+                "핵심 결론",
+                summary,
+                "",
+                "근거",
+                *[f"- {item}" for item in evidence[:3]],
+            ]).strip()
+
+        tool_outputs = [item.get("tool") for item in list(self._tool_result_bank[-3:]) if item.get("tool")]
+        evidence_line = "페이지 결과 또는 도구 실행 결과를 기준으로 요약했습니다."
+        if tool_outputs:
+            evidence_line = f"현재 확보한 도구 결과는 {', '.join(tool_outputs[:3])} 중심입니다."
+
+        return "\n".join([
+            "핵심 결론",
+            "현재 수집된 결과를 바탕으로 한국어 답변을 우선 구성했습니다.",
+            "",
+            "근거",
+            f"- {evidence_line}",
+            "- 질문 키워드와 인자값이 더 구체적일수록 페이지 결과 해석 정확도가 높아집니다.",
+        ]).strip()
+
+    def _build_page_result_priority_answer(self, user_message, page_results, navigation=None, language="ko"):
+        if not page_results:
+            return None
+
+        summary_answer = self._build_page_grounded_fallback_answer(
+            user_message,
+            page_results,
+            navigation=navigation,
+            language="ko",
+        )
+        return summary_answer
+
+    def _build_quick_preview_answer(self, user_message, orchestrator_plan=None, language="ko"):
+        if language != "ko":
+            return None
+
+        page_results = list(getattr(self, "_page_result_bank", [])[-1:])
+        if page_results:
+            page_result = page_results[-1]
+            highlights = self._collect_page_result_highlights(page_result, language=language)
+            page = page_result.get("page", (orchestrator_plan or {}).get("page", "-"))
+            tab = page_result.get("tab", (orchestrator_plan or {}).get("tab", "-"))
+            query = page_result.get("query", user_message)
+            params = self._format_page_result_params(page_result.get("params", {}) or {})
+            first = highlights[0] if highlights else f"{page}/{tab} 페이지 결과를 확보했습니다."
+            second = f"질문 키워드 '{query}'를 실제 페이지에 넣어 결과를 확인했습니다."
+            third = f"적용 인자값은 {', '.join(params)} 입니다." if params else "이 결과를 바탕으로 최종 답변을 정리 중입니다."
+            return "\n".join([
+                "핵심 결론",
+                first,
+                "",
+                "근거",
+                f"- {second}",
+                f"- {third}",
+            ]).strip()
+
+        if self._tool_result_bank:
+            last_tool = self._tool_result_bank[-1]
+            tool_name = last_tool.get("tool", "도구")
+            return "\n".join([
+                "핵심 결론",
+                f"{tool_name} 결과를 확보했고, 이를 바탕으로 최종 답변을 정리 중입니다.",
+                "",
+                "근거",
+                "- 추가 페이지 결과와 파라미터 적용 결과를 곧 반영합니다.",
+            ]).strip()
+
+        page = (orchestrator_plan or {}).get("page", "-")
+        tab = (orchestrator_plan or {}).get("tab", "-")
+        if page != "-" or tab != "-":
+            return "\n".join([
+                "핵심 결론",
+                f"{page}/{tab} 기준으로 답변을 준비하고 있습니다.",
+                "",
+                "근거",
+                "- 실제 페이지 결과와 도구 근거를 모은 뒤 최종 답변으로 교체합니다.",
+            ]).strip()
+
+        return None
+
+    def _has_korean(self, text):
+        return any('가' <= ch <= '힣' for ch in (text or ""))
+
+    def _needs_korean_answer_cleanup(self, text):
+        content = (text or "").strip()
+        if not content:
+            return False
+        english_markers = [
+            "Here are some recent papers",
+            "These papers",
+            "If you're interested",
+            "I'll also direct you",
+            "Let me do that now",
+            "sandbox:/",
+            "주제 발굴 페이지",
+            "페이지로 이동",
+        ]
+        if any(marker.lower() in content.lower() for marker in english_markers):
+            return True
+
+        long_english_lines = 0
+        for line in content.splitlines():
+            stripped = line.strip()
+            if len(stripped) < 24:
+                continue
+            if self._has_korean(stripped):
+                continue
+            if re.search(r"[A-Za-z]{4,}", stripped):
+                long_english_lines += 1
+        return long_english_lines >= 2
+
+    def _strip_navigation_cta(self, text):
+        lines = []
+        skip_next_action = False
+        for raw in (text or "").splitlines():
+            line = raw.strip()
+            lowered = line.lower()
+            if line in ["다음 액션", "### 에이전트 실행 요약"]:
+                skip_next_action = True
+                continue
+            if skip_next_action:
+                if not line:
+                    continue
+                if line.startswith("-"):
+                    if any(token in line for token in ["페이지", "이동", "sandbox:/", "주제 발굴"]):
+                        continue
+                else:
+                    skip_next_action = False
+            if any(token in lowered for token in ["sandbox:/", "i'll also direct", "let me do that now", "if you're interested in more detailed exploration"]):
+                continue
+            if "주제 발굴 페이지" in line or "페이지로 이동" in line or "탐색하려면" in line:
+                continue
+            if re.search(r"\[.*?\]\(sandbox:.*?\)", line):
+                continue
+            lines.append(raw)
+
+        cleaned = "\n".join(lines).strip()
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
+
+    def _strip_document_references(self, text):
+        cleaned_lines = []
+        for raw in (text or "").splitlines():
+            line = raw.strip()
+            if not line:
+                cleaned_lines.append(raw)
+                continue
+
+            lower = line.lower()
+            # If the line looks like raw file/meta references, drop it.
+            if any(token in lower for token in [".pdf", "filename=", "file=", "excerpt=", "chunk="]):
+                continue
+            # Also remove embedded .pdf tokens if they appear inside a longer sentence.
+            if re.search(r"\b[\w\-\(\)\[\]가-힣\.]{3,}\.pdf\b", raw, re.IGNORECASE):
+                continue
+            if re.match(r"^\d+\.\s+\*\*.*\*\*", line) and not self._has_korean(line):
+                continue
+            if re.match(r"^\d+\.\s+", line) and not self._has_korean(line) and re.search(r"[A-Za-z]{5,}", line):
+                continue
+            if not self._has_korean(line) and any(token in lower for token in ["paper", "papers", "study", "journal", "thin solid films"]):
+                continue
+            cleaned_lines.append(raw)
+
+        cleaned = "\n".join(cleaned_lines).strip()
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
+
+    def _get_answer_section_labels(self, language="ko"):
+        if language == "ko":
+            return {"conclusion": "핵심 결론", "evidence": "근거"}
+        return {"conclusion": "Conclusion", "evidence": "Evidence"}
+
+    def _ensure_page_result_summary_in_answer(self, answer, page_results=None, language="ko"):
+        if language != "ko":
+            return (answer or "").strip()
+        page_results = page_results or []
+        if not page_results:
+            return (answer or "").strip()
+
+        page_result = page_results[-1] if isinstance(page_results[-1], dict) else None
+        if not page_result:
+            return (answer or "").strip()
+
+        summary_lines = self._collect_page_result_value_lines(page_result)
+        highlights = self._collect_page_result_highlights(page_result, language=language)
+        total = page_result.get("total", page_result.get("total_hits", page_result.get("total_searched", 0)))
+        page = page_result.get("page", "-")
+        tab = page_result.get("tab", "-")
+        summary_text = self._compose_page_summary_text(page_result, value_lines=summary_lines, highlights=highlights)
+        if not summary_text and total:
+            summary_text = f"{page}/{tab} 페이지에서 질문 관련 결과 {total}건을 확인했습니다."
+        elif not summary_text:
+            summary_text = f"{page}/{tab} 페이지 결과를 기준으로 핵심 항목을 확인했습니다."
+        target_bullet = f"페이지 결과 요약: {summary_text}"
+
+        content = (answer or "").strip()
+        if not content:
+            return content
+
+        # Always rebuild: parse into conclusion paragraphs + evidence bullets,
+        # strip bullet prefixes from conclusion, and deduplicate evidence.
+        lines = [line.rstrip() for line in content.splitlines()]
+        conclusion_header = "핵심 결론"
+        evidence_header = "근거"
+        conclusion_parts = []  # paragraphs (non-bullet lines)
+        evidence_bullets = []
+        section = None
+        for line in lines:
+            stripped = line.strip()
+            if stripped == conclusion_header:
+                section = "conclusion"
+                continue
+            if stripped == evidence_header:
+                section = "evidence"
+                continue
+            if section == "conclusion":
+                # Accept both paragraph text and legacy bullet — strip bullet prefix
+                if stripped.startswith("- "):
+                    conclusion_parts.append(stripped[2:].strip())
+                elif stripped.startswith("• "):
+                    conclusion_parts.append(stripped[2:].strip())
+                elif stripped:
+                    conclusion_parts.append(stripped)
+                else:
+                    conclusion_parts.append("")  # blank line (paragraph separator)
+            elif section == "evidence":
+                if stripped.startswith("- "):
+                    evidence_bullets.append(stripped[2:].strip())
+
+        # Ensure target_bullet is first in evidence; skip duplicated '페이지 결과 요약:' bullets
+        deduped = [target_bullet]
+        for bullet in evidence_bullets:
+            if bullet and bullet not in deduped and not bullet.startswith("페이지 결과 요약:"):
+                deduped.append(bullet)
+            if len(deduped) >= 3:
+                break
+
+        # Rebuild with paragraph structure
+        rebuilt = [conclusion_header]
+        if conclusion_parts:
+            for part in conclusion_parts:
+                rebuilt.append(part)
+        else:
+            rebuilt.append(summary_text)
+        rebuilt.append("")
+        rebuilt.append(evidence_header)
+        rebuilt.extend([f"- {item}" for item in deduped[:3]])
+        return "\n".join(rebuilt).strip()
+
+    def _normalize_final_answer_korean(self, client, answer, user_message, page_results=None, navigation=None):
+        content = (answer or "").strip()
+        if not content:
+            return content
+        fallback_korean = self._build_page_grounded_fallback_answer(
+            user_message,
+            page_results or [],
+            navigation,
+            language="ko"
+        ) or self._build_fast_final_answer(
+            user_message,
+            "",
+            page_results or [],
+            navigation,
+            language="ko"
+        )
+
+        if not self._needs_korean_answer_cleanup(content) and self._has_korean(content):
+            cleaned = self._strip_document_references(self._strip_navigation_cta(content))
+            return self._ensure_page_result_summary_in_answer(cleaned, page_results=page_results, language="ko")
+
+        page_results = page_results or []
+        navigation = navigation if isinstance(navigation, dict) else None
+        page_hint = ""
+        if page_results:
+            latest = page_results[-1] if isinstance(page_results[-1], dict) else {}
+            page_hint = f"page={latest.get('page', '-')} tab={latest.get('tab', '-')} query={latest.get('query', '')}"
+        nav_hint = ""
+        if navigation:
+            nav_hint = f"navigation page={navigation.get('page', '-')} tab={navigation.get('tab', '-')} query={navigation.get('query', '')}"
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "너는 최종 답변 한국어 정규화기다. 설명과 결론은 반드시 자연스러운 한국어로 바꾸고, "
+                            "논문 제목·파일명·PDF 이름·짧은 원문 인용은 최종답변에서 제거하라. "
+                            "페이지 이동 권유, 링크, sandbox 경로, '주제 발굴 페이지로 이동' 같은 문구는 모두 제거하라. "
+                            "사실 추가 없이 기존 답변을 한국어 설명으로만 정리하라. "
+                            "출력 형식: '핵심 결론' 헤딩 후 여러 문단(bullet 아님)으로 서술, 문단 사이 빈 줄, 마지막에 '근거' 헤딩 후 2~3줄 bullet. 근거 첫 bullet은 '페이지 결과 요약:'으로 시작. 답변 본문만 반환하라."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"질문: {user_message}\n{page_hint}\n{nav_hint}\n원문 답변:\n{content}"
+                    }
+                ],
+                max_tokens=1500,
+            )
+            normalized = (response.choices[0].message.content or "").strip()
+            normalized = self._strip_document_references(self._strip_navigation_cta(normalized))
+            if normalized and self._has_korean(normalized):
+                return self._ensure_page_result_summary_in_answer(normalized, page_results=page_results, language="ko")
+            return self._ensure_page_result_summary_in_answer(fallback_korean, page_results=page_results, language="ko")
+        except Exception:
+            return self._ensure_page_result_summary_in_answer(fallback_korean, page_results=page_results, language="ko")
+
+    def _normalize_final_answer_language(self, client, answer, user_message, language="ko", page_results=None, navigation=None):
+        if language == "ko":
+            return self._normalize_final_answer_korean(
+                client,
+                answer,
+                user_message,
+                page_results=page_results,
+                navigation=navigation,
+            )
+
+        content = (answer or "").strip()
+        page_results = page_results or []
+        navigation = navigation if isinstance(navigation, dict) else None
+        labels = self._get_answer_section_labels(language)
+        fallback_source = self._build_page_grounded_fallback_answer(
+            user_message,
+            page_results,
+            navigation,
+            language="ko"
+        ) or self._build_fast_final_answer(
+            user_message,
+            "",
+            page_results,
+            navigation,
+            language="ko"
+        )
+
+        page_hint = ""
+        if page_results:
+            latest = page_results[-1] if isinstance(page_results[-1], dict) else {}
+            page_hint = f"page={latest.get('page', '-')} tab={latest.get('tab', '-')} query={latest.get('query', '')}"
+        nav_hint = ""
+        if navigation:
+            nav_hint = f"navigation page={navigation.get('page', '-')} tab={navigation.get('tab', '-')} query={navigation.get('query', '')}"
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            f"You are a final answer normalizer. Always answer in the user's language regardless of the context language. "
+                            f"Rewrite the answer naturally in English. Remove raw PDF names, filenames, source snippets, and navigation CTA. "
+                            f"Output format: `{labels['conclusion']}` heading followed by MULTIPLE PARAGRAPHS (not bullets), "
+                            f"separated by blank lines. Then `{labels['evidence']}` heading with 2~3 short bullet lines. "
+                            f"If page results exist, first evidence bullet must start with 'Page result summary:'. "
+                            f"Return only the answer body."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Question: {user_message}\n{page_hint}\n{nav_hint}\nOriginal answer:\n{content or fallback_source}"
+                    }
+                ],
+                max_tokens=700,
+            )
+            normalized = (response.choices[0].message.content or "").strip()
+            normalized = self._strip_document_references(self._strip_navigation_cta(normalized))
+            if normalized:
+                return self._ensure_page_result_summary_in_answer(normalized, page_results=page_results, language=language)
+        except Exception:
+            pass
+
+        fallback = self._strip_document_references(self._strip_navigation_cta(content or fallback_source))
+        return self._ensure_page_result_summary_in_answer(fallback, page_results=page_results, language=language)
+
+    def _needs_refinement(self, draft_answer, page_results=None):
+        text = (draft_answer or "").strip()
+        if not text:
+            return True
+        if not self._has_korean(text):
+            return True
+        compact = " ".join(text.split())
+        if len(compact) < 100:
+            return True
+        if compact.count("- ") + compact.count("\n") < 1:
+            return True
+
+        # If we have page_results, enforce richer multi-paragraph conclusions.
+        if page_results:
+            # Extract conclusion section
+            conclusion = text
+            if "핵심 결론" in text and "근거" in text:
+                try:
+                    conclusion = text.split("핵심 결론", 1)[1].split("근거", 1)[0]
+                except Exception:
+                    conclusion = text
+            conclusion = (conclusion or "").strip()
+            paras = [p.strip() for p in conclusion.split("\n\n") if p.strip()]
+            if len(paras) < 2:
+                return True
+            if len(conclusion) < 220:
+                return True
+            # If conclusion is basically only similarity numbers, refine.
+            if re.fullmatch(r".*대표 유사도는[\s0-9\.,]+입니다\.?", conclusion.replace("\n", " ").strip()):
+                return True
+
+        return False
+
+    def _refine_final_answer(self, client, user_message, draft_answer, memory_context, orchestrator_plan):
+        language = self._detect_language(user_message)
+        base_report = self._build_quality_report(language=language, stage="verification")
+        evidence = list(self._evidence_bank[:5])
+        tool_outputs = list(self._tool_result_bank[-5:])
+        page_results = list(getattr(self, "_page_result_bank", [])[-3:])
+        navigation = self._last_navigation if isinstance(self._last_navigation, dict) else None
+        page_priority_answer = self._build_page_result_priority_answer(
+            user_message,
+            page_results,
+            navigation=navigation,
+            language=language,
+        )
+
+        # If we already have a page-grounded draft, use it as the base draft to refine further.
+        draft_for_refine = (draft_answer or "").strip()
+        if page_priority_answer:
+            priority_answer = self._normalize_final_answer_language(
+                client,
+                page_priority_answer,
+                user_message,
+                language=language,
+                page_results=page_results,
+                navigation=navigation,
+            )
+            draft_for_refine = (priority_answer or page_priority_answer or "").strip()
+            base_report["detail"] = "페이지 결과를 1차 근거로 확보했고, 이를 바탕으로 결론을 더 풍부하게 정제합니다." if language == "ko" else "Collected page results as primary evidence and will refine into a richer final answer."
+
+        base_report["evidence_items"] = self._build_evidence_items_from_page_results(page_results)
+
+        fast_answer = self._build_fast_final_answer(user_message, draft_for_refine or draft_answer, page_results, navigation, language=language)
+
+        if len(evidence) == 0 and len(tool_outputs) == 0 and len(page_results) == 0 and not navigation and not self._needs_refinement(draft_for_refine or draft_answer, page_results=page_results):
+            base_report["detail"] = "검색 근거 없이도 답변 구조와 표현 품질을 점검했습니다." if language == "ko" else "Reviewed structure and clarity even without retrieval evidence."
+            return fast_answer, base_report
+
+        if not self._needs_refinement(draft_for_refine or draft_answer, page_results=page_results):
+            base_report["detail"] = "추가 정제 호출 없이 현재 답변을 한국어 최종본으로 확정했습니다."
+            return fast_answer, base_report
+
+        evidence_lines = []
+        for idx, item in enumerate(evidence, start=1):
+            evidence_lines.append(
+                f"[{idx}] file={item.get('filename')} | score={item.get('score')} | chunk={item.get('chunk')} | excerpt={item.get('excerpt')}"
+            )
+
+        tool_lines = []
+        for idx, item in enumerate(tool_outputs, start=1):
+            tool_input = item.get("input") or {}
+            tool_query = tool_input.get("query", "") if isinstance(tool_input, dict) else ""
+            tool_lines.append(
+                f"[{idx}] tool={item.get('tool')} | query={tool_query} | result={item.get('result')}"
+            )
+
+        page_result_lines = []
+        for idx, item in enumerate(page_results, start=1):
+            page = item.get("page", "-")
+            tab = item.get("tab", "-")
+            total = item.get("total", item.get("total_hits", item.get("total_searched", 0)))
+            page_result_lines.append(
+                f"[{idx}] page={page} | tab={tab} | query={item.get('query', '')} | total={total} | data={json.dumps(item, ensure_ascii=False)[:1500]}"
+            )
+
+        navigation_line = ""
+        if navigation:
+            navigation_line = (
+                f"page={navigation.get('page')} | tab={navigation.get('tab')} | query={navigation.get('query')} | params={json.dumps(navigation.get('params', {}), ensure_ascii=False)}"
+            )
+
+        system_prompt = (
+            "너는 검색 근거를 조합해 최종 답변을 다듬는 품질 향상기다. "
+            "Always answer in the user's language regardless of the context language. "
+            "`read_page_results`로 확보한 페이지 결과는 해당 페이지가 실제로 보여줄 1차 근거이므로 가장 우선해서 사용하라. "
+            "특히 사용자가 넣은 query와 params로 실행된 페이지 결과가 있으면, 그 결과를 직접 해석해 사용자의 언어로 최종답변을 재구성하라. "
+            "원문 DB 결과를 그대로 나열하지 말고, 중복을 제거하고 핵심 주장·조건·수치·한계를 통합해 전문가형 답변으로 재작성하라. "
+            "검색 근거가 없더라도 도구 결과와 페이지 파라미터를 읽어 사용자의 언어로 풍부한 답변을 만들어라. "
+            "설명 문장과 요약은 반드시 사용자의 언어로 작성하고, 논문 제목·파일명·PDF 이름·원문 인용 조각은 최종답변에 직접 노출하지 마라. "
+            "반드시 JSON만 반환하고, 키는 answer, evidence_items, synthesis_points, verification_checks, confidence, answer_style 를 사용하라. "
+            "answer 구조 규칙: "
+            "1) '핵심 결론' 헤딩 뒤에 여러 문단으로 서술하라. 첫 문단은 전체 결과 개괄(2~3문장), 중간 문단은 주제별 상세 분석(각 2~4문장, 유사도·실험 조건·핵심 내용 포함), 마지막 문단은 시사점과 후속 제안(2~3문장)을 넣어라. 문단 사이는 빈 줄로 구분하라. "
+            "2) '근거' 헤딩 뒤에 '페이지 결과 요약:' bullet 1줄과 통계 요약 1~2줄만 간략히 넣어라. "
+            "evidence_items 키에는 페이지 결과의 개별 문헌/항목을 배열로 넣어라. 각 항목은 {doc_id, filename, score, snippets} 형태다. 전체 결과를 생략 없이 모두 포함하라."
+            if language == "ko" else
+            "You are a quality refiner that rewrites grounded answers. Treat `read_page_results` outputs as the primary source of truth because they represent what the page would actually display. Do not dump raw DB output. Merge duplicate evidence, surface conditions, numeric facts, limitations, and rewrite the answer into a concise expert response. Even if search evidence is weak, read tool outputs and page parameters to produce a richer final answer. Return JSON only with keys: answer, evidence_items, synthesis_points, verification_checks, confidence, answer_style. The answer must use multiple paragraphs under 'Conclusion' and a brief 'Evidence' section. evidence_items is an array of {doc_id, filename, score, snippets} for every document found."
+        )
+
+        # Derived signals from page results to help the LLM avoid shallow, repetitive conclusions.
+        derived_snips = self._collect_text_snippets_from_page_results(page_results)
+        derived_terms = self._extract_top_keywords(derived_snips, limit=10)
+        derived_block = "\n".join([f"- top_terms: {', '.join(derived_terms)}" if derived_terms else "- top_terms: (none)"] +
+                      [f"- sample_snippets: {derived_snips[0][:180]}" if derived_snips else "- sample_snippets: (none)"])
+
+        user_prompt = f"""
+Question:
+{user_message}
+
+Draft answer:
+{draft_answer or '(empty)'}
+
+Category: {orchestrator_plan.get('category', '-')}
+Target page/tab: {orchestrator_plan.get('page', '-')} / {orchestrator_plan.get('tab', '-')}
+Selected collection: {memory_context.get('collection', self.collection or '-')}
+
+Evidence:
+{os.linesep.join(evidence_lines) if evidence_lines else '(none)'}
+
+Tool outputs:
+{os.linesep.join(tool_lines) if tool_lines else '(none)'}
+
+Page results:
+{os.linesep.join(page_result_lines) if page_result_lines else '(none)'}
+
+Derived signals (from page results):
+{derived_block}
+
+Navigation context:
+{navigation_line or '(none)'}
+
+Requirements:
+- Always answer in the user's language regardless of the context language.
+- Structure: `핵심 결론` heading followed by MULTIPLE PARAGRAPHS (not bullets), then `근거` heading with 2~3 short summary bullets.
+- 핵심 결론 paragraphs: (1) Overview paragraph (2~3 sentences: total results, main themes), (2) Per-topic detail paragraphs (each 2~4 sentences: topic content, similarity scores, experimental conditions), (3) Final paragraph with implications and suggestions for further search.
+- Separate paragraphs with blank lines. Do NOT use bullet points in 핵심 결론.
+- 근거 section: first bullet starts with `페이지 결과 요약:`, then 1~2 bullets with statistics.
+- Write naturally in the user's language. Do not include raw PDF filenames or English document lists.
+- If page results exist, use them as the main factual basis. Interpret the parameterized page results meaningfully.
+- evidence_items: include ALL documents from page results with fields doc_id, filename, score, snippets. Do NOT omit any.
+- Do not invent facts not grounded in the evidence above.
+- If confidence is limited, say so.
+ - IMPORTANT: Avoid a shallow conclusion that only repeats similarity numbers. Use page-result snippets and top_terms to explain themes, conditions, and actionable next steps.
+""".strip()
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=2000,
+            )
+            parsed = self._extract_json_object(response.choices[0].message.content or "")
+            if not parsed:
+                fallback_answer = self._build_page_grounded_fallback_answer(user_message, page_results, navigation, language=language)
+                normalized_fallback = self._normalize_final_answer_language(
+                    client,
+                    fallback_answer or fast_answer,
+                    user_message,
+                    language=language,
+                    page_results=page_results,
+                    navigation=navigation,
+                )
+                fallback_final = normalized_fallback or fallback_answer or fast_answer
+                if language == "ko" and page_results:
+                    fallback_final = self._ensure_rich_korean_conclusion(fallback_final, user_message, page_results)
+                return fallback_final, base_report
+
+            refined_answer = (parsed.get("answer") or "").strip() or fast_answer
+            if language == "ko" and not self._has_korean(refined_answer):
+                refined_answer = fast_answer
+            if language == "ko" and page_results and len(refined_answer) < 80:
+                fallback_answer = self._build_page_grounded_fallback_answer(user_message, page_results, navigation, language=language)
+                if fallback_answer:
+                    refined_answer = fallback_answer
+            refined_answer = self._normalize_final_answer_language(
+                client,
+                refined_answer,
+                user_message,
+                language=language,
+                page_results=page_results,
+                navigation=navigation,
+            )
+            if language == "ko" and page_results:
+                refined_answer = self._ensure_rich_korean_conclusion(refined_answer, user_message, page_results)
+            report = self._build_quality_report(
+                language=language,
+                stage="verification",
+                detail=(
+                    "페이지 결과와 검색 근거를 통합해, 인자값이 반영된 실제 결과를 사용자의 언어 최종답변으로 재구성했습니다."
+                    if language == "ko" else
+                    "Merged evidence into a structured answer and verified grounding before final delivery."
+                ),
+                answer_style=(parsed.get("answer_style") or base_report.get("answerStyle")),
+                confidence=(parsed.get("confidence") or base_report.get("confidence")),
+                synthesis_points=(parsed.get("synthesis_points") or base_report.get("synthesisPoints")),
+                verification_checks=(parsed.get("verification_checks") or base_report.get("verificationChecks")),
+            )
+            # Attach evidence_items from LLM or build from page_results
+            evidence_items = parsed.get("evidence_items") or []
+            if not evidence_items:
+                evidence_items = self._build_evidence_items_from_page_results(page_results)
+            report["evidence_items"] = evidence_items
+            return refined_answer, report
+        except Exception:
+            fallback_answer = self._build_page_grounded_fallback_answer(user_message, page_results, navigation, language=language)
+            normalized_fallback = self._normalize_final_answer_language(
+                client,
+                fallback_answer or fast_answer,
+                user_message,
+                language=language,
+                page_results=page_results,
+                navigation=navigation,
+            )
+            fallback_final = normalized_fallback or fallback_answer or fast_answer
+            if language == "ko" and page_results:
+                fallback_final = self._ensure_rich_korean_conclusion(fallback_final, user_message, page_results)
+            return fallback_final, base_report
+
+    # =========================================================================
+    # Agent Run Loop (OpenAI Function Calling)
+    # =========================================================================
+    def run(self, message, history=None):
+        """Generator 기반 Agent 실행 루프 — SSE 이벤트를 yield"""
+        if not self.api_key:
+            yield {"type": "error", "message": "OpenAI API key가 설정되지 않았습니다. config/season.py에 openai_api_key를 설정하세요."}
+            return
+
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=self.api_key)
+        except Exception as e:
+            yield {"type": "error", "message": f"OpenAI 클라이언트 생성 실패: {str(e)}"}
+            return
+
+        memory_context = self._build_memory_context(history or [], message)
+        orchestrator_plan = self._build_orchestrator_plan(message)
+        language = self._detect_language(message)
+        difficulty = self._detect_difficulty(message)
+        self._last_user_message = message or ""
+        self._orchestrator_plan = dict(orchestrator_plan or {})
+        self._evidence_bank = []
+        self._tool_result_bank = []
+        self._page_result_bank = []
+        self._last_navigation = None
+        self._quality_report = {}
+        self._preview_emitted = False
+        self._goal_state = self._build_goal_state(orchestrator_plan)
+        self._goal_state["current_cluster"] = "planner"
+
+        yield self._build_orchestration_snapshot(memory_context, orchestrator_plan, language, difficulty)
+        yield self._goal_event(
+            "init",
+            f"목표를 `{self._goal_state.get('goal')}`로 설정하고 planner/retriever/analyst/synthesizer/navigator 군집을 준비했습니다.",
+            orchestrator_plan=orchestrator_plan,
+            status="running"
+        )
+
+        yield self._pipeline_event(
+            "prompt",
+            "running",
+            f"시스템 프롬프트와 사용자 질문을 결합해 {self.model} 실행 컨텍스트를 구성하고 있습니다.",
+            language=language,
+            model=self.model,
+            collection=self.collection or "미선택",
+            metaBadges=[language, self.model, self.collection or "컬렉션 미선택"]
+        )
+
+        yield self._pipeline_event(
+            "memory",
+            "running",
+            "대화 이력, 최근 질문, 선택 컬렉션을 세션 메모리로 정리하고 있습니다.",
+            history_turns=memory_context.get("history_turns", 0),
+            collection=memory_context.get("collection") or "미선택",
+            last_topic=memory_context.get("last_topic", ""),
+            memoryNote=f"이전 대화 {memory_context.get('history_turns', 0)}턴과 컬렉션 {memory_context.get('collection') or '미선택'}을 메모리로 사용합니다.",
+            metaBadges=[f"이력 {memory_context.get('history_turns', 0)}턴", f"컬렉션 {memory_context.get('collection') or '미선택'}"]
+        )
+
+        yield self._pipeline_event(
+            "orchestrator",
+            "running",
+            f"{orchestrator_plan.get('category')} 흐름으로 분류하고, {', '.join(orchestrator_plan.get('recommended_tools', []))} 순으로 실행을 계획하고 있습니다.",
+            category=orchestrator_plan.get("category"),
+            page=orchestrator_plan.get("page"),
+            tab=orchestrator_plan.get("tab"),
+            plan=orchestrator_plan.get("plan", []),
+            metaBadges=[orchestrator_plan.get("category"), orchestrator_plan.get("page"), orchestrator_plan.get("tab")]
+        )
+
+        initial_progress = self._build_goal_state(orchestrator_plan)
+        initial_progress["current_cluster"] = "planner"
+        initial_progress["allowed_tools"] = self._get_cluster_allowed_tools("planner", orchestrator_plan)
+        system_prompt = self._build_system_prompt(
+            memory_context,
+            orchestrator_plan,
+            active_cluster="planner",
+            goal_progress=initial_progress,
+        )
+        tool_schemas = self._get_openai_tools_for_cluster("planner", orchestrator_plan)
+
+        yield self._pipeline_event(
+            "prompt",
+            "done",
+            "프롬프트 레이어가 시스템 규칙, 메모리, 오케스트레이션 계획을 포함하도록 확정되었습니다.",
+            language=language,
+            model=self.model,
+            collection=self.collection or "미선택",
+            metaBadges=[language, self.model, self.collection or "컬렉션 미선택"]
+        )
+
+        yield self._pipeline_event(
+            "memory",
+            "done",
+            f"세션 메모리에 최근 질문 {len(memory_context.get('recent_user_queries', []))}건과 컬렉션 정보를 반영했습니다.",
+            history_turns=memory_context.get("history_turns", 0),
+            collection=memory_context.get("collection") or "미선택",
+            last_topic=memory_context.get("last_topic", ""),
+            memoryNote=f"최근 질문 {len(memory_context.get('recent_user_queries', []))}건을 요약 메모리로 사용합니다.",
+            metaBadges=[f"이력 {memory_context.get('history_turns', 0)}턴", f"컬렉션 {memory_context.get('collection') or '미선택'}"]
+        )
+
+        yield self._pipeline_event(
+            "orchestrator",
+            "done",
+            f"실행 경로를 {orchestrator_plan.get('page')} / {orchestrator_plan.get('tab')} 중심으로 확정했습니다.",
+            category=orchestrator_plan.get("category"),
+            page=orchestrator_plan.get("page"),
+            tab=orchestrator_plan.get("tab"),
+            plan=orchestrator_plan.get("plan", []),
+            metaBadges=[orchestrator_plan.get("category"), orchestrator_plan.get("page"), orchestrator_plan.get("tab")]
+        )
+
+        yield self._pipeline_event(
+            "tools",
+            "pending",
+            "필요한 검색/분석/이동 도구 실행을 대기하고 있습니다.",
+            tool_count=0,
+            metaBadges=["0개 실행"]
+        )
+
+        yield self._pipeline_event(
+            "streaming",
+            "running",
+            "SSE 스트림을 열고 실행 상태를 프론트 UI에 전달하고 있습니다.",
+            transport="SSE",
+            mode="실시간 UI",
+            metaBadges=["SSE", "실시간 UI"]
+        )
+
+        # History 복원
+        if history and isinstance(history, list):
+            self._messages = self._sanitize_openai_history(history)
+        else:
+            self._messages = []
+
+        # 최신 System message를 항상 반영
+        if self._messages and self._messages[0].get("role") == "system":
+            self._messages[0]["content"] = system_prompt
+        else:
+            self._messages.insert(0, {"role": "system", "content": system_prompt})
+
+        # 새 user message 추가
+        self._messages.append({"role": "user", "content": message})
+
+        iteration = 0
+        while iteration < self.MAX_ITERATIONS:
+            iteration += 1
+            self._goal_state["iteration"] = iteration
+            progress = self._assess_goal_progress(orchestrator_plan, final_answer_ready=False)
+            active_cluster = self._determine_active_cluster(progress, final_phase=False)
+            self._goal_state["current_cluster"] = active_cluster
+            self._goal_state["allowed_tools"] = self._get_cluster_allowed_tools(active_cluster, orchestrator_plan)
+            self._messages[0]["content"] = self._build_system_prompt(
+                memory_context,
+                orchestrator_plan,
+                active_cluster=active_cluster,
+                goal_progress=self._goal_state,
+            )
+            tool_schemas = self._get_openai_tools_for_cluster(active_cluster, orchestrator_plan)
+            yield self._goal_event(
+                "loop-check",
+                (
+                    f"{iteration}차 점검: 목표 달성에 필요한 남은 항목은 {', '.join(progress.get('missing', [])) or '없음'} 입니다."
+                    if language == "ko" else
+                    f"Iteration {iteration}: remaining items are {', '.join(progress.get('missing', [])) or 'none'}."
+                ),
+                orchestrator_plan=orchestrator_plan,
+                status=progress.get("status", "running")
+            )
+
+            # LLM API 호출
+            try:
+                self._messages = self._sanitize_openai_history(self._messages)
+                api_kwargs = {
+                    "model": self.model,
+                    "messages": self._messages,
+                    "max_tokens": 2400,
+                }
+                if tool_schemas:
+                    api_kwargs["tools"] = tool_schemas
+                    api_kwargs["tool_choice"] = "auto"
+
+                response = client.chat.completions.create(**api_kwargs)
+            except Exception as e:
+                yield {"type": "error", "message": f"LLM API 호출 실패: {str(e)}"}
+                return
+
+            choice = response.choices[0]
+            msg = choice.message
+
+            # assistant message를 히스토리에 저장
+            assistant_msg = {"role": "assistant", "content": msg.content or ""}
+            if msg.tool_calls:
+                assistant_msg["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        }
+                    }
+                    for tc in msg.tool_calls
+                ]
+            self._messages.append(assistant_msg)
+
+            # Tool 호출 직전의 중간 텍스트만 우선 전달
+            if msg.content and msg.tool_calls:
+                yield self._pipeline_event(
+                    "streaming",
+                    "running",
+                    "LLM이 생성한 최종 답변 초안을 스트리밍 UI로 전달하고 있습니다.",
+                    transport="SSE",
+                    mode="답변 스트리밍",
+                    metaBadges=["SSE", "답변 스트리밍"]
+                )
+                quick_preview = self._build_quick_preview_answer(message, orchestrator_plan, language=language)
+                if quick_preview:
+                    quick_preview = self._normalize_final_answer_language(
+                        client,
+                        quick_preview,
+                        message,
+                        language=language,
+                        page_results=list(getattr(self, "_page_result_bank", [])[-1:]),
+                        navigation=self._last_navigation if isinstance(self._last_navigation, dict) else None,
+                    )
+                    yield {"type": "text", "stage": "preview", "content": quick_preview}
+                    self._preview_emitted = True
+
+            if not msg.tool_calls:
+                final_content = msg.content or ""
+                used_tools = any(item.get("role") == "tool" for item in self._messages)
+
+                pre_finish_progress = self._assess_goal_progress(orchestrator_plan, final_answer_ready=bool(final_content.strip()))
+                if pre_finish_progress.get("missing") and iteration < self.MAX_ITERATIONS:
+                    reminder = (
+                        "목표가 아직 완전히 달성되지 않았습니다. 남은 항목을 채우기 위해 추가 도구를 선택하고 반복을 계속하세요. "
+                        f"남은 항목: {', '.join(pre_finish_progress.get('missing', []))}."
+                        if language == "ko" else
+                        f"The goal is not fully satisfied yet. Continue iterating with additional tools. Missing items: {', '.join(pre_finish_progress.get('missing', []))}."
+                    )
+                    self._goal_state["current_cluster"] = "planner"
+                    yield self._goal_event("replan", reminder, orchestrator_plan=orchestrator_plan, status="running")
+                    continue
+
+                if final_content:
+                    self._goal_state["current_cluster"] = "synthesizer"
+                    yield self._pipeline_event(
+                        "orchestrator",
+                        "running",
+                        "검색 근거와 도구 결과를 조합해 고품질 답변 구조로 재정리하고 있습니다.",
+                        category=orchestrator_plan.get("category"),
+                        page=orchestrator_plan.get("page"),
+                        tab=orchestrator_plan.get("tab"),
+                        metaBadges=[orchestrator_plan.get("category"), "답변 재구성"]
+                    )
+                    yield self._pipeline_event(
+                        "memory",
+                        "running",
+                        "세션 메모리와 검색 근거를 결합해 최종 답변에 반영하고 있습니다.",
+                        history_turns=memory_context.get("history_turns", 0),
+                        collection=memory_context.get("collection") or "미선택",
+                        last_topic=memory_context.get("last_topic", ""),
+                        metaBadges=[f"이력 {memory_context.get('history_turns', 0)}턴", f"근거 {len(self._evidence_bank)}건"]
+                    )
+
+                    final_content, self._quality_report = self._refine_final_answer(
+                        client,
+                        message,
+                        final_content,
+                        memory_context,
+                        orchestrator_plan
+                    )
+
+                    synth_ok, synth_detail = self._evaluate_cluster_outcome(
+                        "synthesizer",
+                        final_answer=final_content,
+                    )
+                    self._mark_self_correction(
+                        "passed" if synth_ok else "failed",
+                        synth_detail,
+                        fallback_cluster=None if synth_ok else "planner"
+                    )
+                    if not synth_ok and iteration < self.MAX_ITERATIONS:
+                        strategy = self._select_recovery_strategy("synthesizer", synth_detail)
+                        recovery_input = self._extract_recovery_query_params(message, orchestrator_plan, strategy.get("label", ""))
+                        self._goal_state["recovery_strategy"] = strategy.get("label", "planner 재계획")
+                        self._goal_state["recovery_hint"] = strategy.get("prompt_hint", "")
+                        self._goal_state["recommended_tools"] = self._get_recovery_recommended_tools(
+                            orchestrator_plan,
+                            strategy.get("label", "")
+                        )
+                        self._goal_state["recovery_query"] = recovery_input.get("query", "")
+                        self._goal_state["recovery_params"] = recovery_input.get("params", {})
+                        self._goal_state["current_cluster"] = strategy.get("target_cluster", "planner")
+                        yield self._goal_event(
+                            "self-correction",
+                            f"{synth_detail} → {strategy.get('label', 'planner 재계획')} 전략으로 재시도합니다.",
+                            orchestrator_plan=orchestrator_plan,
+                            status="running"
+                        )
+                        continue
+
+                    if self._messages and self._messages[-1].get("role") == "assistant":
+                        self._messages[-1]["content"] = final_content
+
+                    if self._quality_report:
+                        yield {
+                            "type": "quality",
+                            "stage": self._quality_report.get("stage", "verification"),
+                            "detail": self._quality_report.get("detail", ""),
+                            "answerStyle": self._quality_report.get("answerStyle", ""),
+                            "confidence": self._quality_report.get("confidence", ""),
+                            "evidenceCount": self._quality_report.get("evidenceCount", 0),
+                            "avgScore": self._quality_report.get("avgScore"),
+                            "synthesisPoints": self._quality_report.get("synthesisPoints", []),
+                            "verificationChecks": self._quality_report.get("verificationChecks", []),
+                            "sources": self._quality_report.get("sources", []),
+                        }
+
+                    # Emit evidence_items for accordion UI
+                    evidence_items = (self._quality_report or {}).get("evidence_items", [])
+                    if not evidence_items:
+                        evidence_items = self._build_evidence_items_from_page_results(
+                            list(getattr(self, "_page_result_bank", [])[-3:])
+                        )
+                    if evidence_items:
+                        yield {
+                            "type": "evidence_items",
+                            "items": evidence_items,
+                        }
+
+                    final_progress = self._assess_goal_progress(orchestrator_plan, final_answer_ready=True)
+                    yield self._goal_event(
+                        "goal-reached",
+                        (
+                            f"최종 답변과 handoff 기준으로 목표를 달성했습니다. 남은 항목: {', '.join(final_progress.get('missing', [])) or '없음'}"
+                            if language == "ko" else
+                            f"Goal reached with final answer and handoff. Remaining items: {', '.join(final_progress.get('missing', [])) or 'none'}"
+                        ),
+                        orchestrator_plan=orchestrator_plan,
+                        status="done"
+                    )
+
+                    yield self._pipeline_event(
+                        "orchestrator",
+                        "done",
+                        self._quality_report.get("detail", "답변 구조 재정리를 완료했습니다."),
+                        category=orchestrator_plan.get("category"),
+                        page=orchestrator_plan.get("page"),
+                        tab=orchestrator_plan.get("tab"),
+                        metaBadges=[
+                            orchestrator_plan.get("category"),
+                            self._quality_report.get("answerStyle", "근거 통합 응답" if language == "ko" else "Grounded synthesis answer"),
+                            self._quality_report.get("confidence", "중간" if language == "ko" else "Medium"),
+                        ]
+                    )
+                    yield self._pipeline_event(
+                        "memory",
+                        "done",
+                        (
+                            f"세션 메모리와 검색 근거 {self._quality_report.get('evidenceCount', 0)}건을 결합해 최종 답변을 정제했습니다."
+                            if language == "ko" else
+                            f"Merged session memory with {self._quality_report.get('evidenceCount', 0)} evidence items for the final answer."
+                        ),
+                        history_turns=memory_context.get("history_turns", 0),
+                        collection=memory_context.get("collection") or "미선택",
+                        last_topic=memory_context.get("last_topic", ""),
+                        metaBadges=[
+                            f"이력 {memory_context.get('history_turns', 0)}턴",
+                            f"근거 {self._quality_report.get('evidenceCount', 0)}건",
+                        ]
+                    )
+                    yield self._pipeline_event(
+                        "streaming",
+                        "running",
+                        "근거 조합과 품질 검증을 거친 답변을 스트리밍 UI로 전달하고 있습니다.",
+                        transport="SSE",
+                        mode="품질 보강 답변",
+                        metaBadges=["SSE", "품질 보강"]
+                    )
+                    # _refine_final_answer already normalizes internally;
+                    # skip the redundant second normalization that was converting paragraphs back to bullets.
+                    yield {"type": "text", "stage": "verification", "content": final_content}
+
+                if not used_tools:
+                    yield self._pipeline_event(
+                        "tools",
+                        "skipped",
+                        "추가 도구 없이 프롬프트와 메모리만으로 답변을 생성했습니다.",
+                        tool_count=0,
+                        metaBadges=["도구 미사용"]
+                    )
+                else:
+                    yield self._pipeline_event(
+                        "tools",
+                        "done",
+                        (
+                            f"수집된 근거 {len(self._evidence_bank)}건과 도구 결과를 답변 구조에 반영했습니다."
+                            if language == "ko" else
+                            f"Integrated tool outputs and {len(self._evidence_bank)} evidence items into the final answer."
+                        ),
+                        tool_count=len([item for item in self._messages if item.get("role") == "tool"]),
+                        metaBadges=[f"근거 {len(self._evidence_bank)}건", self._quality_report.get("confidence", "중간" if language == "ko" else "Medium")]
+                    )
+
+                yield self._pipeline_event(
+                    "streaming",
+                    "done",
+                    "스트리밍 UI에 최종 답변 반영을 완료했습니다.",
+                    transport="SSE",
+                    mode="완료",
+                    metaBadges=["SSE 완료", "최종 답변"]
+                )
+                yield {"type": "done", "content": ""}
+                return
+
+            # Tool 순차 실행
+            tool_counter = 0
+            should_replan = False
+            for tc in msg.tool_calls:
+                tool_name = tc.function.name
+                try:
+                    tool_input = json.loads(tc.function.arguments)
+                except Exception:
+                    tool_input = {}
+                tool_input = self._prepare_tool_input(tool_name, tool_input)
+
+                tool_counter += 1
+
+                yield self._pipeline_event(
+                    "tools",
+                    "running",
+                    f"{tool_name} 도구를 실행해 근거와 후속 액션을 수집하고 있습니다.",
+                    tool_name=tool_name,
+                    tool_count=tool_counter,
+                    metaBadges=[f"{tool_counter}개 실행", tool_name]
+                )
+
+                yield {
+                    "type": "tool_use",
+                    "id": tc.id,
+                    "name": tool_name,
+                    "input": tool_input
+                }
+
+                result = self._execute_tool(tool_name, tool_input)
+                evidence_rows = self._collect_evidence(tool_name, tool_input, result)
+                self._collect_tool_output(tool_name, tool_input, result)
+                if not self._preview_emitted:
+                    quick_preview = self._build_quick_preview_answer(message, orchestrator_plan, language=language)
+                    if quick_preview:
+                        quick_preview = self._normalize_final_answer_language(
+                            client,
+                            quick_preview,
+                            message,
+                            language=language,
+                            page_results=list(getattr(self, "_page_result_bank", [])[-1:]),
+                            navigation=self._last_navigation if isinstance(self._last_navigation, dict) else None,
+                        )
+                        yield {
+                            "type": "text",
+                            "stage": "preview",
+                            "content": quick_preview
+                        }
+                        self._preview_emitted = True
+                progress_after_tool = self._assess_goal_progress(orchestrator_plan, final_answer_ready=False)
+                self._goal_state["current_cluster"] = self._determine_active_cluster(progress_after_tool, final_phase=False)
+
+                source_cluster = active_cluster
+                eval_ok, eval_detail = self._evaluate_cluster_outcome(
+                    source_cluster,
+                    tool_name=tool_name,
+                    result=result,
+                    evidence_rows=evidence_rows,
+                )
+                self._mark_self_correction(
+                    "passed" if eval_ok else "failed",
+                    eval_detail,
+                    fallback_cluster=None if eval_ok else "planner"
+                )
+
+                # Tool 결과를 히스토리에 추가 (OpenAI format)
+                self._messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+                })
+
+                yield {
+                    "type": "tool_result",
+                    "id": tc.id,
+                    "name": tool_name,
+                    "result": result
+                }
+
+                yield self._goal_event(
+                    "post-tool",
+                    (
+                        f"{tool_name} 실행 후 목표를 다시 점검했습니다. 남은 항목: {', '.join(progress_after_tool.get('missing', [])) or '없음'}"
+                        if language == "ko" else
+                        f"Re-checked goal after {tool_name}. Remaining items: {', '.join(progress_after_tool.get('missing', [])) or 'none'}"
+                    ),
+                    orchestrator_plan=orchestrator_plan,
+                    status=progress_after_tool.get("status", "running")
+                )
+
+                if not eval_ok and iteration < self.MAX_ITERATIONS:
+                    strategy = self._select_recovery_strategy(source_cluster, eval_detail)
+                    recovery_input = self._extract_recovery_query_params(message, orchestrator_plan, strategy.get("label", ""))
+                    self._goal_state["recovery_strategy"] = strategy.get("label", "planner 재계획")
+                    self._goal_state["recovery_hint"] = strategy.get("prompt_hint", "")
+                    self._goal_state["recommended_tools"] = self._get_recovery_recommended_tools(
+                        orchestrator_plan,
+                        strategy.get("label", "")
+                    )
+                    self._goal_state["recovery_query"] = recovery_input.get("query", "")
+                    self._goal_state["recovery_params"] = recovery_input.get("params", {})
+                    self._goal_state["current_cluster"] = strategy.get("target_cluster", "planner")
+                    yield self._goal_event(
+                        "self-correction",
+                        f"{eval_detail} → {strategy.get('label', 'planner 재계획')} 전략으로 재시도합니다.",
+                        orchestrator_plan=orchestrator_plan,
+                        status="running"
+                    )
+                    should_replan = True
+
+                if evidence_rows:
+                    evidence_report = self._build_quality_report(
+                        language=language,
+                        stage="evidence",
+                        detail=(
+                            f"상위 근거 {len(evidence_rows[:5])}건을 수집해 답변 조합용 evidence bank를 구성했습니다."
+                            if language == "ko" else
+                            f"Collected {len(evidence_rows[:5])} top evidence items for answer synthesis."
+                        ),
+                        answer_style=("근거 조합 준비" if language == "ko" else "Evidence synthesis prep"),
+                        confidence=("중간" if language == "ko" else "Medium")
+                    )
+                    self._quality_report = evidence_report
+                    yield {
+                        "type": "quality",
+                        "stage": evidence_report.get("stage", "evidence"),
+                        "detail": evidence_report.get("detail", ""),
+                        "answerStyle": evidence_report.get("answerStyle", ""),
+                        "confidence": evidence_report.get("confidence", ""),
+                        "evidenceCount": evidence_report.get("evidenceCount", 0),
+                        "avgScore": evidence_report.get("avgScore"),
+                        "synthesisPoints": evidence_report.get("synthesisPoints", []),
+                        "verificationChecks": evidence_report.get("verificationChecks", []),
+                        "sources": evidence_report.get("sources", []),
+                    }
+
+                yield self._pipeline_event(
+                    "tools",
+                    "running",
+                    f"{tool_name} 결과를 메모리와 최종 답변 컨텍스트에 반영했습니다.",
+                    tool_name=tool_name,
+                    tool_count=tool_counter,
+                    metaBadges=[f"{tool_counter}개 완료", tool_name]
+                )
+
+                if should_replan:
+                    break
+
+            if should_replan:
+                continue
+
+            # finish_reason 확인
+            if choice.finish_reason == "stop":
+                yield self._pipeline_event(
+                    "streaming",
+                    "done",
+                    "도구 실행과 최종 답변 생성이 완료되어 스트리밍 UI 반영을 마쳤습니다.",
+                    transport="SSE",
+                    mode="완료",
+                    metaBadges=["SSE 완료", "최종 답변"]
+                )
+                yield {"type": "done", "content": ""}
+                return
+
+        # 최대 반복 초과
+        yield {"type": "error", "message": "Agent가 최대 반복 횟수에 도달했습니다."}
+
+    # =========================================================================
+    # Tool 실행
+    # =========================================================================
+    def _execute_tool(self, name, tool_input):
+        if name not in self._tools:
+            return f"Error: Unknown tool '{name}'"
+        try:
+            prepared_input = self._prepare_tool_input(name, tool_input)
+            return self._tools[name].execute(**prepared_input)
+        except Exception as e:
+            return f"Error executing {name}: {str(e)}"
+
+    def _prepare_tool_input(self, name, tool_input):
+        prepared = dict(tool_input) if isinstance(tool_input, dict) else {}
+        if name == "navigate_to_page":
+            return self._prepare_navigation_input(prepared)
+        if name == "read_page_results":
+            return self._prepare_read_page_results_input(prepared)
+        return prepared
+
+    def _prepare_read_page_results_input(self, tool_input):
+        prepared = dict(tool_input or {})
+        plan = dict(getattr(self, "_orchestrator_plan", {}) or {})
+        latest_page_result = self._page_result_bank[-1] if self._page_result_bank else {}
+        latest_page_result = latest_page_result if isinstance(latest_page_result, dict) else {}
+
+        # Plan page/tab must win to keep plan↔execution consistent.
+        plan_page = (plan.get("page") or "").strip()
+        plan_tab = (plan.get("tab") or "").strip()
+        page = (prepared.get("page") or latest_page_result.get("page") or plan_page or "").strip()
+        tab = (prepared.get("tab") or latest_page_result.get("tab") or plan_tab or "").strip()
+        if plan_page:
+            page = plan_page
+        if plan_tab:
+            tab = plan_tab
+
+        raw_query = prepared.get("query")
+        query = raw_query.strip() if isinstance(raw_query, str) else ""
+        if not query:
+            query = (
+                (latest_page_result.get("query", "") or "").strip()
+                or " ".join(plan.get("keywords", [])[:2]).strip()
+                or (getattr(self, "_last_user_message", "") or "").strip()[:48]
+            )
+
+        # Collection resolution mirrors navigation input.
+        params = prepared.get("params") if isinstance(prepared.get("params"), dict) else {}
+        collection = (
+            (prepared.get("collection") or "").strip()
+            or (params.get("collection") or "").strip()
+            or (latest_page_result.get("collection") or "").strip()
+            or (self.collection or "").strip()
+            or (self._tool_context.get("collection", "") or "").strip()
+        )
+
+        if page:
+            prepared["page"] = page
+        if tab:
+            prepared["tab"] = tab
+        if query:
+            prepared["query"] = query
+        if params:
+            prepared["params"] = params
+        if collection:
+            prepared["collection"] = collection
+            self.collection = collection
+            self._tool_context["collection"] = collection
+
+        return prepared
+
+    def _prepare_navigation_input(self, tool_input):
+        prepared = dict(tool_input or {})
+        plan = dict(getattr(self, "_orchestrator_plan", {}) or {})
+        latest_page_result = self._page_result_bank[-1] if self._page_result_bank else {}
+        latest_page_result = latest_page_result if isinstance(latest_page_result, dict) else {}
+        last_navigation = self._last_navigation if isinstance(self._last_navigation, dict) else {}
+
+        plan_page = (plan.get("page") or "").strip()
+        plan_tab = (plan.get("tab") or "").strip()
+        page = (prepared.get("page") or latest_page_result.get("page") or plan_page or last_navigation.get("page") or "").strip()
+        tab = (prepared.get("tab") or latest_page_result.get("tab") or plan_tab or last_navigation.get("tab") or "").strip()
+        if plan_page:
+            page = plan_page
+        if plan_tab:
+            tab = plan_tab
+
+        seed_plan = {
+            "page": page,
+            "tab": tab,
+            "keywords": list(plan.get("keywords", [])),
+        }
+        inferred = self._extract_recovery_query_params(
+            getattr(self, "_last_user_message", ""),
+            seed_plan,
+            self._goal_state.get("recovery_strategy", "")
+        )
+
+        raw_query = prepared.get("query")
+        query = raw_query.strip() if isinstance(raw_query, str) else ""
+        if not query:
+            query = (
+                (self._goal_state.get("recovery_query", "") or "").strip()
+                or (latest_page_result.get("query", "") or "").strip()
+                or (inferred.get("query", "") or "").strip()
+                or " ".join(plan.get("keywords", [])[:2]).strip()
+                or (getattr(self, "_last_user_message", "") or "").strip()[:48]
+            )
+
+        merged_params = {}
+        inferred_params = inferred.get("params", {})
+        if isinstance(inferred_params, dict):
+            merged_params.update(inferred_params)
+
+        page_params = latest_page_result.get("params", {})
+        if isinstance(page_params, dict):
+            merged_params.update(page_params)
+
+        recovery_params = self._goal_state.get("recovery_params", {})
+        if isinstance(recovery_params, dict):
+            merged_params.update(recovery_params)
+
+        input_params = prepared.get("params", {})
+        if isinstance(input_params, dict):
+            merged_params.update(input_params)
+
+        collection = (
+            (prepared.get("collection") or "").strip()
+            or (merged_params.get("collection") or "").strip()
+            or (latest_page_result.get("collection") or "").strip()
+            or (self.collection or "").strip()
+            or (self._tool_context.get("collection", "") or "").strip()
+        )
+        if collection:
+            merged_params["collection"] = collection
+            self.collection = collection
+            self._tool_context["collection"] = collection
+
+        if page:
+            prepared["page"] = page
+        if tab:
+            prepared["tab"] = tab
+        if query:
+            prepared["query"] = query
+        if merged_params:
+            prepared["params"] = merged_params
+
+        return prepared
+
+    # =========================================================================
+    # Helpers
+    # =========================================================================
+    def _get_openai_tools(self):
+        return [t.to_openai_tool() for t in self._tools.values()]
+
+    def get_tools(self):
+        return [{"name": t.name, "description": t.description} for t in self._tools.values()]
+
+    def get_history(self):
+        return list(self._messages)
+
+    def clear_history(self):
+        self._messages = []
+
+Model = Agent

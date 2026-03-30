@@ -6,18 +6,9 @@ import sys
 import json
 
 from base_tool import BaseTool
+from common import normalize_collection_info
 
-MODEL_REGISTRY = {
-    "snunlp/KR-SBERT-V40K-klueNLI-augSTS": {"dim": 768, "short_name": "KR-SBERT"},
-    "BM-K/KoSimCSE-roberta-multitask": {"dim": 768, "short_name": "KoSimCSE"},
-    "jhgan/ko-sroberta-multitask": {"dim": 768, "short_name": "ko-sroberta"},
-    "sentence-transformers/all-MiniLM-L6-v2": {"dim": 384, "short_name": "MiniLM-L6"},
-    "sentence-transformers/all-mpnet-base-v2": {"dim": 768, "short_name": "MPNet"},
-    "BAAI/bge-base-en-v1.5": {"dim": 768, "short_name": "BGE-base"},
-    "intfloat/multilingual-e5-large": {"dim": 1024, "short_name": "mE5-Large"},
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {"dim": 384, "short_name": "MiniLM-L12"}
-}
-
+MODEL_REGISTRY = wiz.model("modelregistry").compact()
 
 class GetCollectionsTool(BaseTool):
     name = "get_collections"
@@ -52,7 +43,7 @@ class GetCollectionsTool(BaseTool):
 
         lines = [f"Available collections ({len(col_names)}):\n"]
         for name in sorted(col_names):
-            info = meta.get(name, {})
+            info = normalize_collection_info(meta.get(name, {}))
             model_name = info.get("model", "unknown")
             short_name = info.get("short_name", MODEL_REGISTRY.get(model_name, {}).get("short_name", "Unknown"))
             dim = info.get("dim", "?")

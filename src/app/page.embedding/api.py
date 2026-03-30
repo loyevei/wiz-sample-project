@@ -27,6 +27,7 @@ except ImportError:
 # ==============================================================================
 MILVUS_URI = os.environ.get("MILVUS_URI", "/opt/app/data/milvus.db")
 COLLECTION_META_PATH = "/opt/app/data/collection_meta.json"
+DATA_DIR = "/opt/app/data"
 DEFAULT_COLLECTION = "plasma_papers"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_CHUNK_OVERLAP = 100
@@ -34,49 +35,8 @@ DEFAULT_CHUNK_OVERLAP = 100
 # ==============================================================================
 # 모델 레지스트리
 # ==============================================================================
-MODEL_REGISTRY = {
-    "snunlp/KR-SBERT-V40K-klueNLI-augSTS": {
-        "name": "snunlp/KR-SBERT-V40K-klueNLI-augSTS",
-        "dim": 768, "description": "한국어 최적화 SBERT (KlueNLI + augSTS)",
-        "lang": "ko", "short_name": "KR-SBERT", "max_seq_length": 128
-    },
-    "BM-K/KoSimCSE-roberta-multitask": {
-        "name": "BM-K/KoSimCSE-roberta-multitask",
-        "dim": 768, "description": "한국어 SimCSE RoBERTa 멀티태스크",
-        "lang": "ko", "short_name": "KoSimCSE", "max_seq_length": 512
-    },
-    "jhgan/ko-sroberta-multitask": {
-        "name": "jhgan/ko-sroberta-multitask",
-        "dim": 768, "description": "한국어 SRoBERTa 멀티태스크",
-        "lang": "ko", "short_name": "ko-sroberta", "max_seq_length": 512
-    },
-    "sentence-transformers/all-MiniLM-L6-v2": {
-        "name": "sentence-transformers/all-MiniLM-L6-v2",
-        "dim": 384, "description": "영어 경량 MiniLM (고속 추론)",
-        "lang": "en", "short_name": "MiniLM-L6", "max_seq_length": 256
-    },
-    "sentence-transformers/all-mpnet-base-v2": {
-        "name": "sentence-transformers/all-mpnet-base-v2",
-        "dim": 768, "description": "영어 고성능 MPNet",
-        "lang": "en", "short_name": "MPNet", "max_seq_length": 384
-    },
-    "BAAI/bge-base-en-v1.5": {
-        "name": "BAAI/bge-base-en-v1.5",
-        "dim": 768, "description": "영어 BGE base (BAAI)",
-        "lang": "en", "short_name": "BGE-base", "max_seq_length": 512
-    },
-    "intfloat/multilingual-e5-large": {
-        "name": "intfloat/multilingual-e5-large",
-        "dim": 1024, "description": "다국어 E5 Large (한국어 지원)",
-        "lang": "multi", "short_name": "mE5-Large", "max_seq_length": 512
-    },
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {
-        "name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        "dim": 384, "description": "경량 다국어 MiniLM (빠른 추론)",
-        "lang": "multi", "short_name": "MiniLM-L12", "max_seq_length": 128
-    }
-}
-DEFAULT_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
+MODEL_REGISTRY = wiz.model("modelregistry").full()
+DEFAULT_MODEL = wiz.model("modelregistry").default_model()
 
 # ==============================================================================
 # 청킹 전략 레지스트리
@@ -163,6 +123,23 @@ MATH_CHARS = set("∫∑∂√∞±×÷≈≠≤≥∈∉⊂⊃∪∩∀∃∅�
 FIGURE_PATTERNS = re.compile(r'^\s*(Fig\.?|Figure|그림|FIGURE|fig\.?)\s*\.?\s*\d', re.IGNORECASE)
 TABLE_CAPTION_PATTERNS = re.compile(r'^\s*(Table|표|TABLE)\s*\.?\s*\d', re.IGNORECASE)
 SPECIAL_MARKER = re.compile(r'\[(FIGURE|EQUATION|TABLE):\s')
+TEMPORAL_SIGNAL_PATTERNS = {
+    "online_year": [
+        r'available\s+online[\s\S]{0,80}?((?:19|20)\d{2})',
+        r'online[\s\S]{0,40}?((?:19|20)\d{2})',
+    ],
+    "publication_year": [
+        r'published[\s\S]{0,80}?((?:19|20)\d{2})',
+        r'\b(?:applied|journal|vacuum|thin solid films|materials science|micromachines|physics)\b[^\n]{0,60}\(((?:19|20)\d{2})\)',
+        r'\(((?:19|20)\d{2})\)',
+    ],
+    "accepted_year": [
+        r'accepted[\s\S]{0,80}?((?:19|20)\d{2})',
+    ],
+    "received_year": [
+        r'received[\s\S]{0,80}?((?:19|20)\d{2})',
+    ],
+}
 
 # ==============================================================================
 # sys 모듈 캐시
@@ -190,13 +167,8 @@ def _get_client():
 # 컬렉션 메타데이터 관리
 # ==============================================================================
 def _load_collection_meta():
-    if os.path.exists(COLLECTION_META_PATH):
-        try:
-            with open(COLLECTION_META_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    meta_helper = wiz.model("collectionmeta")
+    return meta_helper.load(COLLECTION_META_PATH)
 
 def _save_collection_meta(meta):
     os.makedirs(os.path.dirname(COLLECTION_META_PATH), exist_ok=True)
@@ -204,17 +176,12 @@ def _save_collection_meta(meta):
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
 def _get_collection_model(collection_name):
-    meta = _load_collection_meta()
-    info = meta.get(collection_name, {})
-    return info.get("model", DEFAULT_MODEL)
+    meta_helper = wiz.model("collectionmeta")
+    return meta_helper.get_model(COLLECTION_META_PATH, collection_name, DEFAULT_MODEL)
 
 def _infer_model_from_dim(dim):
-    dim_to_models = {}
-    for name, info in MODEL_REGISTRY.items():
-        d = info["dim"]
-        if d not in dim_to_models:
-            dim_to_models[d] = name
-    return dim_to_models.get(dim, DEFAULT_MODEL)
+    registry = wiz.model("modelregistry")
+    return registry.infer_model_from_dim(dim, DEFAULT_MODEL)
 
 
 def _get_collection_fields(client, collection_name):
@@ -686,6 +653,113 @@ def _split_sentences(text):
             sentences.append(part)
     return sentences if sentences else [text]
 
+
+def _extract_temporal_signals(text):
+    text = (text or "").strip()
+    signals = {
+        "publication_year": "",
+        "online_year": "",
+        "accepted_year": "",
+        "received_year": "",
+    }
+    if not text:
+        return signals
+
+    for key, patterns in TEMPORAL_SIGNAL_PATTERNS.items():
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if not match:
+                continue
+            year = match.group(1)
+            try:
+                year_int = int(year)
+                if 1900 <= year_int <= 2100:
+                    signals[key] = str(year_int)
+                    break
+            except Exception:
+                pass
+
+    return signals
+
+
+def _build_temporal_metadata_prefix(full_text, pages_data=None):
+    candidate_parts = []
+
+    if pages_data:
+        first_page = pages_data[0] if len(pages_data) > 0 else None
+        if first_page:
+            first_page_texts = []
+            for block in first_page.get("blocks", []):
+                content = (block.get("content", "") or "").strip()
+                if content:
+                    first_page_texts.append(content)
+            if first_page_texts:
+                candidate_parts.append("\n".join(first_page_texts[:40]))
+
+    head_text = (full_text or "")[:5000].strip()
+    if head_text:
+        candidate_parts.append(head_text)
+
+    if not candidate_parts:
+        return ""
+
+    merged = "\n\n".join(candidate_parts)
+    signals = _extract_temporal_signals(merged)
+    parts = []
+
+    publication_year = signals.get("publication_year", "")
+    online_year = signals.get("online_year", "")
+    accepted_year = signals.get("accepted_year", "")
+    received_year = signals.get("received_year", "")
+
+    if publication_year:
+        parts.append(f"Published {publication_year}")
+    if online_year:
+        parts.append(f"Available online {online_year}")
+    if accepted_year:
+        parts.append(f"Accepted {accepted_year}")
+    if received_year:
+        parts.append(f"Received {received_year}")
+
+    if not parts:
+        return ""
+
+    return "Publication timeline: " + ". ".join(parts) + "."
+
+
+def _enrich_chunks_with_temporal_metadata(chunks, full_text, pages_data=None, max_chunks=5):
+    prefix = _build_temporal_metadata_prefix(full_text, pages_data=pages_data)
+    if not prefix:
+        return chunks
+
+    enriched = 0
+    for chunk in chunks:
+        if enriched >= max_chunks:
+            break
+
+        chunk_type = (chunk.get("chunk_type", "") or "text").strip()
+        if chunk_type not in ("text", "mixed"):
+            continue
+
+        text = (chunk.get("text", "") or "").strip()
+        if not text:
+            continue
+
+        lower = text.lower()
+        if any(token in lower for token in [
+            "publication timeline:",
+            "available online",
+            "accepted ",
+            "received ",
+            "published ",
+        ]):
+            continue
+
+        chunk["text"] = f"{prefix}\n\n{text}".strip()
+        enriched += 1
+
+    return chunks
+
 # ==============================================================================
 # 청크 타입 감지
 # ==============================================================================
@@ -765,6 +839,9 @@ def _chunk_text(text, strategy="semantic_section", chunk_size=DEFAULT_CHUNK_SIZE
     # 페이지 번호 매핑
     if pages_data:
         _assign_page_numbers(chunks, pages_data)
+
+    # 논문 접수/채택/온라인 공개 연도 메타를 초기 청크에 보강
+    chunks = _enrich_chunks_with_temporal_metadata(chunks, text, pages_data=pages_data)
 
     # 빈 청크 제거
     chunks = [c for c in chunks if c.get("text", "").strip()]
@@ -1275,11 +1352,12 @@ def collections():
         client = _get_client()
         col_names = client.list_collections()
         meta = _load_collection_meta()
+        meta_helper = wiz.model("collectionmeta")
         meta_updated = False
 
         result = []
         for name in col_names:
-            info = meta.get(name, {})
+            info = meta_helper.normalize_info(meta.get(name, {}))
             if not info or info.get("short_name") == "Unknown":
                 try:
                     col_info = client.describe_collection(name)
@@ -1540,6 +1618,13 @@ def upload():
         # 4. Milvus 저장
         client = _ensure_collection(collection_name, model_name)
         doc_id = str(uuid.uuid4())[:8]
+
+        # 4-1. PDF 원본 영구 저장 (검색 결과에서 원문 조회용)
+        pdf_dir = os.path.join(DATA_DIR, "pdfs", collection_name)
+        os.makedirs(pdf_dir, exist_ok=True)
+        pdf_dest = os.path.join(pdf_dir, f"{doc_id}.pdf")
+        import shutil
+        shutil.copy2(tmp_path, pdf_dest)
 
         # 스키마 필드 존재 여부 확인 (하위 호환)
         has_extended_fields = True

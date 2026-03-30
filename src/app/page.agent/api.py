@@ -1,11 +1,19 @@
 import json
 import season.lib.exception
 
-struct = wiz.model("struct")
+def _load_agent_class():
+    """Hot-load Agent class from the latest built source to avoid runtime cache issues.
+
+    This enables applying Python changes via build without server restart.
+    """
+    hotload = wiz.model("hotload")
+    return hotload.load_symbol("model/struct/agent.py", "Agent", name_prefix="wiz_hot_agent")
 
 def agent_tools():
     """등록된 Tool 목록 반환"""
-    agent = struct.agent()
+    struct = wiz.model("struct")
+    AgentClass = _load_agent_class()
+    agent = AgentClass(struct)
     tools = agent.get_tools()
     wiz.response.status(200, tools)
 
@@ -27,8 +35,10 @@ def agent_chat():
     except Exception:
         history = []
 
-    # Agent 인스턴스 생성 (collection 전달)
-    agent = struct.agent(collection=collection)
+    # Agent 인스턴스 생성 (collection 전달) — hot-loaded to reflect latest build without restart
+    struct = wiz.model("struct")
+    AgentClass = _load_agent_class()
+    agent = AgentClass(struct, collection=collection)
 
     # SSE Generator
     def generate():

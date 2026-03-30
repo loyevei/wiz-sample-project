@@ -1,134 +1,242 @@
-div(class="flex flex-col h-full bg-white")
+//- Full-page Agent Chat — matches floating chatbot design
+div(class="flex flex-col h-full w-full bg-white")
+
     //- Header
-    div(class="flex items-center justify-between border-b border-gray-200 px-6 py-3 flex-shrink-0")
-        div(class="flex items-center gap-3")
-            div(class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 text-white")
+    div(class="flex items-start justify-between gap-4 border-b border-fuchsia-100 bg-gradient-to-r from-slate-950 via-violet-950 to-fuchsia-950 px-6 py-5 text-white")
+        div(class="flex min-w-0 items-center gap-4")
+            div(class="flex h-14 w-14 items-center justify-center rounded-2xl border border-fuchsia-300/30 bg-white/10 p-1.5")
+                img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-xl object-cover")
+            div(class="min-w-0")
+                div(class="flex items-center gap-2")
+                    span(class="text-[16px] font-semibold") {{robotProfile.name}}
+                    span(*ngIf="robotProfile.tag", class="inline-flex items-center rounded-full border border-fuchsia-300/30 bg-fuchsia-400/10 px-2.5 py-0.5 text-[10px] font-semibold tracking-[0.2em] text-fuchsia-100") {{robotProfile.tag}}
+                p(class="mt-1 text-[12px] leading-5 text-fuchsia-100/80") {{robotProfile.subtitle}}
+        div(class="flex flex-shrink-0 items-center gap-2")
+            button(*ngIf="collectionSelected && selectedCollection", (click)="changeCollection()", class="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-[11px] font-medium text-fuchsia-50 transition-colors hover:bg-white/20", title="컬렉션 변경")
+                span 📦
+                span(class="max-w-[120px] truncate") {{selectedCollection}}
+            button((click)="clearChat()", class="rounded-lg p-2 text-fuchsia-100/80 transition-colors hover:bg-white/10 hover:text-white", title="대화 초기화")
                 svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-5")
-                    path(stroke-linecap="round", stroke-linejoin="round", d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z")
-            h1(class="text-lg font-semibold text-gray-900") AI Research Assistant
-        div(class="flex items-center gap-2")
-            //- Tool count badge
-            div(*ngIf="availableTools.length > 0", class="flex items-center gap-1 px-2 py-1 bg-violet-50 text-violet-600 rounded-full text-xs font-medium")
-                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3.5")
-                    path(stroke-linecap="round", stroke-linejoin="round", d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z")
-                span {{availableTools.length}} tools
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182")
 
-            //- Clear button
-            button((click)="clearChat()", class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors", title="대화 초기화")
-                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4")
-                    path(stroke-linecap="round", stroke-linejoin="round", d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0")
+    //- Collection Selection Screen
+    div(*ngIf="!collectionSelected", class="flex-1 min-h-0 overflow-y-auto bg-slate-50 px-6 py-8")
+        div(class="flex h-full flex-col items-center justify-center")
+            div(*ngIf="collectionsLoading", class="flex flex-col items-center gap-4")
+                div(class="h-14 w-14 rounded-full border-[3px] border-cyan-400 border-t-transparent animate-spin")
+                p(class="text-[14px] text-slate-500") 데이터베이스 로딩 중...
+            div(*ngIf="!collectionsLoading", class="w-full max-w-xl")
+                div(class="mb-8 text-center")
+                    div(class="mx-auto mb-5 flex h-28 w-28 items-center justify-center rounded-[32px] border border-fuchsia-200 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-4 shadow-[0_24px_50px_rgba(88,28,135,0.2)]")
+                        img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-[22px] object-cover")
+                    p(class="text-[18px] font-semibold text-slate-900") {{robotProfile.name}}
+                    p(class="mt-2 text-[13px] leading-6 text-slate-500 max-w-md mx-auto") 논문 검색에 사용할 컬렉션을 선택하면 실제 에이전트 오케스트레이션 실행 상태를 실시간으로 보여드립니다.
+                div(*ngIf="collections.length === 0", class="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center")
+                    p(class="text-[14px] font-medium text-slate-600") 사용 가능한 컬렉션이 없습니다.
+                    p(class="mt-2 text-[12px] text-slate-400") 먼저 임베딩 페이지에서 PDF를 업로드하세요.
+                div(*ngIf="collections.length > 0", class="space-y-4")
+                    div(class="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/60 px-5 py-4 text-[13px] text-fuchsia-800")
+                        span(class="font-semibold") AGENT READY
+                        span(class="ml-2 text-fuchsia-700/80") 컬렉션 선택 후 오케스트레이션 계획, 참고 문헌, 도구 실행 로그를 함께 표시합니다.
+                    div(class="flex flex-wrap gap-2")
+                        button(*ngFor="let col of collections", (click)="selectCollection(col.name)", class="inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-[13px] font-medium transition-all", [ngClass]="selectedCollection === col.name ? 'border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700 shadow ring-1 ring-fuchsia-200' : 'border-slate-200 bg-white text-slate-700 hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-700'")
+                            span(class="text-base") 📄
+                            span {{col.name}}
+                            span(class="text-[11px] text-slate-400") {{col.total_docs}} docs
 
-    //- Chat Messages Area
-    div(#chatContainer="", class="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4")
-        //- Welcome message (no messages yet)
-        div(*ngIf="chatMessages.length === 0", class="flex flex-col items-center justify-center h-full text-center")
-            div(class="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-4")
-                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-8 text-white")
-                    path(stroke-linecap="round", stroke-linejoin="round", d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z")
-            h2(class="text-lg font-semibold text-gray-900 mb-2") 플라즈마 연구 AI 어시스턴트
-            p(class="text-[13px] text-gray-500 max-w-md") 논문 검색, 공정 예측, 진단 분석, 이론 연구 등 플라즈마 연구를 도와드립니다. 질문하시면 해당 연구 도구 페이지로 안내해 드립니다.
+    //- Chat Body
+    div(*ngIf="collectionSelected", #chatBody="", class="flex-1 min-h-0 overflow-y-auto bg-[linear-gradient(180deg,#fdf4ff_0%,#faf5ff_48%,#f8fafc_100%)] px-6 py-6 space-y-5")
 
-            //- Domain Cards Grid
-            div(class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6 w-full max-w-2xl")
-                a(*ngFor="let card of domainCards", [href]="card.url", class="group block p-3 bg-gray-50 hover:bg-violet-50 rounded-xl border border-gray-200 hover:border-violet-300 transition-all text-left")
-                    div(class="flex items-center gap-2 mb-1")
-                        span(class="text-lg") {{getPageConfig(card.page).icon}}
-                        span(class="text-[13px] font-semibold text-gray-900 group-hover:text-violet-700") {{getPageConfig(card.page).label_ko}}
-                    p(class="text-[11px] text-gray-500 group-hover:text-violet-500 line-clamp-2") {{card.desc}}
+        //- Welcome Screen (no messages)
+        div(*ngIf="chatMessages.length === 0", class="flex h-full flex-col items-center justify-center text-center")
+            div(class="relative mb-5 flex h-28 w-28 items-center justify-center rounded-[32px] border border-fuchsia-200 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-4 shadow-[0_28px_60px_rgba(88,28,135,0.18)]")
+                img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-[22px] object-cover")
+            p(class="text-[18px] font-semibold text-slate-900") {{robotProfile.name}}
+            p(class="mt-2 max-w-lg text-[13px] leading-6 text-slate-500") 군집형 에이전트가 목표 달성 전까지 계획·수집·분석·정리를 반복하면서 페이지 결과 기반 답변을 만듭니다.
+            div(class="mt-6 grid w-full max-w-lg grid-cols-2 gap-3")
+                button(*ngFor="let s of suggestions", (click)="sendChat(s.text)", class="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-[13px] text-slate-600 transition-all hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-700")
+                    span(class="text-lg") {{s.icon}}
+                    span(class="truncate") {{s.text}}
 
-            div(class="flex flex-wrap gap-2 mt-6 justify-center")
-                button(*ngFor="let q of ['플라즈마 에칭 선택비 향상 방법은?', 'RF power가 식각 속도에 미치는 영향은?', 'OES와 Langmuir probe 비교해줘', 'Boltzmann 방정식 관련 이론 분석해줘']", (click)="chatInput = q; sendChat()", class="px-3 py-1.5 bg-gray-100 hover:bg-violet-50 text-gray-600 hover:text-violet-700 rounded-full text-xs transition-colors")
-                    | {{q}}
-
-        //- Message list
+        //- Messages
         ng-container(*ngFor="let msg of chatMessages; let i = index")
             //- User message
             div(*ngIf="msg.role === 'user'", class="flex justify-end")
-                div(class="max-w-[75%]")
-                    div(*ngIf="msg.collapsed", (click)="toggleCollapse(i)", class="px-4 py-2 bg-indigo-50 text-indigo-400 rounded-2xl rounded-br-md text-xs cursor-pointer hover:bg-indigo-100 truncate max-w-[200px]")
-                        | {{msg.content}}
-                    div(*ngIf="!msg.collapsed", class="px-4 py-2.5 bg-indigo-600 text-white rounded-2xl rounded-br-md text-[13px] leading-relaxed whitespace-pre-wrap")
-                        | {{msg.content}}
+                div(class="max-w-[70%] rounded-3xl rounded-br-md bg-fuchsia-600 px-5 py-3 text-[14px] leading-relaxed text-white shadow-sm whitespace-pre-wrap") {{msg.content}}
 
             //- Assistant message
             div(*ngIf="msg.role === 'assistant'", class="flex justify-start")
-                div(class="max-w-[85%] space-y-2")
-                    //- Collapsed assistant
-                    div(*ngIf="msg.collapsed", (click)="toggleCollapse(i)", class="px-4 py-2 bg-gray-50 text-gray-400 rounded-2xl rounded-bl-md text-xs cursor-pointer hover:bg-gray-100 truncate max-w-[300px]")
-                        | {{msg.content?.substring(0, 80) || '(tool calls)'}}...
+                div(class="max-w-[85%] space-y-4")
+                    //- Collapsed view
+                    button(*ngIf="msg.collapsed", (click)="toggleCollapse(msg)", class="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left text-[13px] text-slate-500 shadow-sm transition-colors hover:bg-slate-50")
+                        div(class="flex items-center justify-between gap-3")
+                            span(class="truncate") ▶ {{getCollapsedPreview(msg)}}
+                            span(class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500") 최신 외 턴 접힘
 
-                    //- Expanded assistant
                     ng-container(*ngIf="!msg.collapsed")
-                        //- Tool calls
-                        ng-container(*ngFor="let tc of msg.toolCalls; let j = index")
-                            //- Tool Use (navigate_to_page는 숨김)
-                            div(*ngIf="tc.type === 'use' && tc.name !== 'navigate_to_page'", class="border border-amber-200 bg-amber-50 rounded-xl overflow-hidden")
-                                div((click)="toggleToolCollapse(msg, j)", class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-amber-100 transition-colors")
-                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3.5 text-amber-600 flex-shrink-0")
-                                        path(stroke-linecap="round", stroke-linejoin="round", d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z")
-                                    span(class="text-xs font-medium text-amber-700") 🔧 {{tc.name}}
-                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3 text-amber-400 ml-auto", [class.rotate-180]="!tc.collapsed")
-                                        path(stroke-linecap="round", stroke-linejoin="round", d="m19.5 8.25-7.5 7.5-7.5-7.5")
-                                div(*ngIf="!tc.collapsed", class="px-3 pb-2")
-                                    pre(class="text-xs text-amber-800 bg-amber-100/50 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap") {{formatToolInput(tc.input)}}
+                        //- Trace Card
+                        div(class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm")
+                            button((click)="toggleTrace(msg)", class="flex w-full items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-5 py-4 text-left")
+                                div(class="min-w-0")
+                                    div(class="flex items-center gap-2")
+                                        span(class="text-[14px] font-semibold text-slate-900") 답변 생성 과정
+                                        span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(getCurrentTraceStep(msg)?.status || 'pending')") {{getCurrentTraceStep(msg)?.title || '정리 중'}}
+                                    p(class="mt-1 text-[12px] text-slate-500") {{getVisibleAnswerJourney(msg).length}} / {{getAnswerJourneyCount(msg)}}개 과정 표시 · {{msg.traceCategory}} · {{msg.traceDifficulty}}
+                                    div(class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200")
+                                        div(class="h-full rounded-full bg-gradient-to-r from-cyan-500 via-violet-500 to-fuchsia-500 transition-all duration-500", [style.width.%]="getJourneyProgressPercent(msg)")
+                                    div(*ngIf="!msg.traceCompleted", class="mt-2 flex flex-wrap gap-1.5")
+                                        span(*ngFor="let chip of getCardStageChips(msg)", class="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-all", [ngClass]="getCardStageChipClasses(chip.status)")
+                                            span {{chip.icon}}
+                                            span {{chip.label}}
+                                span(class="text-[12px] text-slate-400") {{msg.traceCompleted ? '요약 보기' : (msg.traceOpen ? '접기' : '펼치기')}}
 
-                            //- Tool Result (navigate_to_page는 숨김)
-                            div(*ngIf="tc.type === 'result' && tc.name !== 'navigate_to_page'", class="border border-emerald-200 bg-emerald-50 rounded-xl overflow-hidden")
-                                div((click)="toggleToolCollapse(msg, j)", class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-emerald-100 transition-colors")
-                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3.5 text-emerald-600 flex-shrink-0")
-                                        path(stroke-linecap="round", stroke-linejoin="round", d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z")
-                                    span(class="text-xs font-medium text-emerald-700") ✅ {{tc.name}} 결과
-                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3 text-emerald-400 ml-auto", [class.rotate-180]="!tc.collapsed")
-                                        path(stroke-linecap="round", stroke-linejoin="round", d="m19.5 8.25-7.5 7.5-7.5-7.5")
-                                div(*ngIf="!tc.collapsed", class="px-3 pb-2")
-                                    pre(class="text-xs text-emerald-800 bg-emerald-100/50 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto") {{tc.result}}
+                            div(*ngIf="msg.traceOpen", class="space-y-2.5 px-5 py-5")
+                                //- Current step
+                                div(class="journey-reveal journey-reveal-current rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3", [style.animationDelay.ms]="getJourneyAnimationDelay(0, 20)")
+                                    div(class="flex items-start gap-3")
+                                        div(class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/80 text-[12px] font-semibold text-cyan-700") ⚙️
+                                        div(class="min-w-0 flex-1")
+                                            div(class="flex items-center justify-between gap-2")
+                                                span(class="text-[13px] font-semibold text-slate-900") 현재 진행 단계
+                                                span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(getCurrentTraceStep(msg)?.status || 'pending')") {{getTraceStatusLabel(getCurrentTraceStep(msg)?.status || 'pending')}}
+                                            p(class="mt-1 text-[12px] leading-5 text-slate-700 whitespace-pre-wrap break-words") {{getCurrentTraceStep(msg)?.detail || msg.currentDescription || '질문을 분석하고 있습니다.'}}
 
-                        //- Intent classification badge
-                        div(*ngIf="msg.intent", class="flex items-center gap-2")
-                            div(class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border", [ngClass]="getIntentBadgeClass(msg.intent)")
-                                span {{getPageConfig(msg.intent).icon}}
-                                span {{getPageConfig(msg.intent).label_ko}} 분석
-                            span(class="text-[10px] text-gray-400 italic") 잠시 후 해당 페이지로 이동합니다
+                                //- Journey steps
+                                div(*ngFor="let item of getVisibleAnswerJourney(msg); let idx = index", class="journey-reveal rounded-2xl border px-4 py-3", [ngClass]="getTraceStepClasses(item)", [style.animationDelay.ms]="getJourneyAnimationDelay(idx + 1, 60)")
+                                    div(class="flex items-start gap-3")
+                                        div(class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/80 text-[12px] font-semibold text-slate-700") {{item.icon}}
+                                        div(class="min-w-0 flex-1")
+                                            div(class="flex items-center justify-between gap-2")
+                                                span(class="text-[13px] font-semibold text-slate-900") {{item.title}}
+                                                span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(item.status)") {{getTraceStatusLabel(item.status)}}
+                                            p(class="mt-1 text-[12px] leading-5 text-slate-600 whitespace-pre-wrap break-words") {{item.detail}}
 
-                        //- Text content (Markdown rendered)
-                        div(*ngIf="msg.content", class="px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl rounded-bl-md text-[13px] leading-relaxed")
-                            div([innerHTML]="renderMarkdown(msg.content)")
+                                //- Hidden steps hint
+                                div(*ngIf="getHiddenJourneyCount(msg) > 0", class="journey-reveal rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 1, 80)")
+                                    p(class="text-[12px] text-slate-500") 이후 {{getHiddenJourneyCount(msg)}}개 단계는 진행 상황에 맞춰 차례대로 표시됩니다.
 
-                        //- Navigation Cards (페이지 이동 버튼)
-                        div(*ngIf="msg.navigations && msg.navigations.length > 0", class="space-y-2")
-                            div(*ngFor="let nav of msg.navigations", class="group")
-                                button((click)="navigateToPage(nav)", class="w-full flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 rounded-xl hover:from-violet-100 hover:to-indigo-100 hover:border-violet-300 transition-all cursor-pointer text-left")
-                                    div(class="flex items-center justify-center w-10 h-10 rounded-lg bg-white shadow-sm flex-shrink-0")
-                                        span(class="text-xl") {{getPageConfig(nav.page).icon}}
-                                    div(class="flex-1 min-w-0")
-                                        div(class="flex items-center gap-2")
-                                            span(class="text-[13px] font-semibold text-gray-900") {{nav.title_ko}}
-                                            span(class="text-xs text-gray-400") {{nav.title_en}}
-                                        div(*ngIf="nav.query", class="text-xs text-gray-500 mt-0.5 truncate")
-                                            | 🔍 {{nav.query}}
-                                    div(class="flex-shrink-0 text-violet-400 group-hover:text-violet-600 transition-colors")
-                                        svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-5")
-                                            path(stroke-linecap="round", stroke-linejoin="round", d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3")
+                                //- Upcoming step
+                                div(*ngIf="getUpcomingTraceStep(msg)", class="journey-reveal rounded-2xl border border-dashed border-violet-200 bg-violet-50/60 px-4 py-3", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 2, 110)")
+                                    p(class="text-[12px] font-semibold text-violet-800") 다음 예정 단계
+                                    p(class="mt-1 text-[12px] leading-5 text-violet-700") {{getUpcomingTraceStep(msg)?.title}} · {{getUpcomingTraceStep(msg)?.summary || getUpcomingTraceStep(msg)?.detail}}
+
+                                //- Next pending cards preview
+                                div(*ngIf="getNextPendingCards(msg).length > 0", class="journey-reveal rounded-2xl border border-dashed border-fuchsia-200 bg-gradient-to-r from-fuchsia-50/50 to-violet-50/50 px-4 py-3", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 3, 130)")
+                                    p(class="text-[10px] font-semibold text-fuchsia-700/80 mb-2") 다음에 올 카드
+                                    div(class="flex flex-wrap gap-1.5")
+                                        span(*ngFor="let card of getNextPendingCards(msg)", class="inline-flex items-center gap-1 rounded-full border border-fuchsia-200 bg-white/80 px-2.5 py-1 text-[10px] font-medium text-fuchsia-600")
+                                            span {{card.icon}}
+                                            span {{card.label}}
+                                            span(class="inline-block h-1.5 w-1.5 rounded-full bg-fuchsia-300 animate-pulse")
+
+                        //- Navigation Card
+                        div(*ngIf="shouldRenderNavigationCard(msg)", class="journey-reveal rounded-3xl border px-5 py-5", [style.animationDelay.ms]="getResultCardAnimationDelay('navigation')", [ngClass]="(msg.navigationCard?.loading ? 'border-cyan-200 bg-cyan-50/70' : 'border-cyan-300 bg-gradient-to-r from-cyan-50 to-blue-50')")
+                            div(class="mb-2 flex items-center gap-2")
+                                span(class="text-lg") 🧭
+                                span(class="text-[13px] font-semibold text-cyan-800") 페이지 이동
+                                span(*ngIf="msg.navigationCard?.loading", class="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-100/80 px-2 py-0.5 text-[10px] font-medium text-cyan-600")
+                                    span(class="inline-block h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse")
+                                    span 준비 중
+                            div(*ngIf="msg.navigationCard?.loading", class="space-y-2")
+                                div(class="h-3 w-3/4 rounded-full bg-cyan-200 animate-pulse")
+                                div(class="h-3 w-1/2 rounded-full bg-cyan-100 animate-pulse")
+                                p(class="mt-2 text-[12px] text-cyan-600") {{msg.navigationCard?.summary || '질문에 맞는 페이지와 탭을 계산하고 있습니다.'}}
+                            div(*ngIf="!msg.navigationCard?.loading")
+                                div(class="text-[13px] text-cyan-700") {{msg.navigationCard?.summary || buildAgentNavigationSummary(pendingNavigation)}}
+                                button(*ngIf="pendingNavigation", (click)="navigateNow()", class="mt-3 flex w-full items-center justify-center gap-1 rounded-xl bg-cyan-600 px-4 py-2.5 text-[13px] font-medium text-white transition-colors hover:bg-cyan-500")
+                                    span {{msg.navigationCard?.actionLabel || '바로 이동'}}
+
+                        //- Page Result Card
+                        div(*ngIf="shouldRenderPageResultCard(msg)", class="journey-reveal rounded-3xl border px-5 py-5", [style.animationDelay.ms]="getResultCardAnimationDelay('pageResult')", [ngClass]="msg.pageResultCard.loading ? 'border-violet-100 bg-violet-50/50' : 'border-violet-200 bg-violet-50/70'")
+                            div(class="mb-2 flex items-center gap-2")
+                                span(class="text-lg") 🧾
+                                span(class="text-[13px] font-semibold text-violet-800") 실행된 페이지 결과
+                                span(*ngIf="msg.pageResultCard.loading", class="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-100/80 px-2 py-0.5 text-[10px] font-medium text-violet-600")
+                                    span(class="inline-block h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse")
+                                    span 분석 중
+                            div(*ngIf="msg.pageResultCard.loading", class="space-y-2")
+                                div(class="flex items-center gap-2 text-[13px] text-violet-700")
+                                    span {{msg.pageResultCard.page}}
+                                    span ·
+                                    span {{msg.pageResultCard.tab}}
+                                div(class="h-3 w-full rounded-full bg-violet-200 animate-pulse")
+                                div(class="h-3 w-2/3 rounded-full bg-violet-100 animate-pulse")
+                                p(class="mt-1 text-[12px] text-violet-600") {{msg.pageResultCard.summary}}
+                            div(*ngIf="!msg.pageResultCard.loading")
+                                p(class="text-[13px] font-medium text-violet-900") {{msg.pageResultCard.page}} / {{msg.pageResultCard.tab}}
+                                p(class="mt-1 text-[13px] leading-6 text-violet-700") {{msg.pageResultCard.summary}}
+                                p(*ngIf="msg.pageResultCard.query", class="mt-2 text-[12px] text-violet-700") 질문 키워드: {{msg.pageResultCard.query}}
+                                p(*ngIf="msg.pageResultCard.paramsText", class="mt-1 text-[12px] text-violet-700") 적용 인자값: {{msg.pageResultCard.paramsText}}
+                                div(*ngIf="msg.pageResultCard.evidenceLines?.length > 0", class="mt-2 space-y-1")
+                                    p(*ngFor="let line of msg.pageResultCard.evidenceLines", class="text-[12px] leading-5 text-violet-700") • {{line}}
+
+                        //- Answer Card
+                        div(*ngIf="shouldRenderAnswerCard(msg)", class="journey-reveal rounded-3xl border border-slate-200 bg-white px-5 py-5", [style.animationDelay.ms]="getResultCardAnimationDelay('answer')")
+                            div(class="mb-3 flex items-center gap-2")
+                                span(class="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-700") 🤖
+                                div
+                                    p(class="text-[13px] font-semibold text-slate-900") 최종 답변
+                                    p(class="text-[12px] text-slate-500") 최신 턴만 펼쳐집니다.
+                            div(*ngIf="msg.content", class="text-[14px] leading-7 text-slate-800 whitespace-pre-wrap break-words")
+                                | {{getDisplayedAssistantContent(msg)}}
+                                span(*ngIf="msg.typingActive", class="ml-0.5 inline-block h-4 w-[1px] animate-pulse bg-slate-400 align-middle")
+                            div(*ngIf="!msg.content", class="space-y-2")
+                                p(class="text-[12px] font-medium text-slate-500") 현재까지 핵심 포인트
+                                p(*ngFor="let line of getAssistantPreviewLines(msg)", class="text-[13px] leading-6 text-slate-700") • {{line}}
+                                div(class="flex items-center gap-1 pt-1")
+                                    div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 0ms")
+                                    div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 150ms")
+                                    div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 300ms")
+
+                        //- Quality Card
+                        div(*ngIf="shouldRenderQualityCard(msg)", class="journey-reveal rounded-3xl border border-emerald-200 bg-emerald-50/60 px-5 py-5", [style.animationDelay.ms]="getResultCardAnimationDelay('quality')")
+                            div(class="mb-2 flex items-center gap-2")
+                                span(class="text-lg") 🧪
+                                span(class="text-[13px] font-semibold text-emerald-800") 답변 품질 분석
+                            div(*ngIf="getQualityBadges(msg).length > 0", class="mb-2 flex flex-wrap gap-1.5")
+                                span(*ngFor="let badge of getQualityBadges(msg)", class="inline-flex items-center rounded-full border border-emerald-200 bg-white px-2.5 py-0.5 text-[11px] font-medium text-emerald-700") {{badge}}
+                            p(*ngIf="msg.answerQuality?.detail", class="text-[13px] leading-6 text-emerald-800") {{msg.answerQuality.detail}}
+                            p(*ngIf="!msg.answerQuality?.detail", class="text-[13px] leading-6 text-emerald-700") 근거 수, 검증 포인트, 표현 품질을 점검하며 답변 신뢰도를 높이고 있습니다.
+                            div(*ngIf="msg.answerQuality?.synthesisPoints?.length > 0", class="mt-2 space-y-1")
+                                p(*ngFor="let point of msg.answerQuality.synthesisPoints", class="text-[12px] leading-5 text-emerald-700") • {{point}}
+                            div(*ngIf="msg.answerQuality?.verificationChecks?.length > 0", class="mt-2 space-y-1")
+                                p(*ngFor="let check of msg.answerQuality.verificationChecks", class="text-[12px] leading-5 text-emerald-700") ✓ {{check}}
+
+                        //- Evidence Card
+                        div(*ngIf="shouldRenderEvidenceCard(msg)", class="journey-reveal rounded-3xl border border-amber-200 bg-amber-50/60 overflow-hidden", [style.animationDelay.ms]="getResultCardAnimationDelay('evidence')")
+                            button((click)="toggleEvidence(msg)", class="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-amber-100/60")
+                                div(class="flex items-center gap-2")
+                                    span(class="text-lg") 📚
+                                    span(class="text-[13px] font-semibold text-amber-800") 근거 문헌 상세 ({{msg.evidenceItems.length}}건)
+                                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4 text-amber-600 transition-transform", [ngClass]="{'rotate-180': msg.evidenceOpen}")
+                                    path(stroke-linecap="round", stroke-linejoin="round", d="M19.5 8.25l-7.5 7.5-7.5-7.5")
+                            div(*ngIf="msg.evidenceOpen", class="border-t border-amber-200 px-5 py-4 space-y-2.5 max-h-96 overflow-y-auto")
+                                div(*ngFor="let ev of msg.evidenceItems; let i = index", class="rounded-xl border border-amber-100 bg-white px-4 py-3")
+                                    div(class="flex items-center justify-between gap-2")
+                                        span(class="text-[12px] font-medium text-amber-900 truncate flex-1") {{i + 1}}. {{ev.filename || ev.doc_id || '문서'}}
+                                        span(*ngIf="ev.score !== null && ev.score !== undefined", class="flex-shrink-0 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-medium text-amber-700") 유사도 {{formatEvidenceScore(ev.score)}}
+                                    div(*ngIf="ev.snippets?.length > 0", class="mt-1.5 space-y-1")
+                                        p(*ngFor="let snip of ev.snippets", class="text-[12px] leading-5 text-slate-600 break-words") {{snip}}
 
         //- Loading indicator
         div(*ngIf="chatLoading", class="flex justify-start")
-            div(class="px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl rounded-bl-md")
-                div(class="flex items-center gap-2")
-                    div(class="flex gap-1")
-                        div(class="w-2 h-2 bg-violet-400 rounded-full animate-bounce", style="animation-delay: 0ms")
-                        div(class="w-2 h-2 bg-violet-400 rounded-full animate-bounce", style="animation-delay: 150ms")
-                        div(class="w-2 h-2 bg-violet-400 rounded-full animate-bounce", style="animation-delay: 300ms")
-                    span(class="text-xs text-gray-400") 생각하는 중...
+            div(class="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm")
+                div(class="flex items-center gap-1")
+                    div(class="h-2 w-2 rounded-full bg-fuchsia-400 animate-bounce", style="animation-delay: 0ms")
+                    div(class="h-2 w-2 rounded-full bg-fuchsia-400 animate-bounce", style="animation-delay: 150ms")
+                    div(class="h-2 w-2 rounded-full bg-fuchsia-400 animate-bounce", style="animation-delay: 300ms")
 
     //- Input Area
-    div(class="flex-shrink-0 border-t border-gray-200 px-4 py-3 bg-white")
-        div(class="flex items-end gap-2 max-w-4xl mx-auto")
-            div(class="flex-1 relative")
-                textarea(#chatInputEl="", [(ngModel)]="chatInput", (keydown)="onKeydown($event)", placeholder="플라즈마 연구에 대해 질문하세요...", rows="1", class="w-full resize-none rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-[13px] text-gray-900 placeholder-gray-400 focus:border-violet-500 focus:ring-1 focus:ring-violet-500 focus:outline-none transition-colors", style="max-height: 120px; min-height: 40px;")
-            //- Send / Cancel button
-            button(*ngIf="!chatLoading", (click)="sendChat()", [disabled]="!chatInput.trim()", class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl text-white transition-colors", [class]="chatInput.trim() ? 'bg-violet-600 hover:bg-violet-700' : 'bg-gray-300 cursor-not-allowed'")
-                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-5")
-                    path(stroke-linecap="round", stroke-linejoin="round", d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5")
-            button(*ngIf="chatLoading", (click)="cancelChat()", class="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white transition-colors")
-                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-5")
-                    path(stroke-linecap="round", stroke-linejoin="round", d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z")
+    div(*ngIf="collectionSelected", class="border-t border-slate-200 bg-white px-6 py-5")
+        div(class="flex items-end gap-3 max-w-4xl mx-auto")
+            div(class="relative flex-shrink-0")
+                div(class="flex h-12 w-12 items-center justify-center rounded-2xl border border-fuchsia-100 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-1.5")
+                    img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-xl object-cover")
+            div(class="flex-1")
+                textarea(#chatInputEl="", [(ngModel)]="chatInput", (keydown)="onKeydown($event)", placeholder="플라즈마 관련 질문을 입력하세요...", rows="1", class="max-h-32 w-full resize-none rounded-2xl border border-slate-300 px-5 py-3.5 text-[14px] leading-6 text-slate-800 outline-none transition-colors focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-100", [disabled]="chatLoading")
+            button(*ngIf="!chatLoading", (click)="sendChat()", [disabled]="!chatInput.trim()", class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-fuchsia-600 text-white transition-colors hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-5")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5")
+            button(*ngIf="chatLoading", (click)="cancelChat()", class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-500 text-white transition-colors hover:bg-rose-400")
+                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-5")
+                    path(stroke-linecap="round", stroke-linejoin="round", d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z")

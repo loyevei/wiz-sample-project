@@ -5,16 +5,11 @@ import json
 MILVUS_URI = os.environ.get("MILVUS_URI", "/opt/app/data/milvus.db")
 COLLECTION_META_PATH = "/opt/app/data/collection_meta.json"
 
-MODEL_REGISTRY = {
-    "snunlp/KR-SBERT-V40K-klueNLI-augSTS": {"dim": 768, "short_name": "KR-SBERT"},
-    "BM-K/KoSimCSE-roberta-multitask": {"dim": 768, "short_name": "KoSimCSE"},
-    "jhgan/ko-sroberta-multitask": {"dim": 768, "short_name": "ko-sroberta"},
-    "sentence-transformers/all-MiniLM-L6-v2": {"dim": 384, "short_name": "MiniLM-L6"},
-    "sentence-transformers/all-mpnet-base-v2": {"dim": 768, "short_name": "MPNet"},
-    "BAAI/bge-base-en-v1.5": {"dim": 768, "short_name": "BGE-base"},
-    "intfloat/multilingual-e5-large": {"dim": 1024, "short_name": "mE5-Large"},
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {"dim": 384, "short_name": "MiniLM-L12"}
-}
+MODEL_REGISTRY = wiz.model("modelregistry").compact()
+
+
+def _collection_meta_helper():
+    return wiz.model("collectionmeta")
 
 def _get_client():
     from pymilvus import MilvusClient
@@ -39,9 +34,10 @@ def collections():
         except Exception:
             pass
 
+        meta_helper = _collection_meta_helper()
         result = []
         for name in col_names:
-            info = meta.get(name, {})
+            info = meta_helper.normalize_info(meta.get(name, {}))
             total_chunks = 0
             total_docs = 0
             try:

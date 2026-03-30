@@ -126,7 +126,57 @@ class NavigateToPage(BaseTool):
         }
     }
 
-    def execute(self, page: str, tab: str = "", query: str = "", params: dict = None) -> str:
+    def _get_request_message(self):
+        runtime_wiz = self.ctx.get("wiz") if isinstance(self.ctx, dict) else None
+        if runtime_wiz is None:
+            runtime_wiz = globals().get("wiz")
+        if runtime_wiz is None:
+            return ""
+        try:
+            message = runtime_wiz.request.query("message", "")
+            return (message or "").strip()
+        except Exception:
+            return ""
+
+    def _infer_navigation_target(self, message, page="", tab=""):
+        normalized = (message or "").lower()
+        inferred_page = (page or "").strip()
+        inferred_tab = (tab or "").strip()
+
+        if not inferred_page:
+            inferred_page = "research"
+            inferred_tab = inferred_tab or "discover"
+
+            if any(keyword in normalized for keyword in ["그래프", "차트", "통계", "피팅", "scatter", "plot"]):
+                inferred_page, inferred_tab = "analysis", inferred_tab or "plotter"
+            elif any(keyword in normalized for keyword in ["실험", "doe", "레시피", "노트"]):
+                inferred_page, inferred_tab = "experiment", inferred_tab or "doe"
+            elif any(keyword in normalized for keyword in ["디바이", "paschen", "자이로", "계산", "주파수"]):
+                inferred_page, inferred_tab = "calculator", inferred_tab or "plasma"
+            elif any(keyword in normalized for keyword in ["수식", "방정식", "가정", "theory", "이론", "boltzmann"]):
+                inferred_page, inferred_tab = "theory", inferred_tab or "equation"
+            elif any(keyword in normalized for keyword in ["비교", "compare"]) and any(keyword in normalized for keyword in ["oes", "랭뮤어", "probe", "진단"]):
+                inferred_page, inferred_tab = "diagnosis", inferred_tab or "compare"
+            elif any(keyword in normalized for keyword in ["고장", "원인", "해결", "증상", "아킹", "불안정", "반사", "파티클"]):
+                inferred_page, inferred_tab = "diagnosis", inferred_tab or "failure"
+            elif any(keyword in normalized for keyword in ["oes", "랭뮤어", "진단", "스펙트럼", "이상"]):
+                inferred_page, inferred_tab = "diagnosis", inferred_tab or "detection"
+            elif any(keyword in normalized for keyword in ["예측", "etch", "식각", "증착", "rf", "pressure", "power", "icp"]):
+                inferred_page, inferred_tab = "prediction", inferred_tab or "predict"
+            elif any(keyword in normalized for keyword in ["프로젝트", "협업", "토론", "activity", "공유"]):
+                inferred_page, inferred_tab = "collaboration", inferred_tab or "projects"
+
+        if inferred_page in self.PAGE_CONFIG and not inferred_tab:
+            inferred_tab = self.PAGE_CONFIG[inferred_page]["default_tab"]
+
+        return inferred_page, inferred_tab
+
+    def execute(self, page: str = "", tab: str = "", query: str = "", params: dict = None, **kwargs) -> str:
+        message = self._get_request_message()
+        page, tab = self._infer_navigation_target(message, page=page, tab=tab)
+        if not query:
+            query = message
+
         if page not in self.PAGE_CONFIG:
             return json.dumps({
                 "error": f"Unknown page: {page}. Must be one of: research, prediction, diagnosis, theory"

@@ -1,7 +1,10 @@
-import { OnInit } from '@angular/core';
+import { OnInit, OnDestroy } from '@angular/core';
 import { Service } from '@wiz/libs/portal/season/service';
 
-export class Component implements OnInit {
+export class Component implements OnInit, OnDestroy {
+    private readonly collectionChangeEventName: string = 'plasma-collection-changed';
+    private collectionChangeListener: any = null;
+
     // 파일 관련
     public selectedFiles: File[] = [];
     public dragOver: boolean = false;
@@ -59,6 +62,21 @@ export class Component implements OnInit {
         await this.loadStats();
         await this.loadChunkTypeStats();
         await this.service.render();
+        this.collectionChangeListener = async (event: any) => {
+            const nextCollection = String(event?.detail?.collection || '').trim();
+            if (!nextCollection || nextCollection === this.selectedCollection) return;
+            if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            this.selectedCollection = nextCollection;
+            await this.onCollectionChange(false);
+        };
+        window.addEventListener(this.collectionChangeEventName, this.collectionChangeListener as EventListener);
+    }
+
+    public ngOnDestroy() {
+        if (this.collectionChangeListener) {
+            window.removeEventListener(this.collectionChangeEventName, this.collectionChangeListener as EventListener);
+            this.collectionChangeListener = null;
+        }
     }
 
     // =========================================================================
@@ -329,10 +347,13 @@ export class Component implements OnInit {
                 fd.append('chunk_strategy', this.selectedStrategy);
                 fd.append('similarity_threshold', String(this.similarityThreshold));
 
-                const { code, data } = await wiz.call("upload", fd, {
-                    contentType: false,
-                    processData: false
+                const response = await fetch('/wiz/api/page.embedding.v2/upload', {
+                    method: 'POST',
+                    body: fd
                 });
+                const payload = await response.json();
+                const code = payload?.code;
+                const data = payload?.data || {};
 
                 if (code === 200) {
                     let detail = `${data.chunks_count}개 청크 → ${data.vectors_stored}개 벡터`;
@@ -387,13 +408,18 @@ export class Component implements OnInit {
         await this.service.render();
     }
 
-    public async onCollectionChange() {
+    public async onCollectionChange(emitEvent: boolean = true) {
         await this.loadStats();
         await this.loadChunkTypeStats();
         // 컬렉션 변경 시 해당 컬렉션의 모델로 자동 전환
         const info = this.getSelectedCollectionInfo();
         if (info && info.model) {
             this.selectedModel = info.model;
+        }
+        if (emitEvent) {
+            window.dispatchEvent(new CustomEvent(this.collectionChangeEventName, {
+                detail: { collection: this.selectedCollection, source: 'page-embedding' }
+            }));
         }
         await this.service.render();
     }

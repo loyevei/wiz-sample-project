@@ -8,6 +8,7 @@ import re
 import numpy as np
 
 from base_tool import BaseTool
+from common import normalize_collection_info
 
 PARAM_PATTERNS = {
     "pressure": {
@@ -173,8 +174,9 @@ class PredictProcessTool(BaseTool):
             if os.path.exists(META_PATH):
                 with open(META_PATH, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-                if meta.get(collection, {}).get("model"):
-                    model_name = meta[collection]["model"]
+                info = normalize_collection_info(meta.get(collection, {}))
+                if info.get("model"):
+                    model_name = info["model"]
         except Exception:
             pass
 

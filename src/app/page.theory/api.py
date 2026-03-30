@@ -19,17 +19,8 @@ COLLECTION_META_PATH = "/opt/app/data/collection_meta.json"
 DEFAULT_COLLECTION = "plasma_papers"
 THEORY_GRAPH_DIR = "/opt/app/data/theory_graphs"
 
-MODEL_REGISTRY = {
-    "snunlp/KR-SBERT-V40K-klueNLI-augSTS": {"dim": 768, "short_name": "KR-SBERT"},
-    "BM-K/KoSimCSE-roberta-multitask": {"dim": 768, "short_name": "KoSimCSE"},
-    "jhgan/ko-sroberta-multitask": {"dim": 768, "short_name": "ko-sroberta"},
-    "sentence-transformers/all-MiniLM-L6-v2": {"dim": 384, "short_name": "MiniLM-L6"},
-    "sentence-transformers/all-mpnet-base-v2": {"dim": 768, "short_name": "MPNet"},
-    "BAAI/bge-base-en-v1.5": {"dim": 768, "short_name": "BGE-base"},
-    "intfloat/multilingual-e5-large": {"dim": 1024, "short_name": "mE5-Large"},
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {"dim": 384, "short_name": "MiniLM-L12"}
-}
-DEFAULT_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
+MODEL_REGISTRY = wiz.model("modelregistry").compact()
+DEFAULT_MODEL = wiz.model("modelregistry").default_model()
 
 # ==============================================================================
 # 플라즈마 도메인 수식 사전
@@ -268,18 +259,12 @@ CAUSAL_PATTERNS = [
 # 공통 유틸리티
 # ==============================================================================
 def _load_collection_meta():
-    if os.path.exists(COLLECTION_META_PATH):
-        try:
-            with open(COLLECTION_META_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    meta_helper = wiz.model("collectionmeta")
+    return meta_helper.load(COLLECTION_META_PATH)
 
 def _get_collection_model(collection_name):
-    meta = _load_collection_meta()
-    info = meta.get(collection_name, {})
-    return info.get("model", DEFAULT_MODEL)
+    meta_helper = wiz.model("collectionmeta")
+    return meta_helper.get_model(COLLECTION_META_PATH, collection_name, DEFAULT_MODEL)
 
 def _get_model(model_name=None):
     if model_name is None:
@@ -345,9 +330,10 @@ def collections():
         client = _get_client()
         col_names = client.list_collections()
         meta = _load_collection_meta()
+        meta_helper = wiz.model("collectionmeta")
         result = []
         for name in col_names:
-            info = meta.get(name, {})
+            info = meta_helper.normalize_info(meta.get(name, {}))
             if not info or info.get("short_name") == "Unknown":
                 try:
                     col_info = client.describe_collection(name)
@@ -561,6 +547,63 @@ def extract_equations():
         wiz.response.status(500, message=str(e))
 
 
+def run_search_equations_data(query_eq="", collection_name=None):
+    query_eq = (query_eq or "").strip()
+    if not query_eq:
+        raise ValueError("검색할 수식을 입력하세요.")
+
+    collection_name = (collection_name or DEFAULT_COLLECTION).strip() or DEFAULT_COLLECTION
+    client = _get_client()
+    model_name = _get_collection_model(collection_name)
+    model = _get_model(model_name)
+
+    search_text = f"equation formula {query_eq}"
+    query_vec = model.encode([search_text], normalize_embeddings=True)[0].tolist()
+
+    results = client.search(
+        collection_name=collection_name,
+        data=[query_vec],
+        limit=30,
+        output_fields=["doc_id", "filename", "chunk_index", "text"],
+        search_params={"metric_type": "COSINE"}
+    )
+
+    query_classification = _classify_equation(query_eq)
+    matched_docs = {}
+    for hit in results[0]:
+        entity = hit.get("entity", {})
+        text = entity.get("text", "")
+        doc_id = entity.get("doc_id", "")
+        filename = entity.get("filename", "")
+        score = hit.get("distance", 0)
+        doc_eqs = _extract_latex_equations(text)
+        has_equation = len(doc_eqs) > 0
+
+        if doc_id not in matched_docs:
+            matched_docs[doc_id] = {
+                "doc_id": doc_id,
+                "filename": filename,
+                "score": round(score, 4),
+                "has_equation": has_equation,
+                "equations": [],
+                "snippet": text[:250]
+            }
+
+        for eq in doc_eqs:
+            cls = _classify_equation(eq["latex"])
+            matched_docs[doc_id]["equations"].append({
+                "latex": eq["latex"][:200],
+                "classification": cls
+            })
+
+    result_list = sorted(matched_docs.values(), key=lambda x: (-int(x["has_equation"]), -x["score"]))
+    return {
+        "results": result_list[:20],
+        "query_classification": query_classification,
+        "total": len(result_list)
+    }
+
+
 def search_equations():
     """수식 기반 유사 문서 검색"""
     try:
@@ -570,62 +613,8 @@ def search_equations():
             return
 
         collection_name, model_name = _resolve_collection_and_model()
-        client = _get_client()
-        model = _get_model(model_name)
-
-        # 수식 문자열 + 컨텍스트 임베딩 검색
-        search_text = f"equation formula {query_eq}"
-        query_vec = model.encode([search_text], normalize_embeddings=True)[0].tolist()
-
-        results = client.search(
-            collection_name=collection_name,
-            data=[query_vec],
-            limit=30,
-            output_fields=["doc_id", "filename", "chunk_index", "text"],
-            search_params={"metric_type": "COSINE"}
-        )
-
-        # 수식 분류
-        query_classification = _classify_equation(query_eq)
-
-        # 결과에서 수식 포함 여부 필터링 + 정렬
-        matched_docs = {}
-        for hit in results[0]:
-            entity = hit.get("entity", {})
-            text = entity.get("text", "")
-            doc_id = entity.get("doc_id", "")
-            filename = entity.get("filename", "")
-            score = hit.get("distance", 0)
-
-            # 문서 내 수식 추출
-            doc_eqs = _extract_latex_equations(text)
-            has_equation = len(doc_eqs) > 0
-
-            if doc_id not in matched_docs:
-                matched_docs[doc_id] = {
-                    "doc_id": doc_id,
-                    "filename": filename,
-                    "score": round(score, 4),
-                    "has_equation": has_equation,
-                    "equations": [],
-                    "snippet": text[:250]
-                }
-
-            for eq in doc_eqs:
-                cls = _classify_equation(eq["latex"])
-                matched_docs[doc_id]["equations"].append({
-                    "latex": eq["latex"][:200],
-                    "classification": cls
-                })
-
-        # 수식 있는 문서 우선 정렬
-        result_list = sorted(matched_docs.values(),
-                           key=lambda x: (-int(x["has_equation"]), -x["score"]))
-
-        wiz.response.status(200,
-            results=result_list[:20],
-            query_classification=query_classification,
-            total=len(result_list))
+        result = run_search_equations_data(query_eq=query_eq, collection_name=collection_name)
+        wiz.response.status(200, **result)
     except season.lib.exception.ResponseException:
         raise
     except Exception as e:

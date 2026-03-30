@@ -3,7 +3,7 @@ button((click)="toggleChat()", class="fixed bottom-6 right-6 z-[9999] h-16 w-16 
     div(class="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[15px] bg-[#14071f] text-white")
         div(class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(244,114,182,0.36),transparent_55%)]")
         img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="relative h-11 w-11 drop-shadow-[0_0_20px_rgba(244,114,182,0.38)]")
-        div(class="absolute bottom-1 text-[9px] font-semibold tracking-[0.24em] text-fuchsia-100/90") PX14
+        div(class="absolute bottom-1 text-[9px] font-semibold tracking-[0.24em] text-fuchsia-100/90") KFE bot
 
 //- Chat Window
 div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all duration-300", [ngClass]="isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'")
@@ -15,7 +15,7 @@ div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all du
                 div(class="min-w-0")
                     div(class="flex items-center gap-2")
                         span(class="truncate text-[14px] font-semibold") {{robotProfile.name}}
-                        span(class="inline-flex items-center rounded-full border border-fuchsia-300/30 bg-fuchsia-400/10 px-2 py-0.5 text-[9px] font-semibold tracking-[0.2em] text-fuchsia-100") {{robotProfile.tag}}
+                        span(*ngIf="robotProfile.tag", class="inline-flex items-center rounded-full border border-fuchsia-300/30 bg-fuchsia-400/10 px-2 py-0.5 text-[9px] font-semibold tracking-[0.2em] text-fuchsia-100") {{robotProfile.tag}}
                     p(class="mt-1 text-[11px] leading-5 text-fuchsia-100/80") {{robotProfile.subtitle}}
             div(class="flex flex-shrink-0 items-center gap-1")
                 button(*ngIf="collectionSelected && selectedCollection", (click)="changeCollection()", class="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 text-[10px] font-medium text-fuchsia-50 transition-colors hover:bg-white/20", title="컬렉션 변경")
@@ -38,14 +38,14 @@ div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all du
                         div(class="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-[28px] border border-fuchsia-200 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-3 shadow-[0_20px_40px_rgba(88,28,135,0.2)]")
                             img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-[20px] object-cover")
                         p(class="text-[15px] font-semibold text-slate-900") {{robotProfile.name}}
-                        p(class="mt-1 text-[12px] leading-5 text-slate-500") 논문 검색에 사용할 컬렉션을 선택하면 14단계 사고 과정을 실시간으로 보여드립니다.
+                        p(class="mt-1 text-[12px] leading-5 text-slate-500") 논문 검색에 사용할 컬렉션을 선택하면 실제 에이전트 오케스트레이션 실행 상태를 실시간으로 보여드립니다.
                     div(*ngIf="collections.length === 0", class="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-7 text-center")
                         p(class="text-[13px] font-medium text-slate-600") 사용 가능한 컬렉션이 없습니다.
                         p(class="mt-1 text-[11px] text-slate-400") 먼저 임베딩 페이지에서 PDF를 업로드하세요.
                     div(*ngIf="collections.length > 0", class="space-y-3")
                         div(class="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/60 px-4 py-3 text-[12px] text-fuchsia-800")
-                            span(class="font-semibold") TRACE READY
-                            span(class="ml-2 text-fuchsia-700/80") 컬렉션 선택 후 참고 문헌·유사도·도구 실행 로그를 함께 표시합니다.
+                            span(class="font-semibold") AGENT READY
+                            span(class="ml-2 text-fuchsia-700/80") 컬렉션 선택 후 오케스트레이션 계획, 참고 문헌, 도구 실행 로그를 함께 표시합니다.
                         div(class="flex flex-wrap gap-2")
                             button(*ngFor="let col of collections", (click)="selectCollection(col.name)", class="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[12px] font-medium transition-all", [ngClass]="selectedCollection === col.name ? 'border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700 shadow ring-1 ring-fuchsia-200' : 'border-slate-200 bg-white text-slate-700 hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-700'")
                                 span(class="text-sm") 📄
@@ -56,8 +56,8 @@ div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all du
             div(*ngIf="chatMessages.length === 0", class="flex h-full flex-col items-center justify-center text-center")
                 div(class="relative mb-4 flex h-24 w-24 items-center justify-center rounded-[28px] border border-fuchsia-200 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-3 shadow-[0_24px_50px_rgba(88,28,135,0.18)]")
                     img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-[20px] object-cover")
-                p(class="text-[15px] font-semibold text-slate-900") 플라즈마 연구 플로팅 에이전트
-                p(class="mt-1 max-w-[310px] text-[12px] leading-5 text-slate-500") 상단 14단계 사고과정, 참고 문헌 목록, 유사도, 도구 로그, 최종 답변을 한 흐름으로 제공합니다.
+                p(class="text-[15px] font-semibold text-slate-900") {{robotProfile.name}}
+                p(class="mt-1 max-w-[310px] text-[12px] leading-5 text-slate-500") 군집형 에이전트가 목표 달성 전까지 계획·수집·분석·정리를 반복하면서 페이지 결과 기반 답변을 만듭니다.
                 div(class="mt-5 grid w-full max-w-[320px] gap-2")
                     button(*ngFor="let s of suggestions", (click)="sendChat(s.text)", class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left text-[12px] text-slate-600 transition-all hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-700")
                         span(class="text-base") {{s.icon}}
@@ -79,97 +79,135 @@ div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all du
                                 button((click)="toggleTrace(msg)", class="flex w-full items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-left")
                                     div(class="min-w-0")
                                         div(class="flex items-center gap-2")
-                                            span(class="text-[13px] font-semibold text-slate-900") 사고 과정 (14단계)
-                                            span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(getCurrentTraceStep(msg)?.status || 'pending')") {{getCurrentTraceStep(msg)?.title || '준비 중'}}
-                                        p(class="mt-1 text-[11px] text-slate-500") {{getCompletedTraceCount(msg)}}/14 단계 완료 · {{msg.traceCategory}} · {{msg.traceDifficulty}}
-                                    span(class="text-[12px] text-slate-400") {{msg.traceOpen ? '접기' : '펼치기'}}
+                                            span(class="text-[13px] font-semibold text-slate-900") 답변 생성 과정
+                                            span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(getCurrentTraceStep(msg)?.status || 'pending')") {{getCurrentTraceStep(msg)?.title || '정리 중'}}
+                                        p(class="mt-1 text-[11px] text-slate-500") {{getVisibleAnswerJourney(msg).length}} / {{getAnswerJourneyCount(msg)}}개 과정 표시 · {{msg.traceCategory}} · {{msg.traceDifficulty}}
+                                        div(class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200")
+                                            div(class="h-full rounded-full bg-gradient-to-r from-cyan-500 via-violet-500 to-fuchsia-500 transition-all duration-500", [style.width.%]="getJourneyProgressPercent(msg)")
+                                        div(*ngIf="!msg.traceCompleted", class="mt-2 flex flex-wrap gap-1.5")
+                                            span(*ngFor="let chip of getCardStageChips(msg)", class="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-all", [ngClass]="getCardStageChipClasses(chip.status)")
+                                                span {{chip.icon}}
+                                                span {{chip.label}}
+                                    span(class="text-[12px] text-slate-400") {{msg.traceCompleted ? '요약 보기' : (msg.traceOpen ? '접기' : '펼치기')}}
                                 div(*ngIf="msg.traceOpen", class="space-y-2 px-4 py-4")
-                                    div(*ngFor="let step of msg.traceSteps", class="rounded-2xl border px-3 py-2.5", [ngClass]="getTraceStepClasses(step)")
+                                    div(class="journey-reveal journey-reveal-current rounded-2xl border border-cyan-200 bg-cyan-50/70 px-3 py-2.5", [style.animationDelay.ms]="getJourneyAnimationDelay(0, 20)")
                                         div(class="flex items-start gap-3")
-                                            div(class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/80 text-[11px] font-semibold text-slate-700") {{step.id}}
+                                            div(class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/80 text-[11px] font-semibold text-cyan-700") ⚙️
+                                            div(class="min-w-0 flex-1")
+                                                div(class="flex items-center justify-between gap-2")
+                                                    span(class="text-[12px] font-semibold text-slate-900") 현재 진행 단계
+                                                    span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(getCurrentTraceStep(msg)?.status || 'pending')") {{getTraceStatusLabel(getCurrentTraceStep(msg)?.status || 'pending')}}
+                                                p(class="mt-1 text-[11px] leading-5 text-slate-700 whitespace-pre-wrap break-words") {{getCurrentTraceStep(msg)?.detail || msg.currentDescription || '질문을 분석하고 있습니다.'}}
+
+                                    div(*ngFor="let item of getVisibleAnswerJourney(msg); let idx = index", class="journey-reveal rounded-2xl border px-3 py-2.5", [ngClass]="getTraceStepClasses(item)", [style.animationDelay.ms]="getJourneyAnimationDelay(idx + 1, 60)")
+                                        div(class="flex items-start gap-3")
+                                            div(class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/80 text-[11px] font-semibold text-slate-700") {{item.icon}}
                                             div(class="min-w-0 flex-1")
                                                 div(class="flex items-center justify-between gap-2")
                                                     div(class="flex items-center gap-2")
-                                                        span(class="text-[12px] font-semibold text-slate-900") {{step.title}}
-                                                        span(class="text-[11px]") {{getTraceStepIcon(step)}}
-                                                    span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(step.status)") {{getTraceStatusLabel(step.status)}}
-                                                p(class="mt-1 text-[11px] leading-5 text-slate-600") {{step.detail || step.summary}}
+                                                        span(class="text-[12px] font-semibold text-slate-900") {{item.title}}
+                                                    span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(item.status)") {{getTraceStatusLabel(item.status)}}
+                                                p(class="mt-1 text-[11px] leading-5 text-slate-600 whitespace-pre-wrap break-words") {{item.detail}}
 
-                            div(class="rounded-3xl border border-sky-100 bg-sky-50/70 px-4 py-4")
-                                div(class="flex items-center gap-2")
-                                    span(class="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-700") ⚡
-                                    div
-                                        p(class="text-[12px] font-semibold text-slate-900") 현재 단계 설명
-                                        p(class="text-[11px] text-slate-500") {{msg.currentLabel}}
-                                p(class="mt-3 text-[12px] leading-6 text-slate-700") {{msg.currentDescription}}
+                                    div(*ngIf="getHiddenJourneyCount(msg) > 0", class="journey-reveal rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 1, 80)")
+                                        p(class="text-[11px] text-slate-500") 이후 {{getHiddenJourneyCount(msg)}}개 단계는 진행 상황에 맞춰 차례대로 표시됩니다.
 
-                            div(class="rounded-3xl border border-fuchsia-100 bg-fuchsia-50/60 px-4 py-4")
-                                div(class="mb-3 flex items-center gap-2")
-                                    span(class="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-fuchsia-500/10 text-fuchsia-700") ✳️
-                                    div
-                                        p(class="text-[12px] font-semibold text-slate-900") 최종 답변 구성 요소
-                                        p(class="text-[11px] text-slate-500") 프롬프트 + 오케스트레이터 + 도구 + 메모리 + 스트리밍 UI
-                                div(class="grid gap-3 md:grid-cols-2")
-                                    div(*ngFor="let component of getPipelineComponents(msg)", class="rounded-2xl border border-white/80 bg-white/90 px-3 py-3")
-                                        div(class="flex items-start justify-between gap-2")
-                                            div(class="min-w-0")
-                                                div(class="flex items-center gap-2")
-                                                    span(class="text-sm") {{component.icon}}
-                                                    p(class="text-[12px] font-semibold text-slate-900") {{component.title}}
-                                                p(class="mt-1 text-[11px] leading-5 text-slate-500") {{component.summary}}
-                                            span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(component.status)") {{getTraceStatusLabel(component.status)}}
-                                        p(class="mt-3 text-[11px] leading-5 text-slate-700") {{component.detail}}
-                                        div(*ngIf="component.metaBadges?.length > 0", class="mt-3 flex flex-wrap gap-1.5")
-                                            span(*ngFor="let badge of component.metaBadges", class="inline-flex items-center rounded-full border border-fuchsia-100 bg-fuchsia-50 px-2 py-0.5 text-[10px] font-medium text-fuchsia-700") {{badge}}
-                                        div(*ngIf="component.plan?.length > 0", class="mt-3 rounded-xl bg-slate-50 px-3 py-2")
-                                            p(class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400") 오케스트레이션 계획
-                                            div(class="mt-2 space-y-1")
-                                                p(*ngFor="let item of component.plan", class="text-[11px] leading-5 text-slate-600") • {{item}}
-                                div(*ngIf="msg.similaritySummary || msg.references.length > 0", class="mt-4 space-y-3")
-                                    div(*ngIf="msg.similaritySummary", class="inline-flex items-center rounded-full border border-cyan-200 bg-white px-3 py-1 text-[11px] font-medium text-cyan-700") {{msg.similaritySummary}}
-                                    div(*ngIf="msg.references.length > 0", class="rounded-2xl border border-white/80 bg-white/80 p-3")
-                                        p(class="text-[11px] font-semibold text-slate-800") 참고 문헌 목록 + 유사도
-                                        div(class="mt-2 space-y-2")
-                                            div(*ngFor="let ref of msg.references", class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2")
-                                                div(class="flex items-center justify-between gap-2")
-                                                    p(class="truncate text-[11px] font-medium text-slate-800") {{ref.filename}}
-                                                    span(class="inline-flex items-center rounded-full border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-[10px] font-semibold text-cyan-700") sim {{formatScore(ref.score)}}
-                                                p(class="mt-1 text-[10px] text-slate-500") chunk {{ref.chunk}}
-                                                p(class="mt-1 text-[11px] leading-5 text-slate-600 whitespace-pre-wrap break-words") {{ref.excerpt}}
+                                    div(*ngIf="getUpcomingTraceStep(msg)", class="journey-reveal rounded-2xl border border-dashed border-violet-200 bg-violet-50/60 px-3 py-2.5", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 2, 110)")
+                                        p(class="text-[11px] font-semibold text-violet-800") 다음 예정 단계
+                                        p(class="mt-1 text-[11px] leading-5 text-violet-700") {{getUpcomingTraceStep(msg)?.title}} · {{getUpcomingTraceStep(msg)?.summary || getUpcomingTraceStep(msg)?.detail}}
 
-                            div(*ngIf="msg.toolCalls.length > 0", class="rounded-3xl border border-amber-100 bg-amber-50/60 px-4 py-4")
-                                div(class="mb-3 flex items-center gap-2")
-                                    span(class="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-700") 🧰
-                                    div
-                                        p(class="text-[12px] font-semibold text-slate-900") 도구 실행 로그
-                                        p(class="text-[11px] text-slate-500") tool_use / tool_result 별도 카드
-                                div(class="space-y-2")
-                                    ng-container(*ngFor="let tc of msg.toolCalls")
-                                        div(*ngIf="tc.type === 'use'", class="flex items-start gap-2 rounded-2xl border border-amber-200 bg-white px-3 py-3 text-[11px]")
-                                            span(class="mt-0.5 text-sm") {{getToolIcon(tc.name)}}
-                                            div(class="min-w-0 flex-1")
-                                                div(class="font-semibold text-amber-700") {{getToolLabel(tc.name)}}
-                                                div(*ngIf="tc.input", class="mt-1 whitespace-pre-wrap break-words text-amber-600") {{formatToolInput(tc.input)}}
-                                        div(*ngIf="tc.type === 'result' && tc.name !== 'navigate_to_page'", class="flex items-start gap-2 rounded-2xl border border-emerald-200 bg-white px-3 py-3 text-[11px]")
-                                            span(class="mt-0.5 text-sm") ✅
-                                            div(class="min-w-0 flex-1")
-                                                div(class="font-semibold text-emerald-700") {{getToolLabel(tc.name)}} 결과
-                                                div(class="mt-1 whitespace-pre-wrap break-words text-emerald-600") {{parseToolResult(tc.result)}}
-                                        div(*ngIf="tc.type === 'result' && tc.name === 'navigate_to_page'", class="rounded-2xl border border-cyan-300 bg-gradient-to-r from-cyan-50 to-blue-50 px-3 py-3")
-                                            div(class="mb-2 flex items-center gap-2")
-                                                span(class="text-lg") 🧭
-                                                span(class="text-[12px] font-semibold text-cyan-800") 페이지 이동
-                                            div(class="text-[12px] text-cyan-700") {{parseToolResult(tc.result)}}
-                                            button((click)="navigateNow()", class="mt-3 flex w-full items-center justify-center gap-1 rounded-xl bg-cyan-600 px-3 py-2 text-[12px] font-medium text-white transition-colors hover:bg-cyan-500")
-                                                span 바로 이동
+                                    //- 다음에 올 결과 카드 미니 프리뷰 (로딩 중에만)
+                                    div(*ngIf="getNextPendingCards(msg).length > 0", class="journey-reveal rounded-2xl border border-dashed border-fuchsia-200 bg-gradient-to-r from-fuchsia-50/50 to-violet-50/50 px-3 py-2.5", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 3, 130)")
+                                        p(class="text-[10px] font-semibold text-fuchsia-700/80 mb-1.5") 다음에 올 카드
+                                        div(class="flex flex-wrap gap-1.5")
+                                            span(*ngFor="let card of getNextPendingCards(msg)", class="inline-flex items-center gap-1 rounded-full border border-fuchsia-200 bg-white/80 px-2 py-1 text-[10px] font-medium text-fuchsia-600")
+                                                span {{card.icon}}
+                                                span {{card.label}}
+                                                span(class="inline-block h-1.5 w-1.5 rounded-full bg-fuchsia-300 animate-pulse")
 
-                            div(*ngIf="msg.content", class="rounded-3xl border border-slate-200 bg-white px-4 py-4")
+                            div(*ngIf="shouldRenderNavigationCard(msg)", class="journey-reveal rounded-3xl border px-4 py-4", [style.animationDelay.ms]="getResultCardAnimationDelay('navigation')", [ngClass]="(msg.navigationCard?.loading ? 'border-cyan-200 bg-cyan-50/70' : 'border-cyan-300 bg-gradient-to-r from-cyan-50 to-blue-50')")
+                                div(class="mb-2 flex items-center gap-2")
+                                    span(class="text-lg") 🧭
+                                    span(class="text-[12px] font-semibold text-cyan-800") 페이지 이동
+                                    span(*ngIf="msg.navigationCard?.loading", class="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-100/80 px-2 py-0.5 text-[10px] font-medium text-cyan-600")
+                                        span(class="inline-block h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse")
+                                        span 준비 중
+                                div(*ngIf="msg.navigationCard?.loading", class="space-y-2")
+                                    div(class="h-3 w-3/4 rounded-full bg-cyan-200 animate-pulse")
+                                    div(class="h-3 w-1/2 rounded-full bg-cyan-100 animate-pulse")
+                                    p(class="mt-2 text-[11px] text-cyan-600") {{msg.navigationCard?.summary || '질문에 맞는 페이지와 탭을 계산하고 있습니다.'}}
+                                div(*ngIf="!msg.navigationCard?.loading")
+                                    div(class="text-[12px] text-cyan-700") {{msg.navigationCard?.summary || buildAgentNavigationSummary(pendingNavigation)}}
+                                    button(*ngIf="pendingNavigation", (click)="navigateNow()", class="mt-3 flex w-full items-center justify-center gap-1 rounded-xl bg-cyan-600 px-3 py-2 text-[12px] font-medium text-white transition-colors hover:bg-cyan-500")
+                                        span {{msg.navigationCard?.actionLabel || '바로 이동'}}
+
+                            div(*ngIf="shouldRenderPageResultCard(msg)", class="journey-reveal rounded-3xl border px-4 py-4", [style.animationDelay.ms]="getResultCardAnimationDelay('pageResult')", [ngClass]="msg.pageResultCard.loading ? 'border-violet-100 bg-violet-50/50' : 'border-violet-200 bg-violet-50/70'")
+                                div(class="mb-2 flex items-center gap-2")
+                                    span(class="text-lg") 🧾
+                                    span(class="text-[12px] font-semibold text-violet-800") 실행된 페이지 결과
+                                    span(*ngIf="msg.pageResultCard.loading", class="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-100/80 px-2 py-0.5 text-[10px] font-medium text-violet-600")
+                                        span(class="inline-block h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse")
+                                        span 분석 중
+                                div(*ngIf="msg.pageResultCard.loading", class="space-y-2")
+                                    div(class="flex items-center gap-2 text-[12px] text-violet-700")
+                                        span {{msg.pageResultCard.page}}
+                                        span ·
+                                        span {{msg.pageResultCard.tab}}
+                                    div(class="h-3 w-full rounded-full bg-violet-200 animate-pulse")
+                                    div(class="h-3 w-2/3 rounded-full bg-violet-100 animate-pulse")
+                                    p(class="mt-1 text-[11px] text-violet-600") {{msg.pageResultCard.summary}}
+                                div(*ngIf="!msg.pageResultCard.loading")
+                                    p(class="text-[12px] font-medium text-violet-900") {{msg.pageResultCard.page}} / {{msg.pageResultCard.tab}}
+                                    p(class="mt-1 text-[12px] leading-5 text-violet-700") {{msg.pageResultCard.summary}}
+                                    p(*ngIf="msg.pageResultCard.query", class="mt-2 text-[11px] text-violet-700") 질문 키워드: {{msg.pageResultCard.query}}
+                                    p(*ngIf="msg.pageResultCard.paramsText", class="mt-1 text-[11px] text-violet-700") 적용 인자값: {{msg.pageResultCard.paramsText}}
+                                    div(*ngIf="msg.pageResultCard.evidenceLines?.length > 0", class="mt-2 space-y-1")
+                                        p(*ngFor="let line of msg.pageResultCard.evidenceLines", class="text-[11px] leading-5 text-violet-700") • {{line}}
+
+                            div(*ngIf="shouldRenderAnswerCard(msg)", class="journey-reveal rounded-3xl border border-slate-200 bg-white px-4 py-4", [style.animationDelay.ms]="getResultCardAnimationDelay('answer')")
                                 div(class="mb-3 flex items-center gap-2")
                                     span(class="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-700") 🤖
                                     div
                                         p(class="text-[12px] font-semibold text-slate-900") 최종 답변
                                         p(class="text-[11px] text-slate-500") 최신 턴만 펼쳐집니다.
-                                div(class="text-[13px] leading-6 text-slate-800 whitespace-pre-wrap break-words") {{msg.content}}
+                                div(*ngIf="msg.content", class="text-[13px] leading-6 text-slate-800 whitespace-pre-wrap break-words")
+                                    | {{getDisplayedAssistantContent(msg)}}
+                                    span(*ngIf="msg.typingActive", class="ml-0.5 inline-block h-4 w-[1px] animate-pulse bg-slate-400 align-middle")
+                                div(*ngIf="!msg.content", class="space-y-2")
+                                    p(class="text-[11px] font-medium text-slate-500") 현재까지 핵심 포인트
+                                    p(*ngFor="let line of getAssistantPreviewLines(msg)", class="text-[12px] leading-5 text-slate-700") • {{line}}
+                                    div(class="flex items-center gap-1 pt-1")
+                                        div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 0ms")
+                                        div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 150ms")
+                                        div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 300ms")
+
+                            div(*ngIf="shouldRenderQualityCard(msg)", class="journey-reveal rounded-3xl border border-emerald-200 bg-emerald-50/60 px-4 py-4", [style.animationDelay.ms]="getResultCardAnimationDelay('quality')")
+                                div(class="mb-2 flex items-center gap-2")
+                                    span(class="text-lg") 🧪
+                                    span(class="text-[12px] font-semibold text-emerald-800") 답변 품질 분석
+                                div(*ngIf="getQualityBadges(msg).length > 0", class="mb-2 flex flex-wrap gap-1.5")
+                                    span(*ngFor="let badge of getQualityBadges(msg)", class="inline-flex items-center rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-medium text-emerald-700") {{badge}}
+                                p(*ngIf="msg.answerQuality?.detail", class="text-[12px] leading-5 text-emerald-800") {{msg.answerQuality.detail}}
+                                p(*ngIf="!msg.answerQuality?.detail", class="text-[12px] leading-5 text-emerald-700") 근거 수, 검증 포인트, 표현 품질을 점검하며 답변 신뢰도를 높이고 있습니다.
+                                div(*ngIf="msg.answerQuality?.synthesisPoints?.length > 0", class="mt-2 space-y-1")
+                                    p(*ngFor="let point of msg.answerQuality.synthesisPoints", class="text-[11px] leading-5 text-emerald-700") • {{point}}
+                                div(*ngIf="msg.answerQuality?.verificationChecks?.length > 0", class="mt-2 space-y-1")
+                                    p(*ngFor="let check of msg.answerQuality.verificationChecks", class="text-[11px] leading-5 text-emerald-700") ✓ {{check}}
+
+                            div(*ngIf="shouldRenderEvidenceCard(msg)", class="journey-reveal rounded-3xl border border-amber-200 bg-amber-50/60 overflow-hidden", [style.animationDelay.ms]="getResultCardAnimationDelay('evidence')")
+                                button((click)="toggleEvidence(msg)", class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-amber-100/60")
+                                    div(class="flex items-center gap-2")
+                                        span(class="text-lg") 📚
+                                        span(class="text-[12px] font-semibold text-amber-800") 근거 문헌 상세 ({{msg.evidenceItems.length}}건)
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4 text-amber-600 transition-transform", [ngClass]="{'rotate-180': msg.evidenceOpen}")
+                                        path(stroke-linecap="round", stroke-linejoin="round", d="M19.5 8.25l-7.5 7.5-7.5-7.5")
+                                div(*ngIf="msg.evidenceOpen", class="border-t border-amber-200 px-4 py-3 space-y-2 max-h-80 overflow-y-auto")
+                                    div(*ngFor="let ev of msg.evidenceItems; let i = index", class="rounded-xl border border-amber-100 bg-white px-3 py-2")
+                                        div(class="flex items-center justify-between gap-2")
+                                            span(class="text-[11px] font-medium text-amber-900 truncate flex-1") {{i + 1}}. {{ev.filename || ev.doc_id || '문서'}}
+                                            span(*ngIf="ev.score !== null && ev.score !== undefined", class="flex-shrink-0 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700") 유사도 {{formatEvidenceScore(ev.score)}}
+                                        div(*ngIf="ev.snippets?.length > 0", class="mt-1 space-y-1")
+                                            p(*ngFor="let snip of ev.snippets", class="text-[11px] leading-4 text-slate-600 break-words") {{snip}}
 
             div(*ngIf="chatLoading", class="flex justify-start")
                 div(class="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm")

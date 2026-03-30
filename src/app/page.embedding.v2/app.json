@@ -1,0 +1,12 @@
+{
+    "id": "page.embedding.v2",
+    "mode": "page",
+    "title": "/embedding/v2",
+    "namespace": "embedding.v2",
+    "category": "embedding",
+    "viewuri": "/embedding/v2",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-embedding-v2()"
+}

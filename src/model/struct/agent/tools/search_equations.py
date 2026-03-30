@@ -4,9 +4,9 @@
 import os
 import sys
 import json
-import re
 
 from base_tool import BaseTool
+from common import normalize_collection_info
 
 
 class SearchEquationsTool(BaseTool):
@@ -51,7 +51,7 @@ class SearchEquationsTool(BaseTool):
             if os.path.exists(META_PATH):
                 with open(META_PATH, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-                info = meta.get(collection, {})
+                info = normalize_collection_info(meta.get(collection, {}))
                 if info.get("model"):
                     model_name = info["model"]
         except Exception:

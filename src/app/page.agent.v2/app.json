@@ -1,0 +1,12 @@
+{
+    "id": "page.agent.v2",
+    "mode": "page",
+    "title": "/agent/v2",
+    "namespace": "agent.v2",
+    "category": "agent",
+    "viewuri": "/agent/v2",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-agent-v2()"
+}

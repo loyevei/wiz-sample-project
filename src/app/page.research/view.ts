@@ -1,9 +1,15 @@
-import { OnInit, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import { OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Service } from '@wiz/libs/portal/season/service';
 
-export class Component implements OnInit {
+export class Component implements OnInit, OnDestroy {
     private readonly collectionStorageKey: string = 'plasma.selectedCollection';
+    private readonly topicKeywordsStorageKey: string = 'plasma.research.topicKeywords';
+    private readonly viewedDocsStorageKey: string = 'plasma.research.viewedDocs';
+    private readonly collectionChangeEventName: string = 'plasma-collection-changed';
+    private queryParamSub: any = null;
+    private lastQueryParamSignature: string = '';
+    private collectionChangeListener: any = null;
 
     // ============================
     // 탭 관리
@@ -60,6 +66,9 @@ export class Component implements OnInit {
     public topicMapLoaded: boolean = false;
     public hoveredPoint: any = null;
     public topicInterpretation: any = null;
+    public topicPersonalization: any = null;
+    public topicPersonalKeywords: string = '';
+    public viewedDocsCount: number = 0;
 
     // ============================
     // Research Gap Detector (gap)
@@ -112,6 +121,8 @@ export class Component implements OnInit {
     public patentQuery: string = '';
     public patentSearching: boolean = false;
     public patentResults: any[] = [];
+    public patentError: string = '';
+    public patentSource: string = 'KIPRIS Plus';
 
     public suggestedTags: string[] = [
         '플라즈마 에칭', 'RF 방전', '박막 증착', '균일도 개선',
@@ -151,15 +162,94 @@ export class Component implements OnInit {
         } catch (e) { }
     }
 
+    private getStoredTopicKeywords(): string {
+        try {
+            return localStorage.getItem(this.topicKeywordsStorageKey) || '';
+        } catch (e) { }
+        return '';
+    }
+
+    private persistTopicKeywords(value: string) {
+        try {
+            localStorage.setItem(this.topicKeywordsStorageKey, value || '');
+        } catch (e) { }
+    }
+
+    private getViewedDocIds(): string[] {
+        try {
+            const raw = localStorage.getItem(this.viewedDocsStorageKey) || '[]';
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) { }
+        return [];
+    }
+
+    private markViewedDoc(docId: string) {
+        if (!docId) return;
+        try {
+            const items = this.getViewedDocIds().filter((item: string) => item !== docId);
+            items.unshift(docId);
+            localStorage.setItem(this.viewedDocsStorageKey, JSON.stringify(items.slice(0, 200)));
+            this.viewedDocsCount = items.slice(0, 200).length;
+        } catch (e) { }
+    }
+
+    private getEffectiveTopicKeywords(): string {
+        const explicit = (this.topicPersonalKeywords || '').trim();
+        if (explicit) return explicit;
+
+        const inferred: string[] = [];
+        if (this.searchKeyword?.trim()) inferred.push(this.searchKeyword.trim());
+        if (this.recommendKeyword?.trim()) inferred.push(this.recommendKeyword.trim());
+        for (const trace of this.evidenceTraces || []) {
+            const keyword = (trace?.keyword || '').trim();
+            if (!keyword) continue;
+            inferred.push(keyword);
+            if (inferred.length >= 4) break;
+        }
+        return inferred.join(', ');
+    }
+
+    public onTopicPersonalKeywordsChange() {
+        this.persistTopicKeywords(this.topicPersonalKeywords);
+    }
+
     public async ngOnInit() {
         await this.service.init();
+        this.topicPersonalKeywords = this.getStoredTopicKeywords();
+        this.viewedDocsCount = this.getViewedDocIds().length;
         await this.loadCollections();
         await this.handleQueryParams();
         await this.loadEvidenceTraces();
+        this.queryParamSub = this.route.queryParams.subscribe(async (params: any) => {
+            await this.handleQueryParams(params);
+        });
+        this.collectionChangeListener = async (event: any) => {
+            const nextCollection = String(event?.detail?.collection || '').trim();
+            if (!nextCollection || nextCollection === this.selectedCollection) return;
+            if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            this.selectedCollection = nextCollection;
+            await this.onCollectionChange(false);
+        };
+        window.addEventListener(this.collectionChangeEventName, this.collectionChangeListener as EventListener);
     }
 
-    private async handleQueryParams() {
-        const params = this.route.snapshot.queryParams;
+    public ngOnDestroy() {
+        if (this.queryParamSub) {
+            this.queryParamSub.unsubscribe();
+            this.queryParamSub = null;
+        }
+        if (this.collectionChangeListener) {
+            window.removeEventListener(this.collectionChangeEventName, this.collectionChangeListener as EventListener);
+            this.collectionChangeListener = null;
+        }
+    }
+
+    private async handleQueryParams(params: any = this.route.snapshot.queryParams) {
+        const signature = JSON.stringify(params || {});
+        if (signature === this.lastQueryParamSignature) return;
+        this.lastQueryParamSignature = signature;
+
         if (!params || Object.keys(params).length === 0) return;
 
         if (params['tab'] && this.tabs.find((t: any) => t.id === params['tab'])) {
@@ -256,8 +346,13 @@ export class Component implements OnInit {
         await this.service.render();
     }
 
-    public async onCollectionChange() {
+    public async onCollectionChange(emitEvent: boolean = true) {
         this.persistCollection(this.selectedCollection);
+        if (emitEvent) {
+            window.dispatchEvent(new CustomEvent(this.collectionChangeEventName, {
+                detail: { collection: this.selectedCollection, source: 'page-research' }
+            }));
+        }
         // 모든 탭 데이터 초기화
         this.searchResults = [];
         this.recommendations = [];
@@ -271,6 +366,7 @@ export class Component implements OnInit {
         this.topicPoints = [];
         this.topicMapLoaded = false;
         this.topicInterpretation = null;
+        this.topicPersonalization = null;
         this.topicNClusters = 0;
         this.topicTotalDocs = 0;
         this.selectedCluster = -2;
@@ -493,6 +589,17 @@ export class Component implements OnInit {
         } catch (e) { }
     }
 
+    public openPdf(docId: string, pageNum: number = 0) {
+        if (!docId) return;
+        this.markViewedDoc(docId);
+        const collection = encodeURIComponent(this.selectedCollection || '');
+        let url = `/wiz/api/page.research.v2/serve_pdf?doc_id=${docId}&collection=${collection}`;
+        if (pageNum > 0) {
+            url += `#page=${pageNum}`;
+        }
+        window.open(url, '_blank');
+    }
+
     // ============================
     // 키워드 분석 메서드
     // ============================
@@ -524,12 +631,16 @@ export class Component implements OnInit {
         this.topicClusters = [];
         this.topicPoints = [];
         this.selectedCluster = -2;
+        this.topicPersonalization = null;
         await this.service.render();
 
         try {
             const { code, data } = await wiz.call("topic_map", {
                 collection: this.selectedCollection,
-                max_chunks: 500
+                max_chunks: 500,
+                user_keywords: this.getEffectiveTopicKeywords(),
+                seen_doc_ids: JSON.stringify(this.getViewedDocIds()),
+                project_collection: this.selectedCollection
             });
             if (code === 200) {
                 this.topicClusters = data.clusters || [];
@@ -538,6 +649,7 @@ export class Component implements OnInit {
                 this.topicNClusters = data.n_clusters || 0;
                 this.topicMethod = data.method || '';
                 this.topicInterpretation = data.interpretation || null;
+                this.topicPersonalization = data.interpretation?.personalization || null;
                 this.topicMapLoaded = true;
             }
         } catch (e) { }
@@ -550,6 +662,27 @@ export class Component implements OnInit {
     public selectCluster(clusterId: number) {
         this.selectedCluster = this.selectedCluster === clusterId ? -2 : clusterId;
         this.renderTopicCanvas();
+    }
+
+    public async openTopicInDiscover(cluster: any) {
+        if (!cluster) return;
+        this.searchKeyword = (cluster.keywords || []).slice(0, 3).map((item: any) => item.term).join(', ');
+        this.lastKeyword = cluster.label || '토픽 기반 탐색';
+        this.searchResults = (cluster.docs || []).map((doc: any) => ({
+            ...doc,
+            chunks: doc.chunks || [{
+                chunk_index: 0,
+                text: doc.snippet || '',
+                score: doc.max_score || doc.similarity || 0,
+                page_num: doc.page_num || 0,
+            }],
+            max_score: doc.max_score || doc.similarity || 0,
+        }));
+        this.totalHits = this.searchResults.length;
+        this.relatedDocs = [];
+        this.recommendations = [];
+        this.expandedRec = -1;
+        await this.switchTab('discover');
     }
 
     public getFilteredPoints(): any[] {
@@ -816,10 +949,16 @@ export class Component implements OnInit {
         this.recLoading = true;
         await this.service.render();
         try {
-            const { code, data } = await wiz.call("recommend_papers", {
-                interests: this.recInterests,
-                collection: this.selectedCollection
+            const formData = new FormData();
+            formData.append('interests', this.recInterests);
+            formData.append('collection', this.selectedCollection || '');
+            const response = await fetch('/wiz/api/page.research.v2/recommend_papers', {
+                method: 'POST',
+                body: formData
             });
+            const payload = await response.json();
+            const code = payload?.code;
+            const data = payload?.data || [];
             if (code === 200) this.recResults = data || [];
         } catch (e) { }
         this.recLoading = false;
@@ -852,13 +991,21 @@ export class Component implements OnInit {
     public async searchPatents() {
         if (!this.patentQuery.trim()) return;
         this.patentSearching = true;
+        this.patentError = '';
+        this.patentResults = [];
         await this.service.render();
         try {
-            const { code, data } = await wiz.call("search_patents", {
+            const response: any = await wiz.call("search_patents", {
                 query: this.patentQuery,
                 collection: this.selectedCollection
             });
-            if (code === 200) this.patentResults = data || [];
+            const { code, data, message } = response || {};
+            if (code === 200) {
+                this.patentResults = data?.patents || data || [];
+                this.patentSource = data?.source || 'KIPRIS Plus';
+            } else {
+                this.patentError = message || '특허 검색 중 오류가 발생했습니다.';
+            }
         } catch (e) { }
         this.patentSearching = false;
         await this.service.render();

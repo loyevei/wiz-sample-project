@@ -1,10 +1,13 @@
-import { OnInit } from '@angular/core';
+import { OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Service } from '@wiz/libs/portal/season/service';
 
 declare const wiz: any;
 
-export class Component implements OnInit {
+export class Component implements OnInit, OnDestroy {
+    private readonly collectionChangeEventName: string = 'plasma-collection-changed';
+    private collectionChangeListener: any = null;
+
     public records: any[] = [];
     public projects: any[] = [];
     public collections: any[] = [];
@@ -34,6 +37,24 @@ export class Component implements OnInit {
         await this.loadRecords();
         await this.handleQueryParams();
         await this.service.render();
+        this.collectionChangeListener = async (event: any) => {
+            const nextCollection = String(event?.detail?.collection || '').trim();
+            if (!nextCollection || nextCollection === this.selectedCollectionFilter) return;
+            if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            this.selectedCollectionFilter = nextCollection;
+            if (!this.editingRecord) {
+                this.form.collection = nextCollection;
+            }
+            await this.service.render();
+        };
+        window.addEventListener(this.collectionChangeEventName, this.collectionChangeListener as EventListener);
+    }
+
+    public ngOnDestroy() {
+        if (this.collectionChangeListener) {
+            window.removeEventListener(this.collectionChangeEventName, this.collectionChangeListener as EventListener);
+            this.collectionChangeListener = null;
+        }
     }
 
     private async handleQueryParams() {

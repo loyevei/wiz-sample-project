@@ -1,9 +1,13 @@
-import { OnInit } from '@angular/core';
+import { OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Service } from '@wiz/libs/portal/season/service';
 
-export class Component implements OnInit {
+export class Component implements OnInit, OnDestroy {
     private readonly collectionStorageKey: string = 'plasma.selectedCollection';
+    private readonly collectionChangeEventName: string = 'plasma-collection-changed';
+    private queryParamSub: any = null;
+    private lastQueryParamSignature: string = '';
+    private collectionChangeListener: any = null;
 
     public activeTab: string = 'search';
     public tabs: any[] = [
@@ -134,10 +138,36 @@ export class Component implements OnInit {
         await this.loadOverview();
         await this.handleQueryParams();
         await this.service.render();
+        this.queryParamSub = this.route.queryParams.subscribe(async (params: any) => {
+            await this.handleQueryParams(params);
+        });
+        this.collectionChangeListener = async (event: any) => {
+            const nextCollection = String(event?.detail?.collection || '').trim();
+            if (!nextCollection || nextCollection === this.selectedCollection) return;
+            if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            this.selectedCollection = nextCollection;
+            await this.onCollectionChange(false);
+            await this.service.render();
+        };
+        window.addEventListener(this.collectionChangeEventName, this.collectionChangeListener as EventListener);
     }
 
-    private async handleQueryParams() {
-        const params = this.route.snapshot.queryParams;
+    public ngOnDestroy() {
+        if (this.queryParamSub) {
+            this.queryParamSub.unsubscribe();
+            this.queryParamSub = null;
+        }
+        if (this.collectionChangeListener) {
+            window.removeEventListener(this.collectionChangeEventName, this.collectionChangeListener as EventListener);
+            this.collectionChangeListener = null;
+        }
+    }
+
+    private async handleQueryParams(params: any = this.route.snapshot.queryParams) {
+        const signature = JSON.stringify(params || {});
+        if (signature === this.lastQueryParamSignature) return;
+        this.lastQueryParamSignature = signature;
+
         if (!params || Object.keys(params).length === 0) return;
 
         if (params['tab'] && this.tabs.find((t: any) => t.id === params['tab'])) {
@@ -205,8 +235,13 @@ export class Component implements OnInit {
         return this.collections.find((c: any) => c.name === this.selectedCollection);
     }
 
-    public async onCollectionChange() {
+    public async onCollectionChange(emitEvent: boolean = true) {
         this.persistCollection(this.selectedCollection);
+        if (emitEvent) {
+            window.dispatchEvent(new CustomEvent(this.collectionChangeEventName, {
+                detail: { collection: this.selectedCollection, source: 'page-diagnosis' }
+            }));
+        }
         // 탭별 기존 결과 초기화
         this.searchResults = [];
         this.similarSpectra = [];

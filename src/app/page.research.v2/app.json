@@ -1,0 +1,12 @@
+{
+    "id": "page.research.v2",
+    "mode": "page",
+    "title": "/research/v2",
+    "namespace": "research.v2",
+    "category": "research",
+    "viewuri": "/research/v2",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-research-v2()"
+}

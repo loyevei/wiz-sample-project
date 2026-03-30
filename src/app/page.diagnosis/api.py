@@ -52,34 +52,20 @@ EMISSION_LINES = {
     388.9: "He I", 501.6: "He I", 587.6: "He I", 667.8: "He I",
 }
 
-MODEL_REGISTRY = {
-    "snunlp/KR-SBERT-V40K-klueNLI-augSTS": {"dim": 768, "short_name": "KR-SBERT"},
-    "BM-K/KoSimCSE-roberta-multitask": {"dim": 768, "short_name": "KoSimCSE"},
-    "jhgan/ko-sroberta-multitask": {"dim": 768, "short_name": "ko-sroberta"},
-    "sentence-transformers/all-MiniLM-L6-v2": {"dim": 384, "short_name": "MiniLM-L6"},
-    "sentence-transformers/all-mpnet-base-v2": {"dim": 768, "short_name": "MPNet"},
-    "BAAI/bge-base-en-v1.5": {"dim": 768, "short_name": "BGE-base"},
-    "intfloat/multilingual-e5-large": {"dim": 1024, "short_name": "mE5-Large"},
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {"dim": 384, "short_name": "MiniLM-L12"}
-}
-DEFAULT_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
+MODEL_REGISTRY = wiz.model("modelregistry").compact()
+DEFAULT_MODEL = wiz.model("modelregistry").default_model()
 
 # ==============================================================================
 # Common Helpers
 # ==============================================================================
 
 def _load_collection_meta():
-    if os.path.exists(COLLECTION_META_PATH):
-        try:
-            with open(COLLECTION_META_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    meta_helper = wiz.model("collectionmeta")
+    return meta_helper.load(COLLECTION_META_PATH)
 
 def _get_collection_model(collection_name):
-    meta = _load_collection_meta()
-    return meta.get(collection_name, {}).get("model", DEFAULT_MODEL)
+    meta_helper = wiz.model("collectionmeta")
+    return meta_helper.get_model(COLLECTION_META_PATH, collection_name, DEFAULT_MODEL)
 
 def _get_model(model_name=None):
     if model_name is None:
@@ -230,9 +216,10 @@ def collections():
         client = _get_client()
         col_names = client.list_collections()
         meta = _load_collection_meta()
+        meta_helper = wiz.model("collectionmeta")
         result = []
         for name in col_names:
-            info = meta.get(name, {})
+            info = meta_helper.normalize_info(meta.get(name, {}))
             if not info or info.get("short_name") == "Unknown":
                 try:
                     col_info = client.describe_collection(name)
@@ -289,6 +276,26 @@ def search_diagnostic():
     except Exception as e:
         traceback.print_exc()
         wiz.response.status(500, message=str(e))
+
+
+def run_search_diagnostic_data(query="", diagnostic_type="", top_k=20, collection_name=None):
+    collection_name = (collection_name or DEFAULT_COLLECTION).strip() or DEFAULT_COLLECTION
+    client = _get_client()
+    if not client.has_collection(collection_name):
+        return {"results": [], "message": "컬렉션이 없습니다."}
+    enhanced_query = f"{diagnostic_type} {query}".strip() if diagnostic_type else query
+    if not enhanced_query.strip():
+        raise ValueError("검색어를 입력하세요.")
+    model_name = _get_collection_model(collection_name)
+    model = _get_model(model_name)
+    qvec = model.encode([enhanced_query], normalize_embeddings=True)[0].tolist()
+    results = client.search(collection_name=collection_name, data=[qvec], limit=top_k,
+                            output_fields=["doc_id", "filename", "chunk_index", "text"],
+                            search_params={"metric_type": "COSINE"})
+    items = [{"doc_id": h["entity"].get("doc_id",""), "filename": h["entity"].get("filename",""),
+              "chunk_index": h["entity"].get("chunk_index",0), "text": h["entity"].get("text","")[:400],
+              "score": round(h.get("distance",0), 4)} for h in results[0]]
+    return {"query": enhanced_query, "results": items, "total": len(items)}
 
 
 def compare_diagnostics():
@@ -349,6 +356,76 @@ def compare_diagnostics():
     except Exception as e:
         traceback.print_exc()
         wiz.response.status(500, message=str(e))
+
+
+def run_compare_diagnostics_data(method_a="", method_b="", collection_name=None):
+    if not method_a or not method_b:
+        raise ValueError("두 가지 진단 방법을 입력하세요.")
+    collection_name = (collection_name or DEFAULT_COLLECTION).strip() or DEFAULT_COLLECTION
+    client = _get_client()
+    model_name = _get_collection_model(collection_name)
+    model = _get_model(model_name)
+    if not client.has_collection(collection_name):
+        return {"comparison": [], "message": "컬렉션이 없습니다."}
+
+    results = {}
+    full_texts = {}
+    for method in [method_a, method_b]:
+        queries = [
+            f"plasma diagnostics {method} measurement analysis",
+            f"플라즈마 진단 {method} 측정 분석",
+            f"{method} principle technique application"
+        ]
+        all_hits = []
+        seen_keys = set()
+        for q in queries:
+            qvec = model.encode([q], normalize_embeddings=True)[0].tolist()
+            sr = client.search(collection_name=collection_name, data=[qvec], limit=10,
+                               output_fields=["doc_id", "filename", "text"],
+                               search_params={"metric_type": "COSINE"})
+            for h in sr[0]:
+                key = h["entity"].get("doc_id", "") + "_" + str(h.get("id", ""))
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    all_hits.append(h)
+        all_hits.sort(key=lambda h: h.get("distance", 0), reverse=True)
+        top_hits = all_hits[:15]
+        results[method] = [{"doc_id": h["entity"].get("doc_id",""), "filename": h["entity"].get("filename",""),
+                            "text": h["entity"].get("text","")[:300], "score": round(h.get("distance",0), 4)} for h in top_hits]
+        full_texts[method] = " ".join(h["entity"].get("text","") for h in top_hits)
+
+    docs_a = set(r["doc_id"] for r in results[method_a])
+    docs_b = set(r["doc_id"] for r in results[method_b])
+    common = docs_a & docs_b
+    analysis = _build_comparison_analysis(method_a, method_b, full_texts[method_a], full_texts[method_b], results[method_a], results[method_b])
+    return {
+        "method_a": method_a,
+        "method_b": method_b,
+        "results_a": results[method_a][:10],
+        "results_b": results[method_b][:10],
+        "common_doc_count": len(common),
+        "common_docs": list(common),
+        "analysis": analysis
+    }
+
+
+def run_diagnosis_detection_data():
+    baseline = _load_json(BASELINE_PATH, {})
+    history = _load_json(ANOMALY_HISTORY_PATH, [])
+    recent = list(reversed(history[-20:]))
+    anomaly_count = sum(1 for h in history if h.get("is_anomaly"))
+    avg_distance = round(float(np.mean([h["distance"] for h in history])), 6) if history else 0
+    baseline_info = {k: v for k, v in baseline.items() if k != "centroid"} if baseline.get("centroid") else None
+    return {
+        "has_baseline": bool(baseline.get("centroid")),
+        "baseline": baseline_info,
+        "history": recent,
+        "stats": {
+            "total": len(history),
+            "anomaly_count": anomaly_count,
+            "avg_distance": avg_distance
+        }
+    }
 
 
 def _build_comparison_analysis(method_a, method_b, text_a, text_b, results_a, results_b):
@@ -895,86 +972,107 @@ def failure_reasoning():
     try:
         symptom = wiz.request.query("symptom", "")
         spectrum_data = wiz.request.query("spectrum_data", "")
-        if not symptom.strip() and not spectrum_data.strip():
-            wiz.response.status(400, message="증상 또는 스펙트럼 데이터를 입력하세요.")
-            return
-        # 1. 알려진 패턴 매칭
-        patterns = _load_json(FAILURE_PATTERNS_PATH, [])
-        matched_patterns = []
-        symptom_lower = symptom.lower()
-        for pat in patterns:
-            pat_symptoms = [s.lower() for s in pat.get("symptoms", [])]
-            match_count = sum(1 for ps in pat_symptoms if ps in symptom_lower or symptom_lower in ps)
-            if match_count > 0:
-                matched_patterns.append({**pat, "match_score": round(match_count / max(len(pat_symptoms), 1), 2)})
-        matched_patterns.sort(key=lambda x: x["match_score"], reverse=True)
-        # 2. 스펙트럼 분석
-        spectrum_info = None
-        species_context = ""
-        if spectrum_data.strip():
-            result = _process_spectrum(spectrum_data)
-            if result:
-                spectrum_info = {"n_peaks": len(result["peaks"]), "species_list": result["species_list"],
-                                 "peaks": result["peaks"][:15]}
-                species_context = " ".join(result["species_list"])
-        # 3. 벡터 검색
-        collection_name, model_name = _resolve_collection_and_model()
-        client = _get_client()
-        evidence_docs = []
-        if client.has_collection(collection_name):
-            model = _get_model(model_name)
-            queries = [
-                f"{symptom} failure cause analysis {species_context}".strip(),
-                f"{symptom} troubleshooting solution {species_context}".strip(),
-                f"plasma process {symptom} abnormal diagnosis",
-                f"{symptom} mechanism root cause"
-            ]
-            all_hits = []
-            for q in queries:
-                qvec = model.encode([q], normalize_embeddings=True)[0].tolist()
-                sr = client.search(collection_name=collection_name, data=[qvec], limit=8,
-                                   output_fields=["doc_id", "filename", "chunk_index", "text"],
-                                   search_params={"metric_type": "COSINE"})
-                for h in sr[0]:
-                    e = h.get("entity", {})
-                    all_hits.append({
-                        "query_context": q.replace(species_context, "").strip() if species_context else q,
-                        "doc_id": e.get("doc_id",""), "filename": e.get("filename",""),
-                        "chunk_index": e.get("chunk_index",0), "text": e.get("text","")[:400],
-                        "score": round(h.get("distance",0), 4)
-                    })
-            seen = set()
-            for h in sorted(all_hits, key=lambda x: x["score"], reverse=True):
-                key = f"{h['doc_id']}_{h['chunk_index']}"
-                if key not in seen:
-                    seen.add(key)
-                    text_l = h["text"].lower()
-                    tags = []
-                    if any(kw in text_l for kw in ["cause", "due to", "because", "원인", "기인"]):
-                        tags.append("원인분석")
-                    if any(kw in text_l for kw in ["solution", "resolve", "fix", "prevent", "해결", "방지", "개선"]):
-                        tags.append("해결방법")
-                    if not tags:
-                        tags.append("관련자료")
-                    h["tags"] = tags
-                    evidence_docs.append(h)
-                if len(evidence_docs) >= 15:
-                    break
-        cause_docs = [d for d in evidence_docs if "원인분석" in d.get("tags",[])]
-        solution_docs = [d for d in evidence_docs if "해결방법" in d.get("tags",[])]
-        summary = {
-            "symptom": symptom, "n_matched_patterns": len(matched_patterns),
-            "n_evidence_docs": len(evidence_docs), "n_cause_docs": len(cause_docs),
-            "n_solution_docs": len(solution_docs),
-            "detected_species": spectrum_info["species_list"] if spectrum_info else []
-        }
-        wiz.response.status(200, summary=summary, matched_patterns=matched_patterns[:5],
-                            evidence_docs=evidence_docs, spectrum_info=spectrum_info)
+        collection_name, _ = _resolve_collection_and_model()
+        result = run_failure_reasoning_data(symptom=symptom, spectrum_data=spectrum_data, collection_name=collection_name)
+        wiz.response.status(200, **result)
     except season.lib.exception.ResponseException:
         raise
     except Exception as e:
         traceback.print_exc()
         wiz.response.status(500, message=str(e))
+
+
+def run_failure_reasoning_data(symptom="", spectrum_data="", collection_name=None):
+    if not symptom.strip() and not spectrum_data.strip():
+        raise ValueError("증상 또는 스펙트럼 데이터를 입력하세요.")
+
+    patterns = _load_json(FAILURE_PATTERNS_PATH, [])
+    matched_patterns = []
+    symptom_lower = symptom.lower()
+    for pat in patterns:
+        pat_symptoms = [s.lower() for s in pat.get("symptoms", [])]
+        match_count = sum(1 for ps in pat_symptoms if ps in symptom_lower or symptom_lower in ps)
+        if match_count > 0:
+            matched_patterns.append({**pat, "match_score": round(match_count / max(len(pat_symptoms), 1), 2)})
+    matched_patterns.sort(key=lambda x: x["match_score"], reverse=True)
+
+    spectrum_info = None
+    species_context = ""
+    if spectrum_data.strip():
+        result = _process_spectrum(spectrum_data)
+        if result:
+            spectrum_info = {
+                "n_peaks": len(result["peaks"]),
+                "species_list": result["species_list"],
+                "peaks": result["peaks"][:15]
+            }
+            species_context = " ".join(result["species_list"])
+
+    collection_name = (collection_name or DEFAULT_COLLECTION).strip() or DEFAULT_COLLECTION
+    model_name = _get_collection_model(collection_name)
+    client = _get_client()
+    evidence_docs = []
+    if client.has_collection(collection_name):
+        model = _get_model(model_name)
+        queries = [
+            f"{symptom} failure cause analysis {species_context}".strip(),
+            f"{symptom} troubleshooting solution {species_context}".strip(),
+            f"plasma process {symptom} abnormal diagnosis",
+            f"{symptom} mechanism root cause"
+        ]
+        all_hits = []
+        for q in queries:
+            if not q.strip():
+                continue
+            qvec = model.encode([q], normalize_embeddings=True)[0].tolist()
+            sr = client.search(collection_name=collection_name, data=[qvec], limit=8,
+                               output_fields=["doc_id", "filename", "chunk_index", "text"],
+                               search_params={"metric_type": "COSINE"})
+            for h in sr[0]:
+                e = h.get("entity", {})
+                all_hits.append({
+                    "query_context": q.replace(species_context, "").strip() if species_context else q,
+                    "doc_id": e.get("doc_id", ""),
+                    "filename": e.get("filename", ""),
+                    "chunk_index": e.get("chunk_index", 0),
+                    "text": e.get("text", "")[:400],
+                    "score": round(h.get("distance", 0), 4)
+                })
+        seen = set()
+        for h in sorted(all_hits, key=lambda x: x["score"], reverse=True):
+            key = f"{h['doc_id']}_{h['chunk_index']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            text_l = h["text"].lower()
+            tags = []
+            if any(kw in text_l for kw in ["cause", "due to", "because", "원인", "기인"]):
+                tags.append("원인분석")
+            if any(kw in text_l for kw in ["solution", "resolve", "fix", "prevent", "해결", "방지", "개선"]):
+                tags.append("해결방법")
+            if not tags:
+                tags.append("관련자료")
+            h["tags"] = tags
+            evidence_docs.append(h)
+            if len(evidence_docs) >= 15:
+                break
+
+    cause_docs = [d for d in evidence_docs if "원인분석" in d.get("tags", [])]
+    solution_docs = [d for d in evidence_docs if "해결방법" in d.get("tags", [])]
+    summary = {
+        "symptom": symptom,
+        "n_matched_patterns": len(matched_patterns),
+        "n_evidence_docs": len(evidence_docs),
+        "n_cause_docs": len(cause_docs),
+        "n_solution_docs": len(solution_docs),
+        "detected_species": spectrum_info["species_list"] if spectrum_info else []
+    }
+    return {
+        "summary": summary,
+        "matched_patterns": matched_patterns[:5],
+        "evidence_docs": evidence_docs,
+        "spectrum_info": spectrum_info
+    }
 
 
 def register_failure_pattern():

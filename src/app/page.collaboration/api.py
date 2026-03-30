@@ -31,6 +31,10 @@ def _save_json(filepath, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+def _collection_meta_helper():
+    return wiz.model("collectionmeta")
+
+
 def _add_activity(act_type, message, detail=""):
     activities = _load_json(ACTIVITY_FILE)
     activities.insert(0, {
@@ -229,10 +233,12 @@ def list_activity():
 
 
 def list_collections():
-    meta = _load_json(COLLECTION_META_PATH)
+    meta_helper = _collection_meta_helper()
+    meta = meta_helper.load(COLLECTION_META_PATH)
     rows = []
     if isinstance(meta, dict):
         for name, info in meta.items():
+            info = meta_helper.normalize_info(info)
             rows.append({
                 "name": name,
                 "short_name": info.get("short_name", "Unknown"),

@@ -175,7 +175,7 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                                 | 근거 문헌
                             div(*ngFor="let ev of rec.evidence", class="bg-gray-50 rounded-lg px-4 py-3 border border-gray-100")
                                 div(class="flex items-center gap-2 mb-1")
-                                    span(class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700") {{ev.filename}}
+                                    span((click)="openPdf(ev.doc_id, ev.page_num); $event.stopPropagation()", class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 cursor-pointer hover:bg-blue-100 transition-colors", title="PDF 원문 보기") {{ev.filename}}
                                     span(class="text-[10px] font-mono", [ngClass]="{'text-green-600': ev.score > 0.5, 'text-amber-600': ev.score <= 0.5}") {{(ev.score * 100).toFixed(1)}}%
                                 p(class="text-[12px] text-gray-600 leading-relaxed line-clamp-3") {{ev.text}}
                                 div(class="mt-2 flex flex-wrap gap-1", *ngIf="ev.conditions?.length > 0")
@@ -195,7 +195,7 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                         div(class="flex items-start justify-between")
                             div(class="flex-1 min-w-0")
                                 div(class="flex items-center gap-2 mb-1")
-                                    span(class="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700") {{cluster.filename}}
+                                    span((click)="openPdf(cluster.doc_id, 0); $event.stopPropagation()", class="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 cursor-pointer hover:bg-blue-100 transition-colors", title="PDF 원문 보기") {{cluster.filename}}
                                     span(class="text-[11px] text-gray-400") {{cluster.chunks.length}}개 청크 매칭
                                 div(class="flex items-center gap-2 mt-1")
                                     div(class="text-[12px] font-medium text-gray-700") 최대 유사도
@@ -209,7 +209,7 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                                 | 관련 연구
 
                         div(class="mt-3 space-y-2")
-                            div(*ngFor="let chunk of cluster.chunks.slice(0, 3)", class="bg-gray-50 rounded-lg px-4 py-3 border border-gray-100")
+                            div(*ngFor="let chunk of cluster.chunks.slice(0, 3)", (click)="openPdf(cluster.doc_id, chunk.page_num)", class="bg-gray-50 rounded-lg px-4 py-3 border border-gray-100 cursor-pointer hover:bg-blue-50/50 hover:border-blue-200 transition-colors", title="PDF 원문 보기 (p.{{chunk.page_num || 1}})")
                                 div(class="flex items-center gap-2 mb-1")
                                     span(class="text-[10px] text-gray-400 font-mono") chunk {{chunk.chunk_index}}
                                     span(class="text-[10px] text-green-600 font-mono") {{(chunk.score * 100).toFixed(1)}}%
@@ -221,7 +221,7 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                     h2(class="text-[15px] font-semibold text-gray-900") 관련 연구 문서
                     p(class="text-[12px] text-gray-400 mt-0.5") "{{relatedSource}}" 기반 유사 문서
                 div(class="divide-y divide-gray-100")
-                    div(*ngFor="let doc of relatedDocs; let i = index", class="px-6 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors")
+                    div(*ngFor="let doc of relatedDocs; let i = index", class="px-6 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors cursor-pointer", (click)="openPdf(doc.doc_id, 0)")
                         div(class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-amber-50 text-amber-600 text-[12px] font-bold") {{i + 1}}
                         div(class="flex-1 min-w-0")
                             p(class="text-[13px] font-medium text-gray-900 truncate") {{doc.filename}}
@@ -250,6 +250,7 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                     div(*ngIf="topicMapLoaded && !topicLoading", class="flex items-center gap-2")
                         span(class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700") {{topicNClusters}}개 토픽
                         span(class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600") {{topicTotalDocs}}문서
+                        span(*ngIf="topicMethod", class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700") {{topicMethod}}
                     button((click)="loadTopicMap()", [disabled]="topicLoading", class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-[12px] font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-50 transition-all active:scale-95")
                         svg(class="animate-spin size-3.5", viewBox="0 0 24 24", *ngIf="topicLoading")
                             circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
@@ -257,6 +258,16 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                         svg(*ngIf="!topicLoading", xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3.5")
                             path(stroke-linecap="round", stroke-linejoin="round", d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z")
                         | {{topicMapLoaded ? '다시 분석' : '분석 실행'}}
+
+            div(class="px-6 pb-4 pt-4 border-b border-gray-100 bg-gray-50/40")
+                div(class="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-start")
+                    div
+                        div(class="text-[12px] font-medium text-gray-700 mb-1") 개인화 기준 키워드
+                        input(type="text", [(ngModel)]="topicPersonalKeywords", (ngModelChange)="onTopicPersonalKeywordsChange()", placeholder="예: ICP 에칭 균일도, OES 진단, PECVD 박막 응력", class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-[13px] text-gray-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none")
+                        p(class="mt-1 text-[11px] text-gray-400") 비워두면 최근 탐색 키워드와 근거 추적 이력을 기준으로 자동 개인화합니다.
+                    div(class="flex items-center gap-2 pt-6 lg:pt-0")
+                        span(class="inline-flex items-center rounded-full bg-white border border-gray-200 px-3 py-1 text-[11px] font-medium text-gray-600") 열람 문서 {{viewedDocsCount}}건 기록
+                        button((click)="loadTopicMap()", [disabled]="topicLoading", class="inline-flex items-center rounded-lg border border-emerald-200 bg-white px-3 py-2 text-[12px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50") 개인화 새로고침
 
             //- Topic Map Loading
             div(*ngIf="topicLoading", class="px-6 py-16")
@@ -305,17 +316,74 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                             div(class="mt-2 flex flex-wrap gap-1.5", *ngIf="cluster.keywords.length > 0")
                                 span(*ngFor="let kw of cluster.keywords", class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border", [style.borderColor]="cluster.color + '40'", [style.backgroundColor]="cluster.color + '10'", [style.color]="cluster.color") {{kw.term}}
                         div(*ngIf="selectedCluster === cluster.id", class="border-t border-gray-100 px-4 py-3")
+                            div(class="mb-3 flex flex-wrap gap-2")
+                                button((click)="openTopicInDiscover(cluster); $event.stopPropagation()", class="inline-flex items-center rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-500") 이 토픽만 Discover로 보기
+                                span(*ngFor="let objective of cluster.objectives", class="inline-flex items-center rounded-full bg-violet-50 border border-violet-200 px-2 py-0.5 text-[10px] font-medium text-violet-700") {{objective.term}} ({{objective.count}})
                             div(*ngIf="cluster.representative_snippet", class="mb-3")
                                 div(class="text-[11px] text-gray-400 font-medium mb-1") 대표 문서 요약
                                 div(class="bg-emerald-50/50 rounded-lg px-3 py-2 border border-emerald-100")
                                     div(class="text-[10px] text-emerald-600 font-medium mb-0.5") {{cluster.representative_doc}}
                                     p(class="text-[11px] text-gray-600 leading-relaxed line-clamp-3") {{cluster.representative_snippet}}
+                            div(class="grid grid-cols-1 xl:grid-cols-3 gap-3 mb-3")
+                                div(class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3")
+                                    div(class="text-[11px] font-semibold text-gray-700 mb-2") 최신 논문 3개
+                                    div(class="space-y-2")
+                                        div(*ngFor="let doc of cluster.latest_docs", class="rounded-md bg-white border border-gray-100 px-3 py-2 cursor-pointer hover:bg-blue-50/40", (click)="openPdf(doc.doc_id, doc.page_num)")
+                                            div(class="flex items-center justify-between gap-2")
+                                                span(class="text-[11px] font-medium text-gray-800 truncate") {{doc.filename}}
+                                                span(class="text-[10px] text-blue-600 font-mono") {{doc.year || '-'}}
+                                            p(class="mt-1 text-[10px] text-gray-500 line-clamp-2") {{doc.snippet}}
+                                div(class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3")
+                                    div(class="text-[11px] font-semibold text-gray-700 mb-2") 핵심 논문 3개
+                                    div(class="space-y-2")
+                                        div(*ngFor="let doc of cluster.core_docs", class="rounded-md bg-white border border-gray-100 px-3 py-2 cursor-pointer hover:bg-emerald-50/40", (click)="openPdf(doc.doc_id, doc.page_num)")
+                                            div(class="flex items-center justify-between gap-2")
+                                                span(class="text-[11px] font-medium text-gray-800 truncate") {{doc.filename}}
+                                                span(class="text-[10px] text-emerald-600 font-mono") {{(doc.max_score * 100).toFixed(0)}}%
+                                            p(class="mt-1 text-[10px] text-gray-500 line-clamp-2") {{doc.snippet}}
+                                div(class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3")
+                                    div(class="text-[11px] font-semibold text-gray-700 mb-2") 브릿지 논문 3개
+                                    div(class="space-y-2")
+                                        div(*ngFor="let doc of cluster.bridge_docs", class="rounded-md bg-white border border-gray-100 px-3 py-2 cursor-pointer hover:bg-amber-50/40", (click)="openPdf(doc.doc_id, doc.page_num)")
+                                            div(class="flex items-center justify-between gap-2")
+                                                span(class="text-[11px] font-medium text-gray-800 truncate") {{doc.filename}}
+                                                span(class="text-[10px] text-amber-600 font-mono") {{(doc.bridge_score * 100).toFixed(0)}}%
+                                            p(class="mt-1 text-[10px] text-gray-500 line-clamp-2") {{doc.snippet}}
+                                            div(class="mt-1 text-[10px] text-gray-400") {{doc.primary_cluster.label}} ↔ {{doc.secondary_cluster.label}}
+                            div(class="grid grid-cols-1 xl:grid-cols-3 gap-3 mb-3")
+                                div(class="rounded-lg border border-gray-200 px-3 py-3")
+                                    div(class="text-[11px] font-semibold text-gray-700 mb-2") 연도 분포
+                                    div(class="flex flex-wrap gap-1.5")
+                                        span(*ngFor="let item of cluster.year_distribution", class="inline-flex items-center rounded-full bg-sky-50 border border-sky-200 px-2 py-0.5 text-[10px] font-medium text-sky-700") {{item.year}} · {{item.count}}
+                                div(class="rounded-lg border border-gray-200 px-3 py-3")
+                                    div(class="text-[11px] font-semibold text-gray-700 mb-2") 주요 실험 조건
+                                    div(class="flex flex-wrap gap-1.5")
+                                        span(*ngFor="let item of cluster.condition_distribution", class="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-medium text-emerald-700") {{item.term}} ({{item.count}})
+                                div(class="rounded-lg border border-gray-200 px-3 py-3")
+                                    div(class="text-[11px] font-semibold text-gray-700 mb-2") 장비 / 가스 / 소재
+                                    div(class="space-y-2")
+                                        div
+                                            div(class="text-[10px] text-gray-400 mb-1") 장비
+                                            div(class="flex flex-wrap gap-1")
+                                                span(*ngFor="let item of cluster.entity_distribution.equipment", class="inline-flex items-center rounded-full bg-violet-50 border border-violet-200 px-2 py-0.5 text-[10px] font-medium text-violet-700") {{item.term}} ({{item.count}})
+                                        div
+                                            div(class="text-[10px] text-gray-400 mb-1") 가스
+                                            div(class="flex flex-wrap gap-1")
+                                                span(*ngFor="let item of cluster.entity_distribution.gases", class="inline-flex items-center rounded-full bg-cyan-50 border border-cyan-200 px-2 py-0.5 text-[10px] font-medium text-cyan-700") {{item.term}} ({{item.count}})
+                                        div
+                                            div(class="text-[10px] text-gray-400 mb-1") 소재
+                                            div(class="flex flex-wrap gap-1")
+                                                span(*ngFor="let item of cluster.entity_distribution.materials", class="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-medium text-amber-700") {{item.term}} ({{item.count}})
                             div(class="text-[11px] text-gray-400 font-medium mb-2") 포함 문서
                             div(class="space-y-1.5")
                                 div(*ngFor="let doc of cluster.docs; let di = index", class="flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 hover:bg-gray-100 transition-colors")
                                     div(class="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0", [style.background]="cluster.color") {{di + 1}}
-                                    span(class="text-[12px] text-gray-700 truncate") {{doc.filename}}
-                                    button((click)="searchKeyword = doc.filename.replace('.pdf',''); switchTab('discover'); searchAndRecommend(); $event.stopPropagation()", class="ml-auto text-[10px] text-amber-600 hover:text-amber-500 font-medium flex-shrink-0") 탐색
+                                    div(class="min-w-0 flex-1")
+                                        div(class="flex items-center gap-2")
+                                            span(class="text-[12px] text-gray-700 truncate") {{doc.filename}}
+                                            span(*ngIf="doc.year", class="text-[10px] text-gray-400 font-mono flex-shrink-0") {{doc.year}}
+                                        p(class="text-[10px] text-gray-500 line-clamp-1") {{doc.snippet}}
+                                    button((click)="openPdf(doc.doc_id, doc.page_num); $event.stopPropagation()", class="text-[10px] text-sky-600 hover:text-sky-500 font-medium flex-shrink-0") PDF
 
                 //- Interpretation Panel
                 div(*ngIf="topicInterpretation", class="border-t border-gray-100")
@@ -366,6 +434,63 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                                             div(class="w-2 h-2 rounded-full", [style.background]="bdoc.secondary_cluster.color")
                                             span(class="text-[10px] text-gray-500") {{bdoc.secondary_cluster.label}} ({{(bdoc.secondary_cluster.similarity * 100).toFixed(0)}}%)
                                 button((click)="searchKeyword = bdoc.filename.replace('.pdf',''); switchTab('discover'); searchAndRecommend()", class="text-[10px] text-amber-600 hover:text-amber-500 font-medium flex-shrink-0") 탐색
+
+                    div(*ngIf="topicInterpretation.contrast_pairs && topicInterpretation.contrast_pairs.length > 0", class="px-6 pb-5")
+                        div(class="text-[13px] font-semibold text-gray-700 mb-3 flex items-center gap-2")
+                            svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-gray-500")
+                                path(stroke-linecap="round", stroke-linejoin="round", d="M9 12.75 11.25 15 15 9.75m6 2.25a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z")
+                            | 조건은 비슷하지만 목적이 다른 토픽
+                        div(class="grid grid-cols-1 lg:grid-cols-2 gap-3")
+                            div(*ngFor="let pair of topicInterpretation.contrast_pairs", class="rounded-lg border border-gray-200 bg-white px-4 py-3")
+                                div(class="flex items-center justify-between gap-2")
+                                    div(class="flex items-center gap-2 min-w-0")
+                                        div(class="w-3 h-3 rounded-full", [style.background]="pair.color_a")
+                                        span(class="text-[12px] font-medium text-gray-800 truncate") {{pair.label_a}}
+                                    span(class="text-[10px] text-gray-400") vs
+                                    div(class="flex items-center gap-2 min-w-0 justify-end")
+                                        span(class="text-[12px] font-medium text-gray-800 truncate") {{pair.label_b}}
+                                        div(class="w-3 h-3 rounded-full", [style.background]="pair.color_b")
+                                div(class="mt-2 flex flex-wrap gap-1.5")
+                                    span(*ngFor="let cond of pair.shared_conditions", class="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-medium text-emerald-700") {{cond}}
+                                div(class="mt-2 flex flex-wrap gap-1.5")
+                                    span(*ngFor="let goal of pair.distinct_objectives", class="inline-flex items-center rounded-full bg-violet-50 border border-violet-200 px-2 py-0.5 text-[10px] font-medium text-violet-700") {{goal}}
+                                div(class="mt-2 text-[10px] text-gray-400") 조건 유사도 {{(pair.condition_similarity * 100).toFixed(0)}}% · 목적 유사도 {{(pair.objective_similarity * 100).toFixed(0)}}%
+
+                    div(*ngIf="topicPersonalization", class="px-6 pb-6")
+                        div(class="text-[13px] font-semibold text-gray-700 mb-3 flex items-center gap-2")
+                            svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4 text-gray-500")
+                                path(stroke-linecap="round", stroke-linejoin="round", d="M15.75 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z")
+                            | 개인화 토픽 가이드
+                        div(class="grid grid-cols-1 xl:grid-cols-3 gap-3")
+                            div(class="rounded-lg border border-gray-200 bg-white px-4 py-3")
+                                div(class="text-[12px] font-semibold text-gray-800 mb-2") 내 연구 키워드와 가까운 토픽
+                                div(class="space-y-2")
+                                    div(*ngFor="let item of topicPersonalization.user_keyword_matches", class="rounded-md bg-gray-50 px-3 py-2")
+                                        div(class="flex items-center gap-2")
+                                            div(class="w-2.5 h-2.5 rounded-full", [style.background]="item.color")
+                                            span(class="text-[11px] font-medium text-gray-800") {{item.label}}
+                                            span(class="ml-auto text-[10px] text-emerald-600 font-mono") {{(item.score * 100).toFixed(0)}}%
+                                        div(class="mt-1 text-[10px] text-gray-400") {{item.reason}}
+                            div(class="rounded-lg border border-gray-200 bg-white px-4 py-3")
+                                div(class="text-[12px] font-semibold text-gray-800 mb-2") 내가 아직 안 본 토픽
+                                div(class="space-y-2")
+                                    div(*ngFor="let item of topicPersonalization.unseen_topics", class="rounded-md bg-gray-50 px-3 py-2")
+                                        div(class="flex items-center gap-2")
+                                            div(class="w-2.5 h-2.5 rounded-full", [style.background]="item.color")
+                                            span(class="text-[11px] font-medium text-gray-800") {{item.label}}
+                                            span(class="ml-auto text-[10px] text-amber-600 font-mono") {{(item.unseen_ratio * 100).toFixed(0)}}%
+                                        div(class="mt-1 text-[10px] text-gray-400") {{item.reason}} · 본 문서 {{item.seen_count}} / {{item.doc_count}}
+                            div(class="rounded-lg border border-gray-200 bg-white px-4 py-3")
+                                div(class="text-[12px] font-semibold text-gray-800 mb-2") 내 프로젝트 컬렉션과 연결되는 토픽
+                                div(class="space-y-2")
+                                    div(*ngFor="let item of topicPersonalization.project_linked_topics", class="rounded-md bg-gray-50 px-3 py-2")
+                                        div(class="flex items-center gap-2")
+                                            div(class="w-2.5 h-2.5 rounded-full", [style.background]="item.color")
+                                            span(class="text-[11px] font-medium text-gray-800") {{item.label}}
+                                            span(class="ml-auto text-[10px] text-sky-600 font-mono") {{item.score}}
+                                        div(class="mt-1 text-[10px] text-gray-400") {{item.reason}}
+                                        div(class="mt-1 flex flex-wrap gap-1")
+                                            span(*ngFor="let project of item.projects", class="inline-flex items-center rounded-full bg-sky-50 border border-sky-200 px-2 py-0.5 text-[10px] font-medium text-sky-700") {{project.name}}
 
         //- ============================================================
         //- TAB: Research Gap Detector
@@ -450,9 +575,9 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                         //- Expanded Related Docs
                         div(*ngIf="expandedGap === gi && gap.related_docs && gap.related_docs.length > 0", class="mt-3 ml-13 space-y-2", (click)="$event.stopPropagation()")
                             div(class="text-[11px] text-gray-400 font-medium mb-2") 관련 문서 (가장 가까운 문헌)
-                            div(*ngFor="let doc of gap.related_docs", class="bg-gray-50 rounded-lg px-4 py-3 border border-gray-100")
+                            div(*ngFor="let doc of gap.related_docs", class="bg-gray-50 rounded-lg px-4 py-3 border border-gray-100 cursor-pointer hover:bg-blue-50/50 hover:border-blue-200 transition-colors", (click)="openPdf(doc.doc_id, 0); $event.stopPropagation()")
                                 div(class="flex items-center gap-2 mb-1")
-                                    span(class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700") {{doc.filename}}
+                                    span(class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700", title="PDF 원문 보기") {{doc.filename}}
                                     span(class="text-[10px] font-mono", [ngClass]="{'text-green-600': doc.score > 0.5, 'text-amber-600': doc.score <= 0.5}") {{(doc.score * 100).toFixed(1)}}%
                                 p(class="text-[12px] text-gray-600 leading-relaxed line-clamp-3") {{doc.snippet}}
 
@@ -550,7 +675,7 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                                     | 근거 문헌
                                 div(*ngFor="let ev of hyp.evidence", class="bg-gray-50 rounded-lg px-4 py-3 border border-gray-100")
                                     div(class="flex items-center gap-2 mb-1")
-                                        span(class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700") {{ev.filename}}
+                                        span((click)="openPdf(ev.doc_id, ev.page_num); $event.stopPropagation()", class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 cursor-pointer hover:bg-blue-100 transition-colors", title="PDF 원문 보기") {{ev.filename}}
                                         span(class="text-[10px] font-mono", [ngClass]="{'text-green-600': ev.score > 0.5, 'text-amber-600': ev.score <= 0.5}") {{(ev.score * 100).toFixed(1)}}%
                                     p(class="text-[12px] text-gray-600 leading-relaxed line-clamp-3") {{ev.text}}
                                     div(class="mt-2 flex flex-wrap gap-1", *ngIf="ev.conditions?.length > 0")
@@ -640,13 +765,18 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                         div(class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold", [ngClass]="paper.score > 0.7 ? 'bg-amber-100 text-amber-700' : (paper.score > 0.5 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')") {{i + 1}}
                         div(class="flex-1 min-w-0")
                             h3(class="text-[13px] font-semibold text-gray-900 mb-1 leading-snug") {{paper.title || '제목 없음'}}
-                            p(*ngIf="paper.authors", class="text-[11px] text-gray-400 mb-2") {{paper.authors}}
-                                span(*ngIf="paper.year", class="ml-2") ({{paper.year}})
+                            p(class="text-[11px] text-gray-400 mb-2")
+                                span(*ngIf="paper.authors") {{paper.authors}}
+                                span(*ngIf="paper.publication_year", class="ml-2") 출판 {{paper.publication_year}}
+                                span(*ngIf="paper.online_year", class="ml-2") · 온라인 {{paper.online_year}}
+                                span(*ngIf="paper.accepted_year", class="ml-2") · 채택 {{paper.accepted_year}}
+                                span(*ngIf="paper.received_year", class="ml-2") · 접수 {{paper.received_year}}
+                                span(*ngIf="!paper.publication_year && !paper.online_year && paper.year", class="ml-2") {{paper.year}}
                             p(class="text-[12px] text-gray-500 mb-3 line-clamp-3 leading-relaxed") {{paper.abstract || paper.text || ''}}
                             div(class="flex items-center flex-wrap gap-2")
                                 span(class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold", [ngClass]="paper.relevance === '높음' ? 'bg-green-100 text-green-700' : (paper.relevance === '보통' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')")
                                     | 유사도 {{(paper.score * 100).toFixed(1)}}%
-                                span(*ngIf="paper.filename", class="text-[10px] text-gray-400 font-mono truncate max-w-[200px]") 📄 {{paper.filename}}
+                                span(*ngIf="paper.filename", (click)="openPdf(paper.doc_id, paper.page_num); $event.stopPropagation()", class="text-[10px] text-blue-600 font-mono truncate max-w-[200px] cursor-pointer hover:text-blue-800 hover:underline transition-colors", title="PDF 원문 보기") 📄 {{paper.filename}}
                                 span(*ngFor="let term of (paper.matched_terms || []).slice(0,3)", class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700") {{term}}
 
             //- 빈 상태
@@ -721,7 +851,7 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                         div(class="space-y-2")
                             div(*ngFor="let ref of proposalResult.reference_details.slice(0, 4)", class="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3")
                                 div(class="flex items-center gap-2 mb-1")
-                                    span(class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700") {{ref.filename}}
+                                    span((click)="openPdf(ref.doc_id, ref.page_num); $event.stopPropagation()", class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 cursor-pointer hover:bg-blue-100 transition-colors", title="PDF 원문 보기") {{ref.filename}}
                                     span(class="text-[10px] font-mono text-gray-500") {{(ref.score * 100).toFixed(1)}}%
                                 p(class="text-[12px] text-gray-600 leading-relaxed line-clamp-3") {{ref.text}}
                                 div(class="mt-2 flex flex-wrap gap-1", *ngIf="ref.conditions?.length > 0")
@@ -737,20 +867,23 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
         div(*ngIf="activeTab === 'patent'")
             div(class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6")
                 h2(class="text-[15px] font-semibold text-gray-900 mb-4") 특허 기술 검색
-                p(class="text-[13px] text-gray-500 mb-4") 기술 키워드를 입력하면, 저장된 문헌에서 특허 관련 기술 동향을 검색합니다.
+                p(class="text-[13px] text-gray-500 mb-4") 기술 키워드를 입력하면 {{patentSource}} API를 통해 실제 특허 검색 결과를 조회합니다.
                 div(class="flex gap-3")
                     input(type="text", class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-[13px] focus:ring-2 focus:ring-amber-200 focus:border-amber-400", placeholder="기술 키워드 (예: atomic layer etching, 플라즈마 표면처리)", [(ngModel)]="patentQuery", (keydown.enter)="searchPatents()")
                     button((click)="searchPatents()", [disabled]="patentSearching || !patentQuery.trim()", class="px-6 py-2.5 bg-amber-600 text-white text-[13px] font-medium rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors whitespace-nowrap")
                         span(*ngIf="!patentSearching") 검색
                         span(*ngIf="patentSearching") 검색 중...
+                p(class="mt-2 text-[11px] text-gray-400") KIPRIS Plus 인증키는 프로젝트 `config/research.py` 또는 `KIPRIS_PLUS_API_KEY` 환경변수로 설정합니다.
 
             //- 검색 결과
             div(*ngIf="patentSearching", class="flex flex-col items-center justify-center py-16")
                 div(class="animate-spin rounded-full h-8 w-8 border-2 border-amber-500 border-t-transparent mb-3")
-                span(class="text-[13px] text-gray-500") 기술 문헌을 검색하고 있습니다...
+                span(class="text-[13px] text-gray-500") KIPRIS Plus 특허 API를 조회하고 있습니다...
+
+            div(*ngIf="!patentSearching && patentError", class="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-[12px] text-rose-700 mb-4") {{patentError}}
 
             div(*ngIf="!patentSearching && patentResults.length > 0", class="space-y-3")
-                div(class="text-[12px] text-gray-500 mb-2") {{patentResults.length}}건의 관련 기술 문헌을 찾았습니다.
+                div(class="text-[12px] text-gray-500 mb-2") {{patentResults.length}}건의 관련 특허를 찾았습니다.
                 div(*ngFor="let patent of patentResults; let i = index", class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:border-amber-300 hover:shadow-md transition-all")
                     div(class="flex items-start gap-3")
                         div(class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold", [ngClass]="patent.score > 0.7 ? 'bg-amber-100 text-amber-700' : (patent.score > 0.5 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')") {{i + 1}}
@@ -763,10 +896,12 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                                 span(class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold", [ngClass]="patent.score > 0.7 ? 'bg-green-100 text-green-700' : (patent.score > 0.5 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')")
                                     | 관련도 {{(patent.score * 100).toFixed(1)}}%
                                 span(*ngFor="let kw of (patent.tech_keywords || []).slice(0,4)", class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700") {{kw}}
-                                span(*ngIf="patent.filename", class="text-[10px] text-gray-400 font-mono truncate max-w-[200px]") 📄 {{patent.filename}}
+                                span(*ngIf="patent.application_number", class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-700 font-mono") 출원 {{patent.application_number}}
+                                span(*ngIf="patent.publication_number", class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-700 font-mono") 공개 {{patent.publication_number}}
+                                span(*ngIf="patent.register_number", class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-700 font-mono") 등록 {{patent.register_number}}
 
             //- 빈 상태
-            div(*ngIf="!patentSearching && patentResults.length === 0 && patentQuery.trim()", class="text-center py-16")
+            div(*ngIf="!patentSearching && !patentError && patentResults.length === 0 && patentQuery.trim()", class="text-center py-16")
                 div(class="text-4xl mb-3") 🔍
                 p(class="text-[13px] text-gray-500") 검색 결과가 없습니다. 다른 기술 키워드를 시도해 보세요.
 

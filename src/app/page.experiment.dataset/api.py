@@ -31,6 +31,10 @@ def _save_json(path, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+def _collection_meta_helper():
+    return wiz.model("collectionmeta")
+
+
 def list_records():
     rows = _load_json(DATASET_FILE, [])
     rows.sort(key=lambda item: item.get("updated_at", item.get("created_at", "")), reverse=True)
@@ -110,9 +114,11 @@ def list_projects():
 
 
 def list_collections():
-    meta = _load_json(COLLECTION_META_PATH, {})
+    meta_helper = _collection_meta_helper()
+    meta = meta_helper.load(COLLECTION_META_PATH)
     rows = []
     for name, info in meta.items():
+        info = meta_helper.normalize_info(info)
         rows.append({
             "name": name,
             "short_name": info.get("short_name", "Unknown"),
