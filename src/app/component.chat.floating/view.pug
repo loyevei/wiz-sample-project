@@ -1,30 +1,24 @@
 //- Floating Chat Button
-button((click)="toggleChat()", class="fixed bottom-6 right-6 z-[9999] h-16 w-16 rounded-2xl bg-gradient-to-br from-fuchsia-500 via-violet-500 to-indigo-600 p-[1px] shadow-[0_20px_60px_rgba(168,85,247,0.38)] transition-all duration-300 hover:scale-105 hover:shadow-[0_24px_70px_rgba(217,70,239,0.42)]", [ngClass]="isOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'")
-    div(class="relative flex h-full w-full items-center justify-center overflow-hidden rounded-[15px] bg-[#14071f] text-white")
-        div(class="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(244,114,182,0.36),transparent_55%)]")
-        img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="relative h-11 w-11 drop-shadow-[0_0_20px_rgba(244,114,182,0.38)]")
-        div(class="absolute bottom-1 text-[9px] font-semibold tracking-[0.24em] text-fuchsia-100/90") KFE bot
+button((click)="toggleChat()", class="fixed bottom-6 right-6 z-[9999] flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl", [ngClass]="isOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'")
+    img(src="/assets/brand/plasma-robot.svg", alt="bot", class="h-8 w-8")
 
 //- Chat Window
 div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all duration-300", [ngClass]="isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'")
-    div(class="flex h-[720px] w-[460px] flex-col overflow-hidden rounded-[28px] border border-fuchsia-100 bg-white shadow-[0_28px_100px_rgba(76,29,149,0.24)]")
-        div(class="flex items-start justify-between gap-3 border-b border-fuchsia-100 bg-gradient-to-r from-slate-950 via-violet-950 to-fuchsia-950 px-4 py-4 text-white")
-            div(class="flex min-w-0 items-center gap-3")
-                div(class="flex h-12 w-12 items-center justify-center rounded-2xl border border-fuchsia-300/30 bg-white/10 p-1")
-                    img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-xl object-cover")
+    div(class="flex h-[720px] w-[460px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl")
+        div(class="flex items-center justify-between border-b border-slate-200 bg-slate-900 px-4 py-3 text-white")
+            div(class="flex min-w-0 items-center gap-2.5")
+                div(class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600")
+                    img(src="/assets/brand/plasma-robot.svg", alt="bot", class="h-4 w-4")
                 div(class="min-w-0")
-                    div(class="flex items-center gap-2")
-                        span(class="truncate text-[14px] font-semibold") {{robotProfile.name}}
-                        span(*ngIf="robotProfile.tag", class="inline-flex items-center rounded-full border border-fuchsia-300/30 bg-fuchsia-400/10 px-2 py-0.5 text-[9px] font-semibold tracking-[0.2em] text-fuchsia-100") {{robotProfile.tag}}
-                    p(class="mt-1 text-[11px] leading-5 text-fuchsia-100/80") {{robotProfile.subtitle}}
-            div(class="flex flex-shrink-0 items-center gap-1")
-                button(*ngIf="collectionSelected && selectedCollection", (click)="changeCollection()", class="inline-flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 text-[10px] font-medium text-fuchsia-50 transition-colors hover:bg-white/20", title="컬렉션 변경")
-                    span 📦
+                    span(class="text-[13px] font-semibold") {{robotProfile.name}}
+                    span(*ngIf="robotProfile.tag", class="ml-2 text-[10px] font-medium text-slate-400") {{robotProfile.tag}}
+            div(class="flex flex-shrink-0 items-center gap-0.5")
+                button(*ngIf="collectionSelected && selectedCollection", (click)="changeCollection()", class="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[10px] font-medium text-slate-300 transition-colors hover:bg-white/20 hover:text-white", title="컬렉션 변경")
                     span(class="max-w-[72px] truncate") {{selectedCollection}}
-                button((click)="clearChat()", class="rounded-lg p-1.5 text-fuchsia-100/80 transition-colors hover:bg-white/10 hover:text-white", title="대화 초기화")
+                button((click)="clearChat()", class="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white", title="대화 초기화")
                     svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4")
                         path(stroke-linecap="round", stroke-linejoin="round", d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182")
-                button((click)="toggleChat()", class="rounded-lg p-1.5 text-fuchsia-100/80 transition-colors hover:bg-white/10 hover:text-white", title="닫기")
+                button((click)="toggleChat()", class="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white", title="닫기")
                     svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-4")
                         path(stroke-linecap="round", stroke-linejoin="round", d="M19.5 8.25l-7.5 7.5-7.5-7.5")
 
@@ -35,197 +29,158 @@ div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all du
                     p(class="text-[13px] text-slate-500") 데이터베이스 로딩 중...
                 div(*ngIf="!collectionsLoading", class="w-full max-w-[360px]")
                     div(class="mb-6 text-center")
-                        div(class="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-[28px] border border-fuchsia-200 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-3 shadow-[0_20px_40px_rgba(88,28,135,0.2)]")
-                            img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-[20px] object-cover")
-                        p(class="text-[15px] font-semibold text-slate-900") {{robotProfile.name}}
-                        p(class="mt-1 text-[12px] leading-5 text-slate-500") 논문 검색에 사용할 컬렉션을 선택하면 실제 에이전트 오케스트레이션 실행 상태를 실시간으로 보여드립니다.
+                        div(class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-md")
+                            img(src="/assets/brand/plasma-robot.svg", alt="bot", class="h-8 w-8")
+                        p(class="text-[14px] font-semibold text-slate-900") {{robotProfile.name}}
+                        p(class="mt-1 text-[12px] leading-5 text-slate-500") 논문 검색에 사용할 컬렉션을 선택하세요.
                     div(*ngIf="collections.length === 0", class="rounded-2xl border border-dashed border-slate-200 bg-white px-5 py-7 text-center")
                         p(class="text-[13px] font-medium text-slate-600") 사용 가능한 컬렉션이 없습니다.
                         p(class="mt-1 text-[11px] text-slate-400") 먼저 임베딩 페이지에서 PDF를 업로드하세요.
                     div(*ngIf="collections.length > 0", class="space-y-3")
-                        div(class="rounded-2xl border border-fuchsia-100 bg-fuchsia-50/60 px-4 py-3 text-[12px] text-fuchsia-800")
-                            span(class="font-semibold") AGENT READY
-                            span(class="ml-2 text-fuchsia-700/80") 컬렉션 선택 후 오케스트레이션 계획, 참고 문헌, 도구 실행 로그를 함께 표시합니다.
                         div(class="flex flex-wrap gap-2")
-                            button(*ngFor="let col of collections", (click)="selectCollection(col.name)", class="inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[12px] font-medium transition-all", [ngClass]="selectedCollection === col.name ? 'border-fuchsia-500 bg-fuchsia-50 text-fuchsia-700 shadow ring-1 ring-fuchsia-200' : 'border-slate-200 bg-white text-slate-700 hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-700'")
+                            button(*ngFor="let col of collections", (click)="selectCollection(col.name)", class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[12px] font-medium transition-all", [ngClass]="selectedCollection === col.name ? 'border-violet-500 bg-violet-50 text-violet-700 ring-1 ring-violet-200' : 'border-slate-200 bg-white text-slate-700 hover:border-violet-300 hover:bg-violet-50'")
                                 span(class="text-sm") 📄
                                 span {{col.name}}
                                 span(class="text-[10px] text-slate-400") {{col.total_docs}} docs
 
-        div(*ngIf="collectionSelected", #chatBody="", class="flex-1 min-h-0 overflow-y-auto bg-[linear-gradient(180deg,#fdf4ff_0%,#faf5ff_48%,#f8fafc_100%)] px-4 py-4 space-y-4")
+        div(*ngIf="collectionSelected", #chatBody="", class="flex-1 min-h-0 overflow-y-auto bg-white px-4 py-4 space-y-4")
             div(*ngIf="chatMessages.length === 0", class="flex h-full flex-col items-center justify-center text-center")
-                div(class="relative mb-4 flex h-24 w-24 items-center justify-center rounded-[28px] border border-fuchsia-200 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-3 shadow-[0_24px_50px_rgba(88,28,135,0.18)]")
-                    img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-[20px] object-cover")
-                p(class="text-[15px] font-semibold text-slate-900") {{robotProfile.name}}
-                p(class="mt-1 max-w-[310px] text-[12px] leading-5 text-slate-500") 군집형 에이전트가 목표 달성 전까지 계획·수집·분석·정리를 반복하면서 페이지 결과 기반 답변을 만듭니다.
-                div(class="mt-5 grid w-full max-w-[320px] gap-2")
-                    button(*ngFor="let s of suggestions", (click)="sendChat(s.text)", class="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left text-[12px] text-slate-600 transition-all hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-700")
+                div(class="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-md")
+                    img(src="/assets/brand/plasma-robot.svg", alt="bot", class="h-7 w-7")
+                p(class="text-[14px] font-semibold text-slate-900") {{robotProfile.name}}
+                p(class="mt-1 max-w-[300px] text-[12px] leading-5 text-slate-500") 무엇이든 물어보세요. 관련 논문을 검색하고 분석하여 답변합니다.
+                div(class="mt-5 grid w-full max-w-[320px] gap-1.5")
+                    button(*ngFor="let s of suggestions", (click)="sendChat(s.text)", class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-[12px] text-slate-600 transition-all hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700")
                         span(class="text-base") {{s.icon}}
                         span(class="truncate") {{s.text}}
 
             ng-container(*ngFor="let msg of chatMessages; let i = index")
                 div(*ngIf="msg.role === 'user'", class="flex justify-end")
-                    div(class="max-w-[84%] rounded-3xl rounded-br-md bg-fuchsia-600 px-4 py-2.5 text-[13px] leading-relaxed text-white shadow-sm whitespace-pre-wrap") {{msg.content}}
+                    div(class="max-w-[84%] rounded-2xl rounded-br-sm bg-violet-600 px-3.5 py-2.5 text-[13px] leading-relaxed text-white shadow-sm whitespace-pre-wrap") {{msg.content}}
 
-                div(*ngIf="msg.role === 'assistant'", class="flex justify-start")
-                    div(class="max-w-[94%] space-y-3")
-                        button(*ngIf="msg.collapsed", (click)="toggleCollapse(msg)", class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-[12px] text-slate-500 shadow-sm transition-colors hover:bg-slate-50")
-                            div(class="flex items-center justify-between gap-3")
-                                span(class="truncate") ▶ {{getCollapsedPreview(msg)}}
-                                span(class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500") 최신 외 턴 접힘
+                div(*ngIf="msg.role === 'assistant'", class="flex gap-2.5")
+                    div(class="flex-shrink-0 pt-0.5")
+                        div(class="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 shadow-sm")
+                            img(src="/assets/brand/plasma-robot.svg", alt="bot", class="h-3.5 w-3.5")
+                    div(class="min-w-0 flex-1 space-y-1.5")
+                        //- Collapsed turn
+                        button(*ngIf="msg.collapsed", (click)="toggleCollapse(msg)", class="w-full rounded-lg border border-slate-200/60 bg-white/80 px-3 py-2 text-left text-[12px] text-slate-500 transition-colors hover:bg-slate-50")
+                            div(class="flex items-center gap-2")
+                                svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3 flex-shrink-0 text-slate-400")
+                                    path(stroke-linecap="round", stroke-linejoin="round", d="m8.25 4.5 7.5 7.5-7.5 7.5")
+                                span(class="truncate flex-1") {{getCollapsedPreview(msg)}}
 
                         ng-container(*ngIf="!msg.collapsed")
-                            div(class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm")
-                                button((click)="toggleTrace(msg)", class="flex w-full items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-left")
-                                    div(class="min-w-0")
-                                        div(class="flex items-center gap-2")
-                                            span(class="text-[13px] font-semibold text-slate-900") 답변 생성 과정
-                                            span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(getCurrentTraceStep(msg)?.status || 'pending')") {{getCurrentTraceStep(msg)?.title || '정리 중'}}
-                                        p(class="mt-1 text-[11px] text-slate-500") {{getVisibleAnswerJourney(msg).length}} / {{getAnswerJourneyCount(msg)}}개 과정 표시 · {{msg.traceCategory}} · {{msg.traceDifficulty}}
-                                        div(class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200")
-                                            div(class="h-full rounded-full bg-gradient-to-r from-cyan-500 via-violet-500 to-fuchsia-500 transition-all duration-500", [style.width.%]="getJourneyProgressPercent(msg)")
-                                        div(*ngIf="!msg.traceCompleted", class="mt-2 flex flex-wrap gap-1.5")
-                                            span(*ngFor="let chip of getCardStageChips(msg)", class="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-all", [ngClass]="getCardStageChipClasses(chip.status)")
-                                                span {{chip.icon}}
-                                                span {{chip.label}}
-                                    span(class="text-[12px] text-slate-400") {{msg.traceCompleted ? '요약 보기' : (msg.traceOpen ? '접기' : '펼치기')}}
-                                div(*ngIf="msg.traceOpen", class="space-y-2 px-4 py-4")
-                                    div(class="journey-reveal journey-reveal-current rounded-2xl border border-cyan-200 bg-cyan-50/70 px-3 py-2.5", [style.animationDelay.ms]="getJourneyAnimationDelay(0, 20)")
-                                        div(class="flex items-start gap-3")
-                                            div(class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/80 text-[11px] font-semibold text-cyan-700") ⚙️
-                                            div(class="min-w-0 flex-1")
-                                                div(class="flex items-center justify-between gap-2")
-                                                    span(class="text-[12px] font-semibold text-slate-900") 현재 진행 단계
-                                                    span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(getCurrentTraceStep(msg)?.status || 'pending')") {{getTraceStatusLabel(getCurrentTraceStep(msg)?.status || 'pending')}}
-                                                p(class="mt-1 text-[11px] leading-5 text-slate-700 whitespace-pre-wrap break-words") {{getCurrentTraceStep(msg)?.detail || msg.currentDescription || '질문을 분석하고 있습니다.'}}
+                            //- Thinking section (Copilot-style)
+                            div(*ngIf="msg.traceSteps?.length > 0", class="copilot-thinking")
+                                button((click)="toggleTrace(msg)", class="flex items-center gap-2 w-full py-1 text-left group")
+                                    div(*ngIf="!msg.traceCompleted", class="flex-shrink-0")
+                                        svg(class="size-4 animate-spin text-violet-500", viewBox="0 0 24 24")
+                                            circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                                            path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                                    svg(*ngIf="msg.traceCompleted", xmlns="http://www.w3.org/2000/svg", viewBox="0 0 20 20", fill="currentColor", class="size-4 flex-shrink-0 text-violet-500")
+                                        path(fill-rule="evenodd", d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z", clip-rule="evenodd")
+                                    span(class="text-[12px] font-medium", [ngClass]="msg.traceCompleted ? 'text-slate-500' : 'text-slate-700'") {{msg.traceCompleted ? 'Thinking 완료 · ' + getCompletedTraceCount(msg) + '단계' : 'Thinking...'}}
+                                    span(*ngIf="!msg.traceCompleted && getCurrentTraceStep(msg)?.title", class="text-[11px] text-slate-400 truncate hidden sm:inline")  · {{getCurrentTraceStep(msg)?.title}}
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3 ml-auto text-slate-400 transition-transform flex-shrink-0 group-hover:text-slate-600", [class.rotate-90]="msg.traceOpen")
+                                        path(stroke-linecap="round", stroke-linejoin="round", d="m8.25 4.5 7.5 7.5-7.5 7.5")
+                                div(*ngIf="msg.traceOpen", class="mt-1 ml-2 pl-3.5 border-l-2 border-slate-200 space-y-0.5 pb-1")
+                                    div(*ngFor="let step of msg.traceSteps", class="flex items-start gap-1.5 py-0.5 text-[11px]", [ngClass]="step.status === 'skipped' ? 'opacity-30' : ''")
+                                        span(*ngIf="step.status === 'done'", class="mt-px text-emerald-500 flex-shrink-0") ✓
+                                        span(*ngIf="step.status === 'running'", class="mt-px text-violet-500 flex-shrink-0") ◔
+                                        span(*ngIf="step.status === 'pending'", class="mt-px text-slate-300 flex-shrink-0") ○
+                                        span(*ngIf="step.status === 'error'", class="mt-px text-red-500 flex-shrink-0") ✕
+                                        span(*ngIf="step.status === 'skipped'", class="mt-px text-slate-400 flex-shrink-0") ↷
+                                        span(class="leading-relaxed")
+                                            span(class="font-medium text-slate-700") {{step.title}}
+                                            span(*ngIf="step.detail", class="text-slate-500")  — {{step.detail | slice:0:100}}
 
-                                    div(*ngFor="let item of getVisibleAnswerJourney(msg); let idx = index", class="journey-reveal rounded-2xl border px-3 py-2.5", [ngClass]="getTraceStepClasses(item)", [style.animationDelay.ms]="getJourneyAnimationDelay(idx + 1, 60)")
-                                        div(class="flex items-start gap-3")
-                                            div(class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl border border-white/70 bg-white/80 text-[11px] font-semibold text-slate-700") {{item.icon}}
-                                            div(class="min-w-0 flex-1")
-                                                div(class="flex items-center justify-between gap-2")
-                                                    div(class="flex items-center gap-2")
-                                                        span(class="text-[12px] font-semibold text-slate-900") {{item.title}}
-                                                    span(class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium", [ngClass]="getTraceStatusClasses(item.status)") {{getTraceStatusLabel(item.status)}}
-                                                p(class="mt-1 text-[11px] leading-5 text-slate-600 whitespace-pre-wrap break-words") {{item.detail}}
+                            //- Tool calls (inline chips)
+                            div(*ngIf="getUsedToolNames(msg).length > 0", class="flex flex-wrap gap-1.5 py-0.5")
+                                button(*ngFor="let tn of getUsedToolNames(msg)", (click)="toggleTrace(msg)", class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600 transition-colors hover:bg-slate-100")
+                                    span {{getToolIcon(tn)}}
+                                    span Used {{getToolLabel(tn)}}
 
-                                    div(*ngIf="getHiddenJourneyCount(msg) > 0", class="journey-reveal rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 1, 80)")
-                                        p(class="text-[11px] text-slate-500") 이후 {{getHiddenJourneyCount(msg)}}개 단계는 진행 상황에 맞춰 차례대로 표시됩니다.
-
-                                    div(*ngIf="getUpcomingTraceStep(msg)", class="journey-reveal rounded-2xl border border-dashed border-violet-200 bg-violet-50/60 px-3 py-2.5", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 2, 110)")
-                                        p(class="text-[11px] font-semibold text-violet-800") 다음 예정 단계
-                                        p(class="mt-1 text-[11px] leading-5 text-violet-700") {{getUpcomingTraceStep(msg)?.title}} · {{getUpcomingTraceStep(msg)?.summary || getUpcomingTraceStep(msg)?.detail}}
-
-                                    //- 다음에 올 결과 카드 미니 프리뷰 (로딩 중에만)
-                                    div(*ngIf="getNextPendingCards(msg).length > 0", class="journey-reveal rounded-2xl border border-dashed border-fuchsia-200 bg-gradient-to-r from-fuchsia-50/50 to-violet-50/50 px-3 py-2.5", [style.animationDelay.ms]="getJourneyAnimationDelay(getVisibleAnswerJourney(msg).length + 3, 130)")
-                                        p(class="text-[10px] font-semibold text-fuchsia-700/80 mb-1.5") 다음에 올 카드
-                                        div(class="flex flex-wrap gap-1.5")
-                                            span(*ngFor="let card of getNextPendingCards(msg)", class="inline-flex items-center gap-1 rounded-full border border-fuchsia-200 bg-white/80 px-2 py-1 text-[10px] font-medium text-fuchsia-600")
-                                                span {{card.icon}}
-                                                span {{card.label}}
-                                                span(class="inline-block h-1.5 w-1.5 rounded-full bg-fuchsia-300 animate-pulse")
-
-                            div(*ngIf="shouldRenderNavigationCard(msg)", class="journey-reveal rounded-3xl border px-4 py-4", [style.animationDelay.ms]="getResultCardAnimationDelay('navigation')", [ngClass]="(msg.navigationCard?.loading ? 'border-cyan-200 bg-cyan-50/70' : 'border-cyan-300 bg-gradient-to-r from-cyan-50 to-blue-50')")
-                                div(class="mb-2 flex items-center gap-2")
-                                    span(class="text-lg") 🧭
-                                    span(class="text-[12px] font-semibold text-cyan-800") 페이지 이동
-                                    span(*ngIf="msg.navigationCard?.loading", class="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-100/80 px-2 py-0.5 text-[10px] font-medium text-cyan-600")
-                                        span(class="inline-block h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse")
-                                        span 준비 중
-                                div(*ngIf="msg.navigationCard?.loading", class="space-y-2")
-                                    div(class="h-3 w-3/4 rounded-full bg-cyan-200 animate-pulse")
-                                    div(class="h-3 w-1/2 rounded-full bg-cyan-100 animate-pulse")
-                                    p(class="mt-2 text-[11px] text-cyan-600") {{msg.navigationCard?.summary || '질문에 맞는 페이지와 탭을 계산하고 있습니다.'}}
+                            //- Navigation (inline)
+                            div(*ngIf="shouldRenderNavigationCard(msg)", class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5")
+                                div(*ngIf="msg.navigationCard?.loading", class="flex items-center gap-2")
+                                    svg(class="size-3.5 animate-spin text-slate-400", viewBox="0 0 24 24")
+                                        circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                                        path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                                    span(class="text-[11px] text-slate-500") {{msg.navigationCard?.summary || '페이지 이동 준비 중...'}}
                                 div(*ngIf="!msg.navigationCard?.loading")
-                                    div(class="text-[12px] text-cyan-700") {{msg.navigationCard?.summary || buildAgentNavigationSummary(pendingNavigation)}}
-                                    button(*ngIf="pendingNavigation", (click)="navigateNow()", class="mt-3 flex w-full items-center justify-center gap-1 rounded-xl bg-cyan-600 px-3 py-2 text-[12px] font-medium text-white transition-colors hover:bg-cyan-500")
-                                        span {{msg.navigationCard?.actionLabel || '바로 이동'}}
+                                    div(class="flex items-center justify-between gap-2")
+                                        div(class="flex items-center gap-1.5 text-[12px] text-slate-700")
+                                            span 🧭
+                                            span {{msg.navigationCard?.summary || buildAgentNavigationSummary(pendingNavigation)}}
+                                        button(*ngIf="pendingNavigation", (click)="navigateNow()", class="flex-shrink-0 inline-flex items-center gap-1 rounded-md bg-violet-600 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-violet-500")
+                                            span {{msg.navigationCard?.actionLabel || '이동'}}
 
-                            div(*ngIf="shouldRenderPageResultCard(msg)", class="journey-reveal rounded-3xl border px-4 py-4", [style.animationDelay.ms]="getResultCardAnimationDelay('pageResult')", [ngClass]="msg.pageResultCard.loading ? 'border-violet-100 bg-violet-50/50' : 'border-violet-200 bg-violet-50/70'")
-                                div(class="mb-2 flex items-center gap-2")
-                                    span(class="text-lg") 🧾
-                                    span(class="text-[12px] font-semibold text-violet-800") 실행된 페이지 결과
-                                    span(*ngIf="msg.pageResultCard.loading", class="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-100/80 px-2 py-0.5 text-[10px] font-medium text-violet-600")
-                                        span(class="inline-block h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse")
-                                        span 분석 중
-                                div(*ngIf="msg.pageResultCard.loading", class="space-y-2")
-                                    div(class="flex items-center gap-2 text-[12px] text-violet-700")
-                                        span {{msg.pageResultCard.page}}
-                                        span ·
-                                        span {{msg.pageResultCard.tab}}
-                                    div(class="h-3 w-full rounded-full bg-violet-200 animate-pulse")
-                                    div(class="h-3 w-2/3 rounded-full bg-violet-100 animate-pulse")
-                                    p(class="mt-1 text-[11px] text-violet-600") {{msg.pageResultCard.summary}}
+                            //- Page result (inline)
+                            div(*ngIf="shouldRenderPageResultCard(msg)", class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px]")
+                                div(*ngIf="msg.pageResultCard.loading", class="flex items-center gap-2 text-slate-500")
+                                    svg(class="size-3.5 animate-spin text-slate-400", viewBox="0 0 24 24")
+                                        circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
+                                        path(class="opacity-75", fill="currentColor", d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z")
+                                    span 🧾 {{msg.pageResultCard.page}}/{{msg.pageResultCard.tab}} 결과 분석 중...
                                 div(*ngIf="!msg.pageResultCard.loading")
-                                    p(class="text-[12px] font-medium text-violet-900") {{msg.pageResultCard.page}} / {{msg.pageResultCard.tab}}
-                                    p(class="mt-1 text-[12px] leading-5 text-violet-700") {{msg.pageResultCard.summary}}
-                                    p(*ngIf="msg.pageResultCard.query", class="mt-2 text-[11px] text-violet-700") 질문 키워드: {{msg.pageResultCard.query}}
-                                    p(*ngIf="msg.pageResultCard.paramsText", class="mt-1 text-[11px] text-violet-700") 적용 인자값: {{msg.pageResultCard.paramsText}}
-                                    div(*ngIf="msg.pageResultCard.evidenceLines?.length > 0", class="mt-2 space-y-1")
-                                        p(*ngFor="let line of msg.pageResultCard.evidenceLines", class="text-[11px] leading-5 text-violet-700") • {{line}}
+                                    p(class="font-medium text-slate-700") 🧾 {{msg.pageResultCard.page}} / {{msg.pageResultCard.tab}}
+                                    p(class="mt-1 text-slate-600 leading-relaxed") {{msg.pageResultCard.summary}}
+                                    div(*ngIf="msg.pageResultCard.evidenceLines?.length > 0", class="mt-1.5 space-y-0.5 text-slate-500")
+                                        p(*ngFor="let line of msg.pageResultCard.evidenceLines") · {{line}}
 
-                            div(*ngIf="shouldRenderAnswerCard(msg)", class="journey-reveal rounded-3xl border border-slate-200 bg-white px-4 py-4", [style.animationDelay.ms]="getResultCardAnimationDelay('answer')")
-                                div(class="mb-3 flex items-center gap-2")
-                                    span(class="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-700") 🤖
-                                    div
-                                        p(class="text-[12px] font-semibold text-slate-900") 최종 답변
-                                        p(class="text-[11px] text-slate-500") 최신 턴만 펼쳐집니다.
-                                div(*ngIf="msg.content", class="text-[13px] leading-6 text-slate-800 whitespace-pre-wrap break-words")
-                                    | {{getDisplayedAssistantContent(msg)}}
-                                    span(*ngIf="msg.typingActive", class="ml-0.5 inline-block h-4 w-[1px] animate-pulse bg-slate-400 align-middle")
-                                div(*ngIf="!msg.content", class="space-y-2")
-                                    p(class="text-[11px] font-medium text-slate-500") 현재까지 핵심 포인트
-                                    p(*ngFor="let line of getAssistantPreviewLines(msg)", class="text-[12px] leading-5 text-slate-700") • {{line}}
+                            //- Answer (clean, no card wrapper)
+                            div(*ngIf="shouldRenderAnswerCard(msg)")
+                                div(*ngIf="msg.content", class="chat-markdown-body text-[13px] leading-7 text-slate-800 break-words", [innerHTML]="getDisplayedAssistantContent(msg)")
+                                span(*ngIf="msg.typingActive", class="inline-block h-4 w-0.5 animate-pulse bg-violet-500 align-middle rounded-full")
+                                div(*ngIf="!msg.content", class="space-y-1.5")
+                                    p(*ngFor="let line of getAssistantPreviewLines(msg)", class="text-[12px] leading-5 text-slate-600") {{line}}
                                     div(class="flex items-center gap-1 pt-1")
-                                        div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 0ms")
-                                        div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 150ms")
-                                        div(class="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-bounce", style="animation-delay: 300ms")
+                                        div(class="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce", style="animation-delay: 0ms")
+                                        div(class="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce", style="animation-delay: 150ms")
+                                        div(class="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce", style="animation-delay: 300ms")
 
-                            div(*ngIf="shouldRenderQualityCard(msg)", class="journey-reveal rounded-3xl border border-emerald-200 bg-emerald-50/60 px-4 py-4", [style.animationDelay.ms]="getResultCardAnimationDelay('quality')")
-                                div(class="mb-2 flex items-center gap-2")
-                                    span(class="text-lg") 🧪
-                                    span(class="text-[12px] font-semibold text-emerald-800") 답변 품질 분석
-                                div(*ngIf="getQualityBadges(msg).length > 0", class="mb-2 flex flex-wrap gap-1.5")
-                                    span(*ngFor="let badge of getQualityBadges(msg)", class="inline-flex items-center rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-medium text-emerald-700") {{badge}}
-                                p(*ngIf="msg.answerQuality?.detail", class="text-[12px] leading-5 text-emerald-800") {{msg.answerQuality.detail}}
-                                p(*ngIf="!msg.answerQuality?.detail", class="text-[12px] leading-5 text-emerald-700") 근거 수, 검증 포인트, 표현 품질을 점검하며 답변 신뢰도를 높이고 있습니다.
-                                div(*ngIf="msg.answerQuality?.synthesisPoints?.length > 0", class="mt-2 space-y-1")
-                                    p(*ngFor="let point of msg.answerQuality.synthesisPoints", class="text-[11px] leading-5 text-emerald-700") • {{point}}
-                                div(*ngIf="msg.answerQuality?.verificationChecks?.length > 0", class="mt-2 space-y-1")
-                                    p(*ngFor="let check of msg.answerQuality.verificationChecks", class="text-[11px] leading-5 text-emerald-700") ✓ {{check}}
+                            //- Quality badges (inline, minimal)
+                            div(*ngIf="shouldRenderQualityCard(msg) && getQualityBadges(msg).length > 0", class="flex flex-wrap gap-1.5")
+                                span(*ngFor="let badge of getQualityBadges(msg)", class="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500") {{badge}}
 
-                            div(*ngIf="shouldRenderEvidenceCard(msg)", class="journey-reveal rounded-3xl border border-amber-200 bg-amber-50/60 overflow-hidden", [style.animationDelay.ms]="getResultCardAnimationDelay('evidence')")
-                                button((click)="toggleEvidence(msg)", class="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-amber-100/60")
-                                    div(class="flex items-center gap-2")
-                                        span(class="text-lg") 📚
-                                        span(class="text-[12px] font-semibold text-amber-800") 근거 문헌 상세 ({{msg.evidenceItems.length}}건)
-                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4 text-amber-600 transition-transform", [ngClass]="{'rotate-180': msg.evidenceOpen}")
+                            //- Evidence (expandable)
+                            div(*ngIf="shouldRenderEvidenceCard(msg)", class="rounded-lg border border-slate-200 overflow-hidden")
+                                button((click)="toggleEvidence(msg)", class="flex w-full items-center justify-between px-3 py-2 text-left text-[11px] transition-colors hover:bg-slate-50")
+                                    span(class="font-medium text-slate-600") 📚 참고 문헌 {{msg.evidenceItems.length}}건
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3 text-slate-400 transition-transform", [ngClass]="{'rotate-180': msg.evidenceOpen}")
                                         path(stroke-linecap="round", stroke-linejoin="round", d="M19.5 8.25l-7.5 7.5-7.5-7.5")
-                                div(*ngIf="msg.evidenceOpen", class="border-t border-amber-200 px-4 py-3 space-y-2 max-h-80 overflow-y-auto")
-                                    div(*ngFor="let ev of msg.evidenceItems; let i = index", class="rounded-xl border border-amber-100 bg-white px-3 py-2")
+                                div(*ngIf="msg.evidenceOpen", class="border-t border-slate-200 px-3 py-2 space-y-1.5 max-h-60 overflow-y-auto bg-slate-50")
+                                    div(*ngFor="let ev of msg.evidenceItems; let i = index", class="rounded-md border border-slate-100 bg-white px-2.5 py-1.5")
                                         div(class="flex items-center justify-between gap-2")
-                                            span(class="text-[11px] font-medium text-amber-900 truncate flex-1") {{i + 1}}. {{ev.filename || ev.doc_id || '문서'}}
-                                            span(*ngIf="ev.score !== null && ev.score !== undefined", class="flex-shrink-0 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700") 유사도 {{formatEvidenceScore(ev.score)}}
-                                        div(*ngIf="ev.snippets?.length > 0", class="mt-1 space-y-1")
-                                            p(*ngFor="let snip of ev.snippets", class="text-[11px] leading-4 text-slate-600 break-words") {{snip}}
+                                            span(class="text-[10px] font-medium text-slate-700 truncate flex-1") {{i + 1}}. {{ev.filename || ev.doc_id || '문서'}}
+                                            span(*ngIf="ev.score !== null && ev.score !== undefined", class="flex-shrink-0 text-[10px] text-slate-500") {{formatEvidenceScore(ev.score)}}
+                                        div(*ngIf="ev.snippets?.length > 0", class="mt-1 space-y-0.5")
+                                            p(*ngFor="let snip of ev.snippets", class="text-[10px] leading-4 text-slate-500 break-words") {{snip}}
 
-            div(*ngIf="chatLoading", class="flex justify-start")
-                div(class="rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm")
-                    div(class="flex items-center gap-1")
-                        div(class="h-2 w-2 rounded-full bg-fuchsia-400 animate-bounce", style="animation-delay: 0ms")
-                        div(class="h-2 w-2 rounded-full bg-fuchsia-400 animate-bounce", style="animation-delay: 150ms")
-                        div(class="h-2 w-2 rounded-full bg-fuchsia-400 animate-bounce", style="animation-delay: 300ms")
+                            //- Action bar
+                            div(*ngIf="msg.content && !msg.typingActive", class="flex items-center gap-1 pt-0.5")
+                                button((click)="copyAnswer(msg)", class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600", title="답변 복사")
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="1.5", stroke="currentColor", class="size-3")
+                                        path(stroke-linecap="round", stroke-linejoin="round", d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9.75a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184")
+                                    span 복사
 
-        div(*ngIf="collectionSelected", class="border-t border-slate-200 bg-white px-4 py-4")
+            div(*ngIf="chatLoading", class="flex gap-2.5")
+                div(class="flex-shrink-0 pt-0.5")
+                    div(class="flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 shadow-sm")
+                        img(src="/assets/brand/plasma-robot.svg", alt="bot", class="h-3.5 w-3.5")
+                div(class="flex items-center gap-1.5 pt-1")
+                    div(class="h-1.5 w-1.5 rounded-full bg-violet-500 animate-bounce", style="animation-delay: 0ms")
+                    div(class="h-1.5 w-1.5 rounded-full bg-violet-500 animate-bounce", style="animation-delay: 150ms")
+                    div(class="h-1.5 w-1.5 rounded-full bg-violet-500 animate-bounce", style="animation-delay: 300ms")
+
+        div(*ngIf="collectionSelected", class="border-t border-slate-200 bg-white px-4 py-3")
             div(class="flex items-end gap-2")
-                div(class="relative flex-shrink-0")
-                    div(class="flex h-11 w-11 items-center justify-center rounded-2xl border border-fuchsia-100 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-1.5")
-                        img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-xl object-cover")
                 div(class="flex-1")
-                    textarea(#chatInputEl="", [(ngModel)]="chatInput", (keydown)="onKeydown($event)", placeholder="플라즈마 관련 질문을 입력하세요...", rows="1", class="max-h-28 w-full resize-none rounded-2xl border border-slate-300 px-4 py-3 text-[13px] leading-6 text-slate-800 outline-none transition-colors focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-100", [disabled]="chatLoading")
-                button(*ngIf="!chatLoading", (click)="sendChat()", [disabled]="!chatInput.trim()", class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-fuchsia-600 text-white transition-colors hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40")
+                    textarea(#chatInputEl="", [(ngModel)]="chatInput", (keydown)="onKeydown($event)", placeholder="질문을 입력하세요...", rows="1", class="max-h-28 w-full resize-none rounded-xl border border-slate-300 px-3.5 py-2.5 text-[13px] leading-6 text-slate-800 outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100", [disabled]="chatLoading")
+                button(*ngIf="!chatLoading", (click)="sendChat()", [disabled]="!chatInput.trim()", class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40")
                     svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4")
                         path(stroke-linecap="round", stroke-linejoin="round", d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5")
-                button(*ngIf="chatLoading", (click)="cancelChat()", class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-500 text-white transition-colors hover:bg-rose-400")
+                button(*ngIf="chatLoading", (click)="cancelChat()", class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-rose-500 text-white transition-colors hover:bg-rose-400")
                     svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-4")
                         path(stroke-linecap="round", stroke-linejoin="round", d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z")

@@ -1,4 +1,4 @@
-div(class="h-screen bg-[#f4f5f5] overflow-hidden")
+div(class="h-dvh bg-[#f4f5f5] overflow-hidden")
     div(class="relative z-50 lg:hidden", *ngIf="!service.status.navbar")
         div(class="fixed inset-0 bg-gray-900/80")
         div(class="fixed inset-0 flex")
@@ -15,11 +15,18 @@ div(class="h-screen bg-[#f4f5f5] overflow-hidden")
         div(class="flex grow flex-col overflow-y-auto border-r border-gray-200 bg-white px-3 pb-3")
             wiz-component-nav-sidebar(style="display: contents;")
 
-    div(class="h-full lg:pl-56 overflow-auto")
-        router-outlet
+    div(class="h-full lg:pl-56 flex overflow-hidden")
+        div(class="flex-1 min-w-0 h-full overflow-auto bg-[#f4f5f5]")
+            router-outlet
+        div(*ngIf="service.status.chat", #chatSidebarPanel="", class="hidden lg:flex flex-shrink-0 h-full relative border-l border-slate-200 bg-white", [style.width.px]="chatSidebarWidth", [style.flex-basis.px]="chatSidebarWidth")
+            div((mousedown)="startResize($event)", class="absolute left-0 top-0 z-10 h-full w-4 -translate-x-1/2 cursor-col-resize group", title="사이드바 크기 조절")
+                span(class="absolute left-1/2 top-1/2 h-20 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-300 transition-colors group-hover:bg-violet-400", [class.bg-violet-500]="isResizing")
+            wiz-component-chat-sidebar(style="display: contents;")
+
+    //- Chat toggle (bottom-right floating button, when closed)
+    button(*ngIf="!service.status.chat", (click)="toggleChat()", class="fixed right-6 bottom-6 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl")
+        img(src="/assets/brand/plasma-robot.svg", alt="bot", class="h-8 w-8")
 
 wiz-portal-season-modal
 div(*ngIf="service.status.loading", class="fixed w-full h-full top-0 left-0 z-50 flex justify-center items-center bg-black/20 backdrop-blur-md")
     wiz-portal-season-loading-season(className="w-12 h-12 text-orange-500 animate-spin duration-700")
-
-wiz-component-chat-floating

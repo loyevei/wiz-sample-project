@@ -28,4 +28,9 @@ export class Component implements OnInit {
         }
         return "group flex gap-x-2 items-center rounded-md px-2 py-1.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50 hover:text-indigo-600";
     }
+
+    public toggleChatSidebar() {
+        this.service.status.toggle('chat');
+        localStorage.setItem('chat_sidebar_open', this.service.status.chat ? 'true' : 'false');
+    }
 }

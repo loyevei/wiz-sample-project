@@ -51,11 +51,27 @@ export class Component implements OnInit, OnDestroy {
     public async ngOnInit() {
         await this.service.init();
         this.selectedCollection = this.getStoredCollection();
-        this.collectionChangeListener = (event: any) => {
+        this.collectionChangeListener = async (event: any) => {
             const nextCollection = String(event?.detail?.collection || '').trim();
+            const deletedCollection = String(event?.detail?.deletedCollection || '').trim();
+            if (deletedCollection) {
+                const previousCollection = this.selectedCollection;
+                await this.loadCollections();
+                this.collectionSelected = !!this.selectedCollection;
+                if (previousCollection !== this.selectedCollection) {
+                    this.resetConversationState();
+                }
+                this.cdr.detectChanges();
+                return;
+            }
             if (!nextCollection || nextCollection === this.selectedCollection) return;
+            if (!this.collections.find((c: any) => c.name === nextCollection)) {
+                await this.loadCollections();
+                if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            }
             this.selectedCollection = nextCollection;
             this.collectionSelected = !!nextCollection;
+            this.persistCollection(nextCollection);
             this.resetConversationState();
             this.cdr.detectChanges();
         };
@@ -103,6 +119,7 @@ export class Component implements OnInit, OnDestroy {
                 if (this.selectedCollection && !this.collections.find((c: any) => c.name === this.selectedCollection)) this.selectedCollection = '';
                 if (this.collections.length > 0 && !this.selectedCollection) this.selectedCollection = this.collections[0].name;
                 if (this.selectedCollection) this.persistCollection(this.selectedCollection);
+                else this.persistCollection('');
                 this.collectionSelected = this.collections.length === 1 ? true : !!this.selectedCollection;
             }
         } catch (e) { }

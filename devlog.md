@@ -1,5 +1,7 @@
 | 날짜 | ID | 작업 내용 | 상세 |
 |------|-----|----------|------|
+| 2026-04-08 | 002 | 플로팅 챗봇을 사이드바 패널로 전환 + Claude×Copilot 하이브리드 에이전트 UI | [상세](devlog/2026-04-08/002-sidebar-chat-claude-copilot-hybrid.md) |
+| 2026-04-08 | 001 | 플로팅 챗봇 UI를 VS Code Copilot 스타일로 전면 개편 (Thinking 섹션, 인라인 도구 칩, 미니멀 디자인) | [상세](devlog/2026-04-08/001-copilot-style-chatbot-ui.md) |
 | 2026-03-27 | 004 | 플로팅 챗봇의 카드/프리뷰 상태 갱신 경로를 공용 헬퍼로 정리해 결합도를 낮춤 | [상세](devlog/2026-03-27/004-floating-chat-state-update-helper-refactor.md) |
 | 2026-03-27 | 003 | 에이전트 답변 대기 체감 개선을 위해 progressive card/preview UX 적용 | [상세](devlog/2026-03-27/003-agent-waiting-ux-progressive-cards.md) |
 | 2026-03-27 | 002 | 변경 컬렉션 기준 에이전트 파이프라인 재적용 | [상세](devlog/2026-03-27/002-agent-pipeline-refresh-for-changed-collection.md) |

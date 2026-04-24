@@ -143,8 +143,21 @@ export class Component implements OnInit, OnDestroy {
         });
         this.collectionChangeListener = async (event: any) => {
             const nextCollection = String(event?.detail?.collection || '').trim();
+            const deletedCollection = String(event?.detail?.deletedCollection || '').trim();
+            if (deletedCollection) {
+                const previousCollection = this.selectedCollection;
+                await this.loadCollections();
+                if (previousCollection !== this.selectedCollection) {
+                    await this.onCollectionChange(false);
+                }
+                await this.service.render();
+                return;
+            }
             if (!nextCollection || nextCollection === this.selectedCollection) return;
-            if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            if (!this.collections.find((c: any) => c.name === nextCollection)) {
+                await this.loadCollections();
+                if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            }
             this.selectedCollection = nextCollection;
             await this.onCollectionChange(false);
             await this.service.render();

@@ -1,0 +1,10 @@
+{
+    "mode": "component",
+    "id": "component.chat.sidebar",
+    "namespace": "chat.sidebar",
+    "title": "chat-sidebar",
+    "viewuri": "",
+    "category": "",
+    "controller": "base",
+    "template": "wiz-component-chat-sidebar()"
+}

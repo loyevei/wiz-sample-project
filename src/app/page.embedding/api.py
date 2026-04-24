@@ -6,6 +6,7 @@ import uuid
 import datetime
 import tempfile
 import traceback
+import shutil
 
 import fitz  # PyMuPDF
 import numpy as np
@@ -156,6 +157,10 @@ def _get_model(model_name=None):
     return sys._embedding_models[model_name]
 
 def _get_client():
+    """Milvus Lite 클라이언트 (싱글톤 캐시)
+    Milvus Lite는 SQLite 기반이므로 동일 프로세스에서 여러 MilvusClient를
+    생성하면 데드락이 발생한다. 반드시 단일 인스턴스를 재사용해야 한다.
+    """
     if not hasattr(sys, '_milvus_client') or sys._milvus_client is None:
         db_path = MILVUS_URI
         if not db_path.startswith("http"):
@@ -174,6 +179,16 @@ def _save_collection_meta(meta):
     os.makedirs(os.path.dirname(COLLECTION_META_PATH), exist_ok=True)
     with open(COLLECTION_META_PATH, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def _count_collection_pdfs(collection_name):
+    pdf_dir = os.path.join(DATA_DIR, "pdfs", collection_name)
+    if not os.path.isdir(pdf_dir):
+        return 0
+    try:
+        return sum(1 for name in os.listdir(pdf_dir) if name.lower().endswith('.pdf'))
+    except Exception:
+        return 0
 
 def _get_collection_model(collection_name):
     meta_helper = wiz.model("collectionmeta")
@@ -196,9 +211,10 @@ def _get_collection_fields(client, collection_name):
 # ==============================================================================
 # 컬렉션 생성 (확장 스키마)
 # ==============================================================================
-def _ensure_collection(collection_name, model_name=None):
-    client = _get_client()
-    if not client.has_collection(collection_name):
+def _ensure_collection(collection_name, model_name=None, client=None):
+    if client is None:
+        client = _get_client()
+    if not client.has_collection(collection_name, timeout=10):
         if model_name is None:
             model_name = DEFAULT_MODEL
         dim = MODEL_REGISTRY.get(model_name, {}).get("dim", 768)
@@ -219,13 +235,20 @@ def _ensure_collection(collection_name, model_name=None):
         schema = CollectionSchema(fields=fields, description=f"Embeddings ({model_name})")
         index_params = client.prepare_index_params()
         index_params.add_index(field_name="embedding", index_type="FLAT", metric_type="COSINE")
-        client.create_collection(collection_name=collection_name, schema=schema, index_params=index_params)
+        client.create_collection(
+            collection_name=collection_name,
+            schema=schema,
+            index_params=index_params,
+            timeout=15
+        )
 
         meta = _load_collection_meta()
         meta[collection_name] = {
             "model": model_name, "dim": dim,
             "created_at": datetime.datetime.now().isoformat(),
-            "short_name": MODEL_REGISTRY.get(model_name, {}).get("short_name", model_name)
+            "short_name": MODEL_REGISTRY.get(model_name, {}).get("short_name", model_name),
+            "total_docs": 0,
+            "total_chunks": 0
         }
         _save_collection_meta(meta)
 
@@ -1329,9 +1352,100 @@ def models():
         model_list.append({
             "name": info["name"], "short_name": info["short_name"],
             "dim": info["dim"], "description": info["description"],
-            "lang": info["lang"], "max_seq_length": info["max_seq_length"]
+            "lang": info["lang"], "max_seq_length": info["max_seq_length"],
+            "custom": info.get("custom", False)
         })
     wiz.response.status(200, models=model_list, default=DEFAULT_MODEL)
+
+
+def add_custom_model():
+    """HuggingFace 등에서 SentenceTransformer 모델을 다운로드하여 레지스트리에 추가"""
+    model_name = wiz.request.query("model_name", "").strip()
+    if not model_name:
+        wiz.response.status(400, message="모델 이름을 입력하세요.")
+
+    # 이미 등록된 모델인지 확인
+    registry = wiz.model("modelregistry")
+    existing = registry.full()
+    if model_name in existing:
+        wiz.response.status(400, message=f"'{model_name}' 모델이 이미 등록되어 있습니다.")
+
+    # SentenceTransformer로 모델 다운로드 및 로드 시도
+    try:
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer(model_name)
+
+        # 모델 정보 추출
+        dim = model.get_sentence_embedding_dimension()
+        max_seq = getattr(model, 'max_seq_length', 512)
+
+        # 언어 자동 감지 (이름 기반 휴리스틱)
+        name_lower = model_name.lower()
+        if any(kw in name_lower for kw in ['ko', 'korean', 'klue', 'kr-']):
+            lang = "ko"
+        elif any(kw in name_lower for kw in ['multilingual', 'multi', 'e5', 'labse', 'xlm']):
+            lang = "multi"
+        else:
+            lang = "en"
+
+        # 설명 자동 생성
+        short_name = model_name.split("/")[-1] if "/" in model_name else model_name
+        description = f"커스텀 모델 ({dim}D, max {max_seq} tokens)"
+
+        # 레지스트리에 등록 (영속 저장)
+        info = registry.add_model(
+            name=model_name,
+            dim=dim,
+            description=description,
+            lang=lang,
+            short_name=short_name,
+            max_seq_length=max_seq
+        )
+
+        # 모델 캐시에 등록 (다시 다운로드 방지)
+        if not hasattr(sys, '_embedding_models') or sys._embedding_models is None:
+            sys._embedding_models = {}
+        sys._embedding_models[model_name] = model
+
+        # MODEL_REGISTRY 갱신
+        global MODEL_REGISTRY
+        MODEL_REGISTRY = registry.full()
+
+        wiz.response.status(200,
+            model=info,
+            message=f"'{short_name}' 모델이 성공적으로 추가되었습니다. ({dim}차원, max {max_seq} tokens)"
+        )
+    except Exception as e:
+        error_msg = str(e)
+        if "404" in error_msg or "not found" in error_msg.lower():
+            wiz.response.status(400, message=f"모델 '{model_name}'을 찾을 수 없습니다. HuggingFace 모델 이름을 확인하세요.")
+        elif "connection" in error_msg.lower() or "timeout" in error_msg.lower():
+            wiz.response.status(400, message=f"모델 다운로드 중 네트워크 오류가 발생했습니다: {error_msg}")
+        else:
+            wiz.response.status(400, message=f"모델 로드 실패: {error_msg}")
+
+
+def remove_custom_model():
+    """커스텀 모델을 레지스트리에서 삭제"""
+    model_name = wiz.request.query("model_name", "").strip()
+    if not model_name:
+        wiz.response.status(400, message="모델 이름을 입력하세요.")
+
+    registry = wiz.model("modelregistry")
+    try:
+        registry.remove_model(model_name)
+    except ValueError as e:
+        wiz.response.status(400, message=str(e))
+
+    # 메모리 캐시에서도 제거
+    if hasattr(sys, '_embedding_models') and sys._embedding_models and model_name in sys._embedding_models:
+        del sys._embedding_models[model_name]
+
+    # MODEL_REGISTRY 갱신
+    global MODEL_REGISTRY
+    MODEL_REGISTRY = registry.full()
+
+    wiz.response.status(200, message=f"모델 '{model_name}'이 삭제되었습니다.")
 
 
 def chunk_strategies():
@@ -1381,19 +1495,24 @@ def collections():
                 except Exception:
                     pass
 
-            total_chunks = 0
-            total_docs = 0
-            try:
-                stats_info = client.get_collection_stats(name)
-                total_chunks = stats_info.get("row_count", 0)
-                if total_chunks > 0:
-                    docs = client.query(
-                        collection_name=name, filter="chunk_index == 0",
-                        output_fields=["doc_id"], limit=10000
-                    )
-                    total_docs = len(docs)
-            except Exception:
-                pass
+            total_docs = info.get("total_docs")
+            if total_docs is None:
+                total_docs = _count_collection_pdfs(name)
+                info["total_docs"] = total_docs
+                meta[name] = info
+                meta_updated = True
+
+            total_chunks = info.get("total_chunks")
+            if total_chunks is None:
+                total_chunks = 0
+                try:
+                    stats_info = client.get_collection_stats(name)
+                    total_chunks = stats_info.get("row_count", 0)
+                except Exception:
+                    pass
+                info["total_chunks"] = total_chunks
+                meta[name] = info
+                meta_updated = True
 
             result.append({
                 "name": name, "model": info.get("model", DEFAULT_MODEL),
@@ -1428,13 +1547,19 @@ def create_collection():
             wiz.response.status(400, message=f"지원하지 않는 모델: {model_name}")
 
         client = _get_client()
-        if client.has_collection(collection_name):
+        if client.has_collection(collection_name, timeout=10):
             wiz.response.status(400, message=f"'{collection_name}' 컬렉션이 이미 존재합니다.")
 
-        _ensure_collection(collection_name, model_name)
+        _ensure_collection(collection_name, model_name, client=client)
+        if not client.has_collection(collection_name, timeout=20):
+            wiz.response.status(500, message=f"'{collection_name}' 컬렉션 생성 확인에 실패했습니다.")
+
+        meta = _load_collection_meta()
+        collection_meta = meta.get(collection_name, {})
         wiz.response.status(200,
             collection_name=collection_name, model=model_name,
             dim=MODEL_REGISTRY[model_name]["dim"],
+            created_at=collection_meta.get("created_at", datetime.datetime.now().isoformat()),
             message=f"'{collection_name}' 컬렉션이 생성되었습니다.")
 
     except season.lib.exception.ResponseException:
@@ -1452,14 +1577,35 @@ def delete_collection():
             wiz.response.status(400, message="컬렉션 이름을 입력하세요.")
 
         client = _get_client()
-        if not client.has_collection(collection_name):
+        if not client.has_collection(collection_name, timeout=10):
             wiz.response.status(404, message=f"'{collection_name}' 컬렉션을 찾을 수 없습니다.")
 
-        client.drop_collection(collection_name)
+        try:
+            load_state = client.get_load_state(collection_name=collection_name, timeout=10)
+            state = str(load_state.get("state", "")).lower()
+            if state not in ("", "not_load", "not loaded"):
+                client.release_collection(collection_name=collection_name, timeout=10)
+        except Exception:
+            try:
+                client.release_collection(collection_name=collection_name, timeout=10)
+            except Exception:
+                pass
+
+        client.drop_collection(collection_name=collection_name, timeout=20)
+        if client.has_collection(collection_name, timeout=10):
+            wiz.response.status(500, message=f"'{collection_name}' 컬렉션 삭제를 완료하지 못했습니다.")
+
         meta = _load_collection_meta()
         meta.pop(collection_name, None)
         _save_collection_meta(meta)
-        wiz.response.status(200, message=f"'{collection_name}' 컬렉션이 삭제되었습니다.")
+
+        pdf_dir = os.path.join(DATA_DIR, "pdfs", collection_name)
+        if os.path.isdir(pdf_dir):
+            shutil.rmtree(pdf_dir, ignore_errors=True)
+
+        wiz.response.status(200,
+            collection_name=collection_name,
+            message=f"'{collection_name}' 컬렉션이 삭제되었습니다.")
 
     except season.lib.exception.ResponseException:
         raise
@@ -1616,7 +1762,8 @@ def upload():
         embeddings = model.encode(texts_to_embed, show_progress_bar=False, normalize_embeddings=True)
 
         # 4. Milvus 저장
-        client = _ensure_collection(collection_name, model_name)
+        client = _get_client()
+        client = _ensure_collection(collection_name, model_name, client=client)
         doc_id = str(uuid.uuid4())[:8]
 
         # 4-1. PDF 원본 영구 저장 (검색 결과에서 원문 조회용)
@@ -1657,6 +1804,17 @@ def upload():
             data.append(record)
 
         client.insert(collection_name=collection_name, data=data)
+
+        meta = _load_collection_meta()
+        collection_meta = meta.get(collection_name, {})
+        collection_meta["model"] = model_name
+        collection_meta["dim"] = MODEL_REGISTRY.get(model_name, {}).get("dim", len(data[0].get("embedding", [])) if len(data) > 0 else 768)
+        collection_meta["short_name"] = MODEL_REGISTRY.get(model_name, {}).get("short_name", model_name)
+        collection_meta["created_at"] = collection_meta.get("created_at", datetime.datetime.now().isoformat())
+        collection_meta["total_docs"] = int(collection_meta.get("total_docs", 0)) + 1
+        collection_meta["total_chunks"] = int(collection_meta.get("total_chunks", 0)) + len(data)
+        meta[collection_name] = collection_meta
+        _save_collection_meta(meta)
 
         # 청크 타입 분포
         chunk_types = {}
@@ -1702,22 +1860,26 @@ def stats():
                 model_name=col_meta.get("model", DEFAULT_MODEL),
                 collection=collection_name)
             return
-
-        stats_info = client.get_collection_stats(collection_name)
-        total_chunks = stats_info.get("row_count", 0)
-        total_docs = 0
-        if total_chunks > 0:
-            try:
-                results = client.query(
-                    collection_name=collection_name,
-                    filter="chunk_index == 0",
-                    output_fields=["doc_id"]
-                )
-                total_docs = len(results)
-            except Exception:
-                total_docs = 0
-
         col_meta = meta.get(collection_name, {})
+        total_docs = col_meta.get("total_docs")
+        if total_docs is None:
+            total_docs = _count_collection_pdfs(collection_name)
+            col_meta["total_docs"] = total_docs
+
+        total_chunks = col_meta.get("total_chunks")
+        if total_chunks is None:
+            total_chunks = 0
+            try:
+                stats_info = client.get_collection_stats(collection_name)
+                total_chunks = stats_info.get("row_count", 0)
+            except Exception:
+                total_chunks = 0
+            col_meta["total_chunks"] = total_chunks
+
+        if meta.get(collection_name) != col_meta:
+            meta[collection_name] = col_meta
+            _save_collection_meta(meta)
+
         model_name = col_meta.get("model", DEFAULT_MODEL)
         model_info = MODEL_REGISTRY.get(model_name, {})
 

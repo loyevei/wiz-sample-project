@@ -1,8 +1,8 @@
 //- Full-page Agent Chat — matches floating chatbot design
-div(class="flex flex-col h-full w-full bg-white")
+div(class="flex flex-col h-full min-h-0 w-full bg-white")
 
     //- Header
-    div(class="flex items-start justify-between gap-4 border-b border-fuchsia-100 bg-gradient-to-r from-slate-950 via-violet-950 to-fuchsia-950 px-6 py-5 text-white")
+    div(class="flex items-start justify-between gap-4 border-b border-fuchsia-100 bg-gradient-to-r from-slate-950 via-violet-950 to-fuchsia-950 px-4 sm:px-6 py-4 sm:py-5 text-white")
         div(class="flex min-w-0 items-center gap-4")
             div(class="flex h-14 w-14 items-center justify-center rounded-2xl border border-fuchsia-300/30 bg-white/10 p-1.5")
                 img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-xl object-cover")
@@ -20,17 +20,17 @@ div(class="flex flex-col h-full w-full bg-white")
                     path(stroke-linecap="round", stroke-linejoin="round", d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182")
 
     //- Collection Selection Screen
-    div(*ngIf="!collectionSelected", class="flex-1 min-h-0 overflow-y-auto bg-slate-50 px-6 py-8")
+    div(*ngIf="!collectionSelected", class="flex-1 min-h-0 overflow-y-auto bg-slate-50 px-4 sm:px-6 md:px-8 py-6 sm:py-8")
         div(class="flex h-full flex-col items-center justify-center")
             div(*ngIf="collectionsLoading", class="flex flex-col items-center gap-4")
                 div(class="h-14 w-14 rounded-full border-[3px] border-cyan-400 border-t-transparent animate-spin")
                 p(class="text-[14px] text-slate-500") 데이터베이스 로딩 중...
-            div(*ngIf="!collectionsLoading", class="w-full max-w-xl")
+            div(*ngIf="!collectionsLoading", class="w-full max-w-[min(48rem,100%)]")
                 div(class="mb-8 text-center")
                     div(class="mx-auto mb-5 flex h-28 w-28 items-center justify-center rounded-[32px] border border-fuchsia-200 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-4 shadow-[0_24px_50px_rgba(88,28,135,0.2)]")
                         img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-[22px] object-cover")
                     p(class="text-[18px] font-semibold text-slate-900") {{robotProfile.name}}
-                    p(class="mt-2 text-[13px] leading-6 text-slate-500 max-w-md mx-auto") 논문 검색에 사용할 컬렉션을 선택하면 실제 에이전트 오케스트레이션 실행 상태를 실시간으로 보여드립니다.
+                    p(class="mt-2 text-[13px] leading-6 text-slate-500 max-w-[min(28rem,100%)] mx-auto") 논문 검색에 사용할 컬렉션을 선택하면 실제 에이전트 오케스트레이션 실행 상태를 실시간으로 보여드립니다.
                 div(*ngIf="collections.length === 0", class="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-8 text-center")
                     p(class="text-[14px] font-medium text-slate-600") 사용 가능한 컬렉션이 없습니다.
                     p(class="mt-2 text-[12px] text-slate-400") 먼저 임베딩 페이지에서 PDF를 업로드하세요.
@@ -45,15 +45,15 @@ div(class="flex flex-col h-full w-full bg-white")
                             span(class="text-[11px] text-slate-400") {{col.total_docs}} docs
 
     //- Chat Body
-    div(*ngIf="collectionSelected", #chatBody="", class="flex-1 min-h-0 overflow-y-auto bg-[linear-gradient(180deg,#fdf4ff_0%,#faf5ff_48%,#f8fafc_100%)] px-6 py-6 space-y-5")
+    div(*ngIf="collectionSelected", #chatBody="", class="flex-1 min-h-0 overflow-y-auto bg-[linear-gradient(180deg,#fdf4ff_0%,#faf5ff_48%,#f8fafc_100%)] px-4 sm:px-6 md:px-8 py-4 sm:py-6 space-y-5")
 
         //- Welcome Screen (no messages)
         div(*ngIf="chatMessages.length === 0", class="flex h-full flex-col items-center justify-center text-center")
             div(class="relative mb-5 flex h-28 w-28 items-center justify-center rounded-[32px] border border-fuchsia-200 bg-gradient-to-br from-slate-950 via-violet-950 to-fuchsia-950 p-4 shadow-[0_28px_60px_rgba(88,28,135,0.18)]")
                 img(src="/assets/brand/plasma-robot.svg", alt="Plasma robot", class="h-full w-full rounded-[22px] object-cover")
             p(class="text-[18px] font-semibold text-slate-900") {{robotProfile.name}}
-            p(class="mt-2 max-w-lg text-[13px] leading-6 text-slate-500") 군집형 에이전트가 목표 달성 전까지 계획·수집·분석·정리를 반복하면서 페이지 결과 기반 답변을 만듭니다.
-            div(class="mt-6 grid w-full max-w-lg grid-cols-2 gap-3")
+            p(class="mt-2 max-w-[min(32rem,100%)] text-[13px] leading-6 text-slate-500") 군집형 에이전트가 목표 달성 전까지 계획·수집·분석·정리를 반복하면서 페이지 결과 기반 답변을 만듭니다.
+            div(class="mt-6 grid w-full max-w-[min(40rem,100%)] grid-cols-1 sm:grid-cols-2 gap-3")
                 button(*ngFor="let s of suggestions", (click)="sendChat(s.text)", class="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-[13px] text-slate-600 transition-all hover:border-fuchsia-300 hover:bg-fuchsia-50 hover:text-fuchsia-700")
                     span(class="text-lg") {{s.icon}}
                     span(class="truncate") {{s.text}}
@@ -62,11 +62,11 @@ div(class="flex flex-col h-full w-full bg-white")
         ng-container(*ngFor="let msg of chatMessages; let i = index")
             //- User message
             div(*ngIf="msg.role === 'user'", class="flex justify-end")
-                div(class="max-w-[70%] rounded-3xl rounded-br-md bg-fuchsia-600 px-5 py-3 text-[14px] leading-relaxed text-white shadow-sm whitespace-pre-wrap") {{msg.content}}
+                div(class="max-w-[92%] sm:max-w-[84%] xl:max-w-[72%] rounded-3xl rounded-br-md bg-fuchsia-600 px-4 sm:px-5 py-3 text-[14px] leading-relaxed text-white shadow-sm whitespace-pre-wrap") {{msg.content}}
 
             //- Assistant message
             div(*ngIf="msg.role === 'assistant'", class="flex justify-start")
-                div(class="max-w-[85%] space-y-4")
+                div(class="max-w-[96%] sm:max-w-[90%] xl:max-w-[80%] space-y-4")
                     //- Collapsed view
                     button(*ngIf="msg.collapsed", (click)="toggleCollapse(msg)", class="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left text-[13px] text-slate-500 shadow-sm transition-colors hover:bg-slate-50")
                         div(class="flex items-center justify-between gap-3")

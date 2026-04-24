@@ -1,6 +1,8 @@
 import { OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Service } from '@wiz/libs/portal/season/service';
 import { Router } from '@angular/router';
+import { marked } from 'marked';
 
 declare const wiz: any;
 
@@ -51,18 +53,41 @@ export class Component implements OnInit, OnDestroy {
     constructor(
         public service: Service,
         private router: Router,
-        private cdr: ChangeDetectorRef
-    ) {}
+        private cdr: ChangeDetectorRef,
+        private sanitizer: DomSanitizer
+    ) {
+        // marked 옵션 설정
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
+    }
 
     public async ngOnInit() {
         await this.service.init();
         this.selectedCollection = this.getStoredCollection();
         this.restoreChatOpenState();
-        this.collectionChangeListener = (event: any) => {
+        this.collectionChangeListener = async (event: any) => {
             const nextCollection = String(event?.detail?.collection || '').trim();
+            const deletedCollection = String(event?.detail?.deletedCollection || '').trim();
+            if (deletedCollection) {
+                const previousCollection = this.selectedCollection;
+                await this.loadCollections();
+                this.collectionSelected = !!this.selectedCollection;
+                if (previousCollection !== this.selectedCollection) {
+                    this.resetConversationState();
+                }
+                this.cdr.detectChanges();
+                return;
+            }
             if (!nextCollection || nextCollection === this.selectedCollection) return;
+            if (!this.collections.find((item: any) => item.name === nextCollection)) {
+                await this.loadCollections();
+                if (!this.collections.find((item: any) => item.name === nextCollection)) return;
+            }
             this.selectedCollection = nextCollection;
             this.collectionSelected = !!nextCollection;
+            this.persistCollection(nextCollection);
             this.resetConversationState();
             this.cdr.detectChanges();
         };
@@ -239,6 +264,8 @@ export class Component implements OnInit, OnDestroy {
 
                 if (this.selectedCollection) {
                     this.persistCollection(this.selectedCollection);
+                } else {
+                    this.persistCollection('');
                 }
 
                 if (this.collections.length === 1 && this.selectedCollection) {
@@ -1030,8 +1057,31 @@ export class Component implements OnInit, OnDestroy {
         this.typingTimers.set(msg, timer);
     }
 
-    public getDisplayedAssistantContent(msg: any): string {
-        return String(msg?.renderedContent ?? msg?.content ?? '');
+    public getDisplayedAssistantContent(msg: any): SafeHtml {
+        const raw = String(msg?.renderedContent ?? msg?.content ?? '');
+        if (!raw.trim()) return this.sanitizer.bypassSecurityTrustHtml('');
+        return this.sanitizer.bypassSecurityTrustHtml(this.renderMarkdown(raw));
+    }
+
+    private renderMarkdown(text: string): string {
+        if (!text || !text.trim()) return '';
+        try {
+            let html = marked.parse(text) as string;
+            // 코드 블록에 복사 버튼 및 언어 레이블 추가
+            html = html.replace(/<pre><code( class="language-(\w+)")?>/g, (_match, _cls, lang) => {
+                const label = lang || 'code';
+                return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${label}</span><button class="code-copy-btn" onclick="navigator.clipboard.writeText(this.closest('.code-block-wrapper').querySelector('code').textContent).then(()=>{this.textContent='✓ 복사됨';setTimeout(()=>{this.textContent='복사'},1500)})">복사</button></div><pre><code${_cls || ''}>`;
+            });
+            html = html.replace(/<\/code><\/pre>/g, '</code></pre></div>');
+            return html;
+        } catch (e) {
+            return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+    }
+
+    public copyAnswer(msg: any) {
+        const text = String(msg?.content || msg?.renderedContent || '');
+        navigator.clipboard.writeText(text).catch(() => {});
     }
 
     private collapsePreviousAssistantTurns(exceptIdx: number = -1) {
@@ -1771,6 +1821,19 @@ export class Component implements OnInit, OnDestroy {
 
     public toggleToolCollapse(tc: any) {
         tc.collapsed = !tc.collapsed;
+    }
+
+    public getUsedToolNames(msg: any): string[] {
+        if (!msg?.toolCalls?.length) return [];
+        const seen = new Set<string>();
+        return msg.toolCalls
+            .filter((tc: any) => tc.type === 'result' && tc.name)
+            .map((tc: any) => tc.name)
+            .filter((name: string) => {
+                if (seen.has(name)) return false;
+                seen.add(name);
+                return true;
+            });
     }
 
     public getToolIcon(name: string): string {

@@ -1,5 +1,13 @@
 :host {
     display: block;
     width: 100%;
-    min-height: 100vh;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+:host ::ng-deep body.chat-resizing,
+:host ::ng-deep body.chat-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
 }

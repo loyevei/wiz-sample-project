@@ -21,6 +21,13 @@ export class Component implements OnInit, OnDestroy {
     public selectedModel: string = '';
     public modelGroups: { label: string, lang: string, models: any[] }[] = [];
 
+    // 커스텀 모델 추가
+    public showAddModel: boolean = false;
+    public newModelName: string = '';
+    public addingModel: boolean = false;
+    public addModelStatus: string = '';
+    public removingModel: string = '';
+
     // 컬렉션 관리
     public collections: any[] = [];
     public selectedCollection: string = '';
@@ -64,8 +71,20 @@ export class Component implements OnInit, OnDestroy {
         await this.service.render();
         this.collectionChangeListener = async (event: any) => {
             const nextCollection = String(event?.detail?.collection || '').trim();
+            const deletedCollection = String(event?.detail?.deletedCollection || '').trim();
+            if (deletedCollection) {
+                const previousCollection = this.selectedCollection;
+                await this.loadCollections();
+                if (previousCollection !== this.selectedCollection) {
+                    await this.onCollectionChange(false);
+                }
+                return;
+            }
             if (!nextCollection || nextCollection === this.selectedCollection) return;
-            if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            if (!this.collections.find((c: any) => c.name === nextCollection)) {
+                await this.loadCollections();
+                if (!this.collections.find((c: any) => c.name === nextCollection)) return;
+            }
             this.selectedCollection = nextCollection;
             await this.onCollectionChange(false);
         };
@@ -113,6 +132,74 @@ export class Component implements OnInit, OnDestroy {
         return this.models.find(m => m.name === this.selectedModel) || {};
     }
 
+    public async addCustomModel() {
+        const name = this.newModelName.trim();
+        if (!name) return;
+
+        if (this.models.find(m => m.name === name)) {
+            this.addModelStatus = `⚠️ '${name}' 모델이 이미 등록되어 있습니다.`;
+            await this.service.render();
+            return;
+        }
+
+        this.addingModel = true;
+        this.addModelStatus = `🔄 '${name}' 모델을 다운로드하고 있습니다... (최초 다운로드 시 수 분 소요)`;
+        await this.service.render();
+
+        try {
+            const { code, data } = await wiz.call("add_custom_model", { model_name: name });
+            if (code === 200) {
+                this.addModelStatus = `✅ ${data.message}`;
+                this.newModelName = '';
+                this.addLog(`✅ 모델 추가: ${data.model?.short_name} (${data.model?.dim}D)`, 'success');
+                await this.loadModels();
+            } else {
+                this.addModelStatus = `❌ ${data?.message || '모델 추가 실패'}`;
+                this.addLog(`❌ 모델 추가 실패: ${data?.message || '알 수 없는 오류'}`, 'error');
+            }
+        } catch (e: any) {
+            this.addModelStatus = `❌ 네트워크 오류: ${e.message || '연결 실패'}`;
+            this.addLog(`❌ 모델 추가 오류: ${e.message || '네트워크 오류'}`, 'error');
+        }
+
+        this.addingModel = false;
+        await this.service.render();
+    }
+
+    public async removeCustomModel(modelName: string) {
+        if (this.removingModel) return;
+
+        const res = await this.service.modal.show({
+            title: '커스텀 모델 삭제',
+            message: `'${modelName}' 모델을 레지스트리에서 삭제하시겠습니까?\n\n⚠️ 이 모델을 사용하는 컬렉션은 영향받지 않지만, 새 임베딩 생성 시 이 모델을 선택할 수 없게 됩니다.`,
+            action: '삭제',
+            actionBtn: 'error',
+            status: 'error'
+        });
+        if (!res) return;
+
+        this.removingModel = modelName;
+        await this.service.render();
+
+        try {
+            const { code, data } = await wiz.call("remove_custom_model", { model_name: modelName });
+            if (code === 200) {
+                this.addLog(`🗑️ 모델 삭제: ${modelName}`, 'success');
+                if (this.selectedModel === modelName) {
+                    this.selectedModel = '';
+                }
+                await this.loadModels();
+            } else {
+                this.addLog(`❌ 모델 삭제 실패: ${data?.message || '알 수 없는 오류'}`, 'error');
+            }
+        } catch (e: any) {
+            this.addLog(`❌ 모델 삭제 오류: ${e.message || '네트워크 오류'}`, 'error');
+        }
+
+        this.removingModel = '';
+        await this.service.render();
+    }
+
     public getLangLabel(lang: string): string {
         const labels: any = { ko: '한국어', en: '영어', multi: '다국어' };
         return labels[lang] || lang;
@@ -148,6 +235,61 @@ export class Component implements OnInit, OnDestroy {
         return this.collections.find(c => c.name === this.selectedCollection) || {};
     }
 
+    private applySelectedCollectionSummary() {
+        const info: any = this.getSelectedCollectionInfo() || {};
+        this.stats = {
+            ...this.stats,
+            total_docs: info.total_docs || 0,
+            total_chunks: info.total_chunks || 0,
+            model_name: info.model || this.selectedModel,
+            model_short_name: info.short_name || this.getSelectedModelInfo().short_name || this.selectedModel,
+            model_dim: info.dim || this.getSelectedModelInfo().dim || 0,
+            collection: this.selectedCollection,
+            created_at: info.created_at || ''
+        };
+        if (info && info.model) {
+            this.selectedModel = info.model;
+        }
+    }
+
+    private async refreshSelectedCollectionDataInBackground() {
+        await Promise.all([
+            this.loadStats(),
+            this.loadChunkTypeStats()
+        ]);
+    }
+
+    private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+        let timeoutHandle: any = null;
+        const timeoutPromise = new Promise<T>((_, reject) => {
+            timeoutHandle = setTimeout(() => reject(new Error(message)), timeoutMs);
+        });
+
+        try {
+            return await Promise.race([promise, timeoutPromise]);
+        } finally {
+            if (timeoutHandle) {
+                clearTimeout(timeoutHandle);
+            }
+        }
+    }
+
+    private async verifyCreatedCollectionInBackground(collectionName: string) {
+        await this.loadCollections();
+        const exists = this.collections.find(c => c.name === collectionName);
+        if (exists) {
+            return;
+        }
+
+        this.collections = this.collections.filter(c => c.name !== collectionName);
+        if (this.selectedCollection === collectionName) {
+            this.selectedCollection = this.collections.length > 0 ? this.collections[0].name : '';
+            this.applySelectedCollectionSummary();
+        }
+        this.addLog(`❌ 컬렉션 '${collectionName}' 생성 확인에 실패했습니다. 다시 시도해주세요.`, 'error');
+        await this.service.render();
+    }
+
     public async createCollection() {
         const name = this.newCollectionName.trim();
         if (!name) return;
@@ -176,9 +318,32 @@ export class Component implements OnInit, OnDestroy {
                 this.addLog(`✅ 컬렉션 '${name}' 생성 완료 (${this.getSelectedModelInfo().short_name || ''}, ${data.dim}D)`, 'success');
                 this.newCollectionName = '';
                 this.showCreateCollection = false;
-                await this.loadCollections();
+                const selectedModelInfo = this.getSelectedModelInfo();
+                if (!this.collections.find(c => c.name === name)) {
+                    this.collections = [
+                        ...this.collections,
+                        {
+                            name,
+                            model: this.selectedModel,
+                            short_name: selectedModelInfo.short_name || this.selectedModel,
+                            dim: data.dim,
+                            created_at: data?.created_at || new Date().toISOString(),
+                            total_docs: 0,
+                            total_chunks: 0
+                        }
+                    ];
+                }
                 this.selectedCollection = name;
-                await this.loadStats();
+                this.statsLoading = false;
+                this.chunkTypeStatsLoading = false;
+                this.chunkTypeStats = {};
+                this.chunkTypeEntries = [];
+                this.applySelectedCollectionSummary();
+                this.broadcastCollectionChange(this.selectedCollection);
+                this.creatingCollection = false;
+                await this.service.render();
+                void this.verifyCreatedCollectionInBackground(name);
+                return;
             } else {
                 this.addLog(`❌ 컬렉션 생성 실패: ${data?.message || '알 수 없는 오류'}`, 'error');
             }
@@ -203,10 +368,11 @@ export class Component implements OnInit, OnDestroy {
         }
         message += '\n\n⚠️ 이 작업은 되돌릴 수 없습니다.';
 
-        const res = await this.service.alert.show({
+        const res = await this.service.modal.show({
             title: '컬렉션 삭제',
-            message: message,
+            message,
             action: '삭제',
+            actionBtn: 'error',
             status: 'error'
         });
         if (!res) return;
@@ -218,14 +384,26 @@ export class Component implements OnInit, OnDestroy {
             const { code, data } = await wiz.call("delete_collection", { collection_name: name });
             if (code === 200) {
                 this.addLog(`🗑️ 컬렉션 '${name}' 삭제 완료`, 'success');
-                if (this.selectedCollection === name) {
-                    this.selectedCollection = '';
+                const previousCollection = this.selectedCollection;
+                this.collections = this.collections.filter(c => c.name !== name);
+                if (previousCollection === name) {
+                    this.selectedCollection = this.collections.length > 0 ? this.collections[0].name : '';
                 }
-                await this.loadCollections();
-                if (this.collections.length > 0 && !this.selectedCollection) {
-                    this.selectedCollection = this.collections[0].name;
+                this.broadcastCollectionChange(this.selectedCollection, name);
+                if (!this.selectedCollection) {
+                    this.stats = {};
+                    this.chunkTypeStats = {};
+                    this.chunkTypeEntries = [];
+                } else {
+                    this.chunkTypeStats = {};
+                    this.chunkTypeEntries = [];
+                    this.statsLoading = false;
+                    this.chunkTypeStatsLoading = false;
+                    this.applySelectedCollectionSummary();
+                    if (previousCollection !== this.selectedCollection) {
+                        void this.refreshSelectedCollectionDataInBackground();
+                    }
                 }
-                await this.loadStats();
             } else {
                 this.addLog(`❌ 삭제 실패: ${data?.message || '알 수 없는 오류'}`, 'error');
             }
@@ -392,6 +570,13 @@ export class Component implements OnInit, OnDestroy {
     // 통계
     // =========================================================================
     public async loadStats() {
+        if (!this.selectedCollection) {
+            this.stats = {};
+            this.statsLoading = false;
+            await this.service.render();
+            return;
+        }
+
         this.statsLoading = true;
         await this.service.render();
 
@@ -409,19 +594,28 @@ export class Component implements OnInit, OnDestroy {
     }
 
     public async onCollectionChange(emitEvent: boolean = true) {
-        await this.loadStats();
-        await this.loadChunkTypeStats();
+        this.applySelectedCollectionSummary();
+        await this.service.render();
+        void this.refreshSelectedCollectionDataInBackground();
         // 컬렉션 변경 시 해당 컬렉션의 모델로 자동 전환
         const info = this.getSelectedCollectionInfo();
         if (info && info.model) {
             this.selectedModel = info.model;
         }
         if (emitEvent) {
-            window.dispatchEvent(new CustomEvent(this.collectionChangeEventName, {
-                detail: { collection: this.selectedCollection, source: 'page-embedding' }
-            }));
+            this.broadcastCollectionChange(this.selectedCollection);
         }
         await this.service.render();
+    }
+
+    private broadcastCollectionChange(collection: string, deletedCollection: string = '') {
+        window.dispatchEvent(new CustomEvent(this.collectionChangeEventName, {
+            detail: {
+                collection: String(collection || '').trim(),
+                deletedCollection: String(deletedCollection || '').trim(),
+                source: 'page-embedding'
+            }
+        }));
     }
 
     // =========================================================================
@@ -512,7 +706,13 @@ export class Component implements OnInit, OnDestroy {
     // 청크 타입 통계
     // =========================================================================
     public async loadChunkTypeStats() {
-        if (!this.selectedCollection) return;
+        if (!this.selectedCollection) {
+            this.chunkTypeStats = {};
+            this.chunkTypeEntries = [];
+            this.chunkTypeStatsLoading = false;
+            await this.service.render();
+            return;
+        }
         this.chunkTypeStatsLoading = true;
         await this.service.render();
 
