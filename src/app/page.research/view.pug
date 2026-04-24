@@ -763,6 +763,10 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                 div(*ngFor="let paper of recResults; let i = index", class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:border-amber-300 hover:shadow-md transition-all")
                     div(class="flex items-start gap-3")
                         div(class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold", [ngClass]="paper.score > 0.7 ? 'bg-amber-100 text-amber-700' : (paper.score > 0.5 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')") {{i + 1}}
+                        //- 페이지 썸네일 (있을 때만)
+                        div(*ngIf="paper.doc_id && paper.page_num", class="flex-shrink-0 w-20 cursor-pointer", (click)="openPdf(paper.doc_id, paper.page_num, paper); $event.stopPropagation()", title="PDF 페이지 보기 (p.{{paper.page_num}})")
+                            img([src]="pdfThumbUrl(paper)", class="w-full h-auto rounded border border-gray-200 hover:border-amber-400 hover:shadow transition-all", (error)="$event.target.style.display='none'")
+                            p(class="text-[10px] text-center text-gray-400 mt-1") p.{{paper.page_num}}
                         div(class="flex-1 min-w-0")
                             h3(class="text-[13px] font-semibold text-gray-900 mb-1 leading-snug") {{paper.title || '제목 없음'}}
                             p(class="text-[11px] text-gray-400 mb-2")
@@ -776,7 +780,7 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                             div(class="flex items-center flex-wrap gap-2")
                                 span(class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold", [ngClass]="paper.relevance === '높음' ? 'bg-green-100 text-green-700' : (paper.relevance === '보통' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600')")
                                     | 유사도 {{(paper.score * 100).toFixed(1)}}%
-                                span(*ngIf="paper.filename", (click)="openPdf(paper.doc_id, paper.page_num); $event.stopPropagation()", class="text-[10px] text-blue-600 font-mono truncate max-w-[200px] cursor-pointer hover:text-blue-800 hover:underline transition-colors", title="PDF 원문 보기") 📄 {{paper.filename}}
+                                span(*ngIf="paper.filename", (click)="openPdf(paper.doc_id, paper.page_num, paper); $event.stopPropagation()", class="text-[10px] text-blue-600 font-mono truncate max-w-[200px] cursor-pointer hover:text-blue-800 hover:underline transition-colors", title="PDF 원문 보기") 📄 {{paper.filename}}
                                 span(*ngFor="let term of (paper.matched_terms || []).slice(0,3)", class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700") {{term}}
 
             //- 빈 상태
@@ -905,3 +909,26 @@ div(class="max-w-6xl pt-6 px-4 sm:px-6 lg:px-8 pb-8 space-y-6")
                 div(class="text-4xl mb-3") 🔍
                 p(class="text-[13px] text-gray-500") 검색 결과가 없습니다. 다른 기술 키워드를 시도해 보세요.
 
+
+//- ============================
+//- PDF 페이지 뷰어 모달
+//- ============================
+div(*ngIf="pdfModal.open", class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4", (click)="closePdfModal()")
+    div(class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col", (click)="$event.stopPropagation()")
+        //- 헤더
+        div(class="flex items-center justify-between px-5 py-3 border-b border-gray-200")
+            div(class="min-w-0 flex-1")
+                p(class="text-[13px] font-semibold text-gray-900 truncate") {{pdfModal.filename || pdfModal.docId}}
+                p(class="text-[11px] text-gray-500") {{pdfModal.collection}} · {{pdfModal.pageNum}}{{pdfModal.totalPages ? ' / ' + pdfModal.totalPages : ''}} 페이지
+            div(class="flex items-center gap-1 ml-3 flex-shrink-0")
+                button((click)="pdfModalGoto(-1)", [disabled]="pdfModal.pageNum <= 1", class="w-8 h-8 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40") ‹
+                button((click)="pdfModalGoto(1)", [disabled]="pdfModal.totalPages > 0 && pdfModal.pageNum >= pdfModal.totalPages", class="w-8 h-8 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40") ›
+                button((click)="openPdfTab(pdfModal.docId, pdfModal.pageNum)", class="ml-2 px-3 h-8 rounded-lg border border-gray-200 text-[12px] text-gray-700 hover:bg-gray-50", title="새 탭에서 PDF 원본 열기") 원본 PDF
+                button((click)="closePdfModal()", class="ml-2 w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 text-xl") ×
+        //- 본문
+        div(class="flex-1 min-h-0 overflow-auto bg-gray-100 p-4")
+            div(class="relative inline-block mx-auto")
+                img([src]="pdfPageImageUrl()", class="block max-w-full h-auto bg-white shadow-lg", (error)="pdfModal.error='페이지 이미지를 찾을 수 없습니다. 문서 업로드 시 페이지 PNG가 생성되지 않았을 수 있습니다.'")
+                //- bbox 하이라이트 오버레이 (있을 때만)
+                div(*ngIf="pdfModal.bbox && pdfModal.pageSize", [ngStyle]="bboxOverlayStyle()")
+            div(*ngIf="pdfModal.error", class="mt-3 text-center text-[13px] text-rose-600") {{pdfModal.error}}

@@ -54,6 +54,24 @@ export class Component implements OnInit, OnDestroy {
     public collectionsLoading: boolean = false;
 
     // ============================
+    // PDF 페이지 모달 뷰어
+    // ============================
+    public pdfModal: any = {
+        open: false,
+        docId: '',
+        pageNum: 1,
+        collection: '',
+        filename: '',
+        bbox: null as number[] | null,
+        pageSize: null as number[] | null,
+        renderDpi: 150,
+        pdfDpi: 72,
+        totalPages: 0,
+        loading: false,
+        error: ''
+    };
+
+    // ============================
     // 토픽 맵 (topicmap)
     // ============================
     public topicClusters: any[] = [];
@@ -601,15 +619,113 @@ export class Component implements OnInit, OnDestroy {
         } catch (e) { }
     }
 
-    public openPdf(docId: string, pageNum: number = 0) {
+    public openPdf(docId: string, pageNum: number = 0, paper: any = null) {
         if (!docId) return;
         this.markViewedDoc(docId);
+        const collection = paper?.collection || this.selectedCollection || '';
+        const filename = paper?.filename || paper?.title || '';
+        const bbox = paper?.bbox || null;
+        this.pdfModal = {
+            open: true,
+            docId,
+            pageNum: Math.max(1, pageNum || 1),
+            collection,
+            filename,
+            bbox,
+            pageSize: null,
+            renderDpi: 150,
+            pdfDpi: 72,
+            totalPages: 0,
+            loading: true,
+            error: ''
+        };
+        this.service.render();
+        this.loadPdfPageMeta();
+    }
+
+    public async loadPdfPageMeta() {
+        try {
+            const url = `/wiz/api/page.embedding/page_meta?collection=${encodeURIComponent(this.pdfModal.collection)}&doc_id=${encodeURIComponent(this.pdfModal.docId)}`;
+            const resp = await fetch(url);
+            if (resp.ok) {
+                const data = await resp.json();
+                const sizes = data.page_size || data.data?.page_size || {};
+                const pn = String(this.pdfModal.pageNum);
+                const size = sizes[pn] || sizes[this.pdfModal.pageNum];
+                this.pdfModal.pageSize = size || null;
+                this.pdfModal.totalPages = data.page_count || data.data?.page_count || 0;
+                this.pdfModal.renderDpi = data.render_dpi || data.data?.render_dpi || 150;
+                this.pdfModal.pdfDpi = data.pdf_dpi || data.data?.pdf_dpi || 72;
+            }
+        } catch (e) {
+            // 메타 없음 — 모달은 정상 표시
+        }
+        this.pdfModal.loading = false;
+        await this.service.render();
+    }
+
+    public pdfPageImageUrl(): string {
+        const { collection, docId, pageNum } = this.pdfModal;
+        if (!docId) return '';
+        return `/wiz/api/page.embedding/page_image?collection=${encodeURIComponent(collection)}&doc_id=${encodeURIComponent(docId)}&page=${pageNum}`;
+    }
+
+    public pdfThumbUrl(paper: any): string {
+        if (!paper?.doc_id) return '';
+        const collection = paper.collection || this.selectedCollection || '';
+        const page = paper.page_num || 1;
+        return `/wiz/api/page.embedding/thumb?collection=${encodeURIComponent(collection)}&doc_id=${encodeURIComponent(paper.doc_id)}&page=${page}`;
+    }
+
+    public closePdfModal() {
+        this.pdfModal.open = false;
+        this.service.render();
+    }
+
+    public async pdfModalGoto(delta: number) {
+        const next = this.pdfModal.pageNum + delta;
+        if (next < 1) return;
+        if (this.pdfModal.totalPages && next > this.pdfModal.totalPages) return;
+        this.pdfModal.pageNum = next;
+        // 페이지 변경 시 bbox는 더 이상 유효하지 않음
+        this.pdfModal.bbox = null;
+        const sizes = this.pdfModal.pageSize ? null : null; // not available
+        await this.service.render();
+        // 새 페이지 사이즈 갱신
+        await this.loadPdfPageMeta();
+    }
+
+    public openPdfTab(docId: string, pageNum: number = 0) {
+        if (!docId) return;
         const collection = encodeURIComponent(this.selectedCollection || '');
         let url = `/wiz/api/page.research.v2/serve_pdf?doc_id=${docId}&collection=${collection}`;
         if (pageNum > 0) {
             url += `#page=${pageNum}`;
         }
         window.open(url, '_blank');
+    }
+
+    public bboxOverlayStyle() {
+        const m = this.pdfModal;
+        if (!m.bbox || !m.pageSize) return { display: 'none' };
+        const [x0, y0, x1, y1] = m.bbox;
+        const [pw, ph] = m.pageSize;
+        if (!pw || !ph) return { display: 'none' };
+        const left = (x0 / pw) * 100;
+        const top = (y0 / ph) * 100;
+        const width = ((x1 - x0) / pw) * 100;
+        const height = ((y1 - y0) / ph) * 100;
+        return {
+            position: 'absolute',
+            left: left + '%',
+            top: top + '%',
+            width: width + '%',
+            height: height + '%',
+            border: '2px solid #ef4444',
+            background: 'rgba(239, 68, 68, 0.10)',
+            'box-shadow': '0 0 0 2px rgba(239, 68, 68, 0.3)',
+            'pointer-events': 'none'
+        };
     }
 
     // ============================

@@ -115,6 +115,31 @@ def _get_client():
         sys._milvus_client = MilvusClient(uri=db_path)
     return sys._milvus_client
 
+
+def _collection_field_names(client, collection_name):
+    """컬렉션 스키마 필드명 셋 (output_fields 안전성 검사용)."""
+    cache = getattr(sys, "_milvus_field_cache", None)
+    if cache is None:
+        cache = {}
+        sys._milvus_field_cache = cache
+    if collection_name in cache:
+        return cache[collection_name]
+    try:
+        info = client.describe_collection(collection_name)
+        names = {f.get("name", "") for f in info.get("fields", [])}
+    except Exception:
+        names = set()
+    cache[collection_name] = names
+    return names
+
+
+def _safe_output_fields(client, collection_name, requested):
+    """요청한 output_fields 중 컬렉션 스키마에 존재하는 것만 반환."""
+    available = _collection_field_names(client, collection_name)
+    if not available:
+        return list(requested)
+    return [f for f in requested if f in available]
+
 def _resolve_collection_and_model():
     """요청에서 컬렉션 결정 → 해당 컬렉션의 모델 로드"""
     collection_name = wiz.request.query("collection", DEFAULT_COLLECTION).strip()
@@ -578,7 +603,8 @@ def _recommend_papers_data(interests="", collection_name=None):
         collection_name=collection_name,
         data=[query_vec],
         limit=limit,
-        output_fields=["doc_id", "filename", "chunk_index", "text", "page_num"],
+        output_fields=_safe_output_fields(client, collection_name,
+            ["doc_id", "filename", "chunk_index", "text", "page_num", "bbox"]),
         search_params={"metric_type": "COSINE"}
     )
 
@@ -603,6 +629,15 @@ def _recommend_papers_data(interests="", collection_name=None):
         text_lower = (doc_title + " " + text_preview).lower()
         matched = [t for t in interest_terms if t in text_lower]
 
+        # bbox JSON 문자열 → 배열 (있는 경우만)
+        bbox_raw = entity.get("bbox", "")
+        bbox_list = None
+        if bbox_raw:
+            try:
+                bbox_list = json.loads(bbox_raw)
+            except Exception:
+                bbox_list = None
+
         papers.append({
             "doc_id": doc_id,
             "title": doc_title,
@@ -617,6 +652,8 @@ def _recommend_papers_data(interests="", collection_name=None):
             "received_year": years.get("received_year", ""),
             "filename": filename,
             "page_num": entity.get("page_num", 0),
+            "bbox": bbox_list,
+            "collection": collection_name,
             "matched_terms": matched,
             "relevance": "높음" if hit.get("distance", 0) > 0.7 else ("보통" if hit.get("distance", 0) > 0.5 else "낮음")
         })

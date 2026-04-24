@@ -76,7 +76,7 @@ div(class="flex flex-col h-full min-h-0 w-full bg-white")
                     ng-container(*ngIf="!msg.collapsed")
                         //- Trace Card
                         div(class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm")
-                            button((click)="toggleTrace(msg)", class="flex w-full items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-5 py-4 text-left")
+                            button((click)="msg.traceCompleted && toggleTrace(msg)", class="flex w-full items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-5 py-4 text-left")
                                 div(class="min-w-0")
                                     div(class="flex items-center gap-2")
                                         span(class="text-[14px] font-semibold text-slate-900") 답변 생성 과정
@@ -88,9 +88,9 @@ div(class="flex flex-col h-full min-h-0 w-full bg-white")
                                         span(*ngFor="let chip of getCardStageChips(msg)", class="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium transition-all", [ngClass]="getCardStageChipClasses(chip.status)")
                                             span {{chip.icon}}
                                             span {{chip.label}}
-                                span(class="text-[12px] text-slate-400") {{msg.traceCompleted ? '요약 보기' : (msg.traceOpen ? '접기' : '펼치기')}}
+                                span(class="text-[12px] text-slate-400") {{msg.traceCompleted ? (msg.traceOpen ? '접기' : '펼치기') : '진행 중'}}
 
-                            div(*ngIf="msg.traceOpen", class="space-y-2.5 px-5 py-5")
+                            div(*ngIf="!msg.traceCompleted || msg.traceOpen", class="space-y-2.5 px-5 py-5")
                                 //- Current step
                                 div(class="journey-reveal journey-reveal-current rounded-2xl border border-cyan-200 bg-cyan-50/70 px-4 py-3", [style.animationDelay.ms]="getJourneyAnimationDelay(0, 20)")
                                     div(class="flex items-start gap-3")

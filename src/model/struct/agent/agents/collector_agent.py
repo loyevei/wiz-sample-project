@@ -78,7 +78,7 @@ class CollectorAgent(BaseAgent):
             iteration += 1
 
             # LLM 호출
-            model = self.ctx.get("model", "gpt-4o")
+            model = self.ctx.get("model", "google/gemma-4-26B-A4B-it")
             try:
                 api_kwargs = {
                     "model": model,

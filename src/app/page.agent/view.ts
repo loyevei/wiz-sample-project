@@ -354,35 +354,123 @@ export class Component implements OnInit, OnDestroy {
         params.append('history', JSON.stringify(this.chatHistory));
         if (activeCollection) params.append('collection', activeCollection);
 
+        let receivedDone = false;
+        let receivedHistory = false;
+
+        const markStreamComplete = () => {
+            if (!this.chatLoading) return;
+            this.chatLoading = false;
+            this.cdr.detectChanges();
+        };
+
         try {
             const response = await fetch('/wiz/api/page.agent/agent_chat', { method: 'POST', body: params, signal: this.chatAbortController.signal });
-            const reader = response.body!.getReader();
+
+            if (!response.ok) {
+                let errorMessage = `요청 실패 (${response.status})`;
+                try {
+                    const payload = await response.json();
+                    errorMessage = payload?.data?.message || payload?.message || errorMessage;
+                } catch (e) { }
+                throw new Error(errorMessage);
+            }
+
+            if (!response.body) {
+                throw new Error('응답 스트림을 열지 못했습니다.');
+            }
+
+            const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
+            const completionTimeoutToken = {};
+
+            const flushBuffer = (force: boolean = false) => {
+                const chunks = force ? [buffer] : buffer.split('\n\n');
+                if (!force) {
+                    buffer = chunks.pop() || '';
+                } else {
+                    buffer = '';
+                }
+
+                for (const chunk of chunks) {
+                    const line = chunk.trim();
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const result = this.handleChatEvent(JSON.parse(line.slice(6)));
+                        receivedDone = receivedDone || result.done;
+                        receivedHistory = receivedHistory || result.history;
+                        if (result.done) {
+                            markStreamComplete();
+                        }
+                    } catch (e) { }
+                }
+            };
+
+            const readNextChunk = async () => {
+                const pendingRead = reader.read().catch(() => ({ done: true, value: undefined }));
+                if (!receivedDone) {
+                    return pendingRead;
+                }
+
+                let timeoutHandle: any = null;
+                const timeoutPromise = new Promise<any>((resolve) => {
+                    timeoutHandle = setTimeout(() => resolve(completionTimeoutToken), 400);
+                });
+                const result = await Promise.race([pendingRead, timeoutPromise]);
+                if (timeoutHandle) {
+                    clearTimeout(timeoutHandle);
+                }
+
+                if (result === completionTimeoutToken) {
+                    await reader.cancel().catch(() => { });
+                    return { done: true, value: undefined };
+                }
+
+                return result;
+            };
+
             while (true) {
-                const { done, value } = await reader.read();
+                const { done, value } = await readNextChunk();
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n\n');
-                buffer = lines.pop() || '';
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) { try { this.handleChatEvent(JSON.parse(line.slice(6))); } catch (e) { } }
-                }
+                flushBuffer();
+            }
+
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+                flushBuffer(true);
             }
         } catch (e: any) {
             if (e.name !== 'AbortError') {
-                const m = this.chatMessages[this.chatAssistantIdx];
-                if (m) m.content += '\n\n**오류가 발생했습니다.**';
+                this.handleChatEvent({ type: 'error', message: e?.message || '연결이 끊어졌습니다.' });
             }
         }
+
+        const currentMessage = this.chatMessages[this.chatAssistantIdx];
+        if (currentMessage && !receivedDone) {
+            this.finalizeAssistantState(currentMessage);
+        }
+
+        if (!receivedHistory && currentMessage) {
+            const assistantContent = String(currentMessage?.content || currentMessage?.previewContent || '').trim();
+            this.chatHistory = [
+                ...this.chatHistory,
+                { role: 'user', content: message },
+                { role: 'assistant', content: assistantContent }
+            ];
+        }
+
         this.chatLoading = false;
+        if (currentMessage) {
+            this.finalizeAssistantState(currentMessage);
+        }
         this.cdr.detectChanges();
     }
 
     // ===== SSE Event Handler =====
-    private handleChatEvent(event: any) {
+    private handleChatEvent(event: any): { done: boolean, history: boolean } {
         const msg = this.chatMessages[this.chatAssistantIdx];
-        if (!msg) return;
+        if (!msg) return { done: false, history: false };
 
         switch (event.type) {
             case 'pipeline': this.applyPipelineEvent(msg, event); break;
@@ -392,8 +480,27 @@ export class Component implements OnInit, OnDestroy {
                 msg.qualityReady = true;
                 this.revealCard(msg, 'quality', 80);
                 break;
+            case 'text_delta':
+                msg.content = (msg.content || '') + (event.content || '');
+                msg._streamedDeltas = true;
+                msg.answerReady = true;
+                this.revealCard(msg, 'answer', 0);
+                this.updateTraceStep(msg, 14, 'running', '답변을 실시간 생성하고 있습니다.');
+                break;
+            case 'text_clear':
+                msg.content = '';
+                msg.renderedContent = '';
+                msg._streamedDeltas = false;
+                break;
             case 'text':
-                if ((event.stage === 'verification' || msg.answerQuality?.stage === 'verification') && (event.content || '').trim()) {
+                if (msg._streamedDeltas && (event.content || '').trim()) {
+                    // 스트리밍 델타로 이미 표시됨 → 최종 버전으로 교체
+                    msg.content = event.content;
+                    msg.renderedContent = event.content;
+                    msg._streamedDeltas = false;
+                    msg.answerReady = true;
+                    this.revealCard(msg, 'answer', 0);
+                } else if ((event.stage === 'verification' || msg.answerQuality?.stage === 'verification') && (event.content || '').trim()) {
                     msg.content = this.enrichFinalAnswerWithPageSummary(event.content || '', msg.pageResultCard);
                     this.queueTypewriterContent(msg, msg.content, true);
                     msg.answerReady = true;
@@ -425,25 +532,16 @@ export class Component implements OnInit, OnDestroy {
                 break;
             case 'history':
                 this.chatHistory = event.messages || [];
-                break;
+                this.syncJourneyReveal(msg);
+                this.scrollToBottom();
+                this.cdr.detectChanges();
+                return { done: false, history: true };
             case 'done':
-                if (!msg.content?.trim() && msg.pageResultCard) {
-                    msg.content = this.buildPageResultFallbackAnswer(msg.pageResultCard);
-                    this.queueTypewriterContent(msg, msg.content, true);
-                    msg.answerReady = true;
-                } else if (!msg.content?.trim() && this.pendingNavigation) {
-                    msg.content = this.buildAgentNavigationSummary(this.pendingNavigation);
-                    this.queueTypewriterContent(msg, msg.content, true);
-                    msg.answerReady = true;
-                }
-                if (msg.answerReady) this.revealCard(msg, 'answer', 0);
-                if (msg.navigationCard) this.revealCard(msg, 'navigation', 0);
-                if (msg.pageResultReady) this.revealCard(msg, 'pageResult', 0);
-                if (msg.qualityReady) this.revealCard(msg, 'quality', 60);
-                if (msg.evidenceReady) this.revealCard(msg, 'evidence', 120);
-                this.finalizeTrace(msg);
-                this.collapsePreviousAssistantTurns(this.chatAssistantIdx);
-                break;
+                this.finalizeAssistantState(msg);
+                this.syncJourneyReveal(msg);
+                this.scrollToBottom();
+                this.cdr.detectChanges();
+                return { done: true, history: false };
             case 'evidence_items':
                 msg.evidenceItems = event.items || [];
                 msg.evidenceOpen = false;
@@ -453,12 +551,18 @@ export class Component implements OnInit, OnDestroy {
             case 'error':
                 msg.content += `\n\n**Error:** ${event.message}`;
                 this.queueTypewriterContent(msg, msg.content, false);
+                msg.answerReady = true;
+                this.revealCard(msg, 'answer', 0);
                 this.markTraceError(msg, event.message || '에이전트 처리 중 오류가 발생했습니다.');
                 break;
+        }
+        if (msg.traceSteps?.length > 0 && !msg.traceCompleted && event.type !== 'done') {
+            msg.traceOpen = true;
         }
         this.syncJourneyReveal(msg);
         this.scrollToBottom();
         this.cdr.detectChanges();
+        return { done: false, history: false };
     }
 
     // ===== Navigation =====
@@ -500,9 +604,66 @@ export class Component implements OnInit, OnDestroy {
             if (data.action === 'navigate') {
                 this.applyNavigationPayload(msg, data);
                 this.cdr.detectChanges();
-                setTimeout(() => { this.navigateNow(); }, 400);
             }
         } catch (e) { }
+    }
+
+    private finalizeAssistantState(msg: any) {
+        if (!msg) return;
+
+        if (!msg.content?.trim() && msg.pageResultCard) {
+            msg.content = this.buildPageResultFallbackAnswer(msg.pageResultCard);
+        } else if (!msg.content?.trim() && this.pendingNavigation) {
+            msg.content = this.buildAgentNavigationSummary(this.pendingNavigation);
+        } else if (!msg.content?.trim()) {
+            const fallback = [
+                msg.pageResultCard?.summary,
+                msg.navigationCard?.summary,
+                msg.answerQuality?.detail,
+                msg.previewContent,
+            ].map((item: any) => String(item || '').trim()).find(Boolean);
+            if (fallback) msg.content = fallback;
+        }
+
+        if (msg.content?.trim()) {
+            this.queueTypewriterContent(msg, msg.content, true);
+            msg.answerReady = true;
+        }
+
+        if (!msg.previewContent?.trim() && msg.content?.trim()) {
+            msg.previewContent = String(msg.content).split(/\n+/)[0];
+        }
+
+        if (msg.navigationCard) {
+            if (this.pendingNavigation) {
+                this.patchNavigationCard(msg, {
+                    loading: false,
+                    summary: msg.navigationCard?.summary || this.buildAgentNavigationSummary(this.pendingNavigation),
+                    actionLabel: '바로 이동'
+                });
+            } else if (msg.navigationCard.loading) {
+                this.patchNavigationCard(msg, {
+                    loading: false,
+                    summary: '이번 답변은 별도의 페이지 이동 없이 여기서 바로 마무리했습니다.',
+                    actionLabel: '이동 없음'
+                });
+            }
+        }
+
+        if (msg.pageResultCard?.loading) {
+            this.patchPageResultCard(msg, {
+                loading: false,
+                summary: msg.pageResultCard.summary || '페이지 결과 없이 현재 대화 문맥으로 답변을 정리했습니다.'
+            });
+        }
+
+        if (msg.answerReady) this.revealCard(msg, 'answer', 0);
+        if (msg.navigationCard) this.revealCard(msg, 'navigation', 0);
+        if (msg.pageResultReady || msg.pageResultCard) this.revealCard(msg, 'pageResult', 0);
+        if (msg.qualityReady) this.revealCard(msg, 'quality', 60);
+        if (msg.evidenceReady) this.revealCard(msg, 'evidence', 120);
+        this.finalizeTrace(msg);
+        this.collapsePreviousAssistantTurns(this.chatAssistantIdx);
     }
 
     public async navigateNow() {

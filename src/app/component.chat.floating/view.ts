@@ -11,8 +11,8 @@ export class Component implements OnInit, OnDestroy {
     private readonly collectionChangeEventName: string = 'plasma-collection-changed';
     private readonly chatOpenStorageKey: string = 'plasma.chatOpen';
     private readonly chatStateStorageKey: string = 'plasma.chatState';
-    private readonly typingChunkSize: number = 2;
-    private readonly typingIntervalMs: number = 18;
+    private readonly typingChunkSize: number = 12;
+    private readonly typingIntervalMs: number = 8;
     private collectionChangeListener: any = null;
 
     // Chat state
@@ -191,6 +191,9 @@ export class Component implements OnInit, OnDestroy {
                     if (msg.traceCompleted) {
                         msg.traceOpen = false;
                         msg.journeyRevealCount = this.getAnswerJourney(msg).length;
+                    } else {
+                        msg.traceOpen = true;
+                        msg.collapsed = false;
                     }
                     this.syncCurrentTrace(msg);
                     this.syncJourneyReveal(msg);
@@ -675,39 +678,106 @@ export class Component implements OnInit, OnDestroy {
             params.append('collection', activeCollection);
         }
 
+        let receivedDone = false;
+
+        const markStreamComplete = () => {
+            if (!this.chatLoading) return;
+            this.chatLoading = false;
+            this.cdr.detectChanges();
+        };
+
         try {
             const response = await fetch(
                 `/wiz/api/page.agent.v2/agent_chat`,
                 { method: 'POST', body: params, signal: this.chatAbortController.signal }
             );
 
-            const reader = response.body!.getReader();
+            if (!response.ok) {
+                let errorMessage = `요청 실패 (${response.status})`;
+                try {
+                    const payload = await response.json();
+                    errorMessage = payload?.data?.message || payload?.message || errorMessage;
+                } catch (e) { }
+                throw new Error(errorMessage);
+            }
+
+            if (!response.body) {
+                throw new Error('응답 스트림을 열지 못했습니다.');
+            }
+
+            const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
+            const completionTimeoutToken = {};
+
+            const flushBuffer = (force: boolean = false) => {
+                const chunks = force ? [buffer] : buffer.split('\n\n');
+                if (!force) {
+                    buffer = chunks.pop() || '';
+                } else {
+                    buffer = '';
+                }
+
+                for (const chunk of chunks) {
+                    const line = chunk.trim();
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const event = JSON.parse(line.slice(6));
+                        if (event.type === 'done') {
+                            receivedDone = true;
+                            markStreamComplete();
+                        }
+                        this.handleChatEvent(event);
+                    } catch (e) { }
+                }
+            };
+
+            const readNextChunk = async () => {
+                const pendingRead = reader.read().catch(() => ({ done: true, value: undefined }));
+                if (!receivedDone) {
+                    return pendingRead;
+                }
+
+                let timeoutHandle: any = null;
+                const timeoutPromise = new Promise<any>((resolve) => {
+                    timeoutHandle = setTimeout(() => resolve(completionTimeoutToken), 400);
+                });
+                const result = await Promise.race([pendingRead, timeoutPromise]);
+                if (timeoutHandle) {
+                    clearTimeout(timeoutHandle);
+                }
+
+                if (result === completionTimeoutToken) {
+                    await reader.cancel().catch(() => { });
+                    return { done: true, value: undefined };
+                }
+
+                return result;
+            };
 
             while (true) {
-                const { done, value } = await reader.read();
+                const { done, value } = await readNextChunk();
                 if (done) break;
 
                 buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n\n');
-                buffer = lines.pop() || '';
+                flushBuffer();
+            }
 
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const event = JSON.parse(line.slice(6));
-                            this.handleChatEvent(event);
-                        } catch (e) { }
-                    }
-                }
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+                flushBuffer(true);
             }
         } catch (e: any) {
             if (e.name !== 'AbortError') {
-                this.chatMessages[this.chatAssistantIdx].content += '\n\n**오류가 발생했습니다.**';
+                this.handleChatEvent({ type: 'error', message: e?.message || '오류가 발생했습니다.' });
             }
         }
 
+        if (!receivedDone) {
+            this.handleChatEvent({ type: 'done', content: '' });
+        }
+
+        this.chatAbortController = null;
         this.chatLoading = false;
         this.cdr.detectChanges();
     }
@@ -719,7 +789,9 @@ export class Component implements OnInit, OnDestroy {
 
         switch (event.type) {
             case 'pipeline':
-                this.applyPipelineEvent(msg, event);
+                if (event.detail) {
+                    this.updatePreviewContent(msg, event.detail, msg.previewContent);
+                }
                 break;
             case 'orchestration':
                 this.applyOrchestrationEvent(msg, event);
@@ -727,29 +799,51 @@ export class Component implements OnInit, OnDestroy {
             case 'quality':
                 this.applyQualityEvent(msg, event);
                 msg.qualityReady = true;
-                this.revealCard(msg, 'quality', 80);
                 break;
-            case 'text':
-                if ((event.stage === 'verification' || msg.answerQuality?.stage === 'verification') && (event.content || '').trim()) {
-                    msg.content = this.enrichFinalAnswerWithPageSummary(event.content || '', msg.pageResultCard);
-                    this.queueTypewriterContent(msg, msg.content, true);
+            case 'text_delta': {
+            const deltaMsg = this.chatMessages[this.chatAssistantIdx];
+            if (deltaMsg) {
+                deltaMsg.content = (deltaMsg.content || '') + (event.content || '');
+                deltaMsg.typingActive = true;
+                deltaMsg._streamedDeltas = true;
+                deltaMsg.answerReady = true;
+                this.revealCard(deltaMsg, 'answer', 0);
+                this.scrollToBottom();
+                this.cdr.detectChanges();
+            }
+            break;
+        }
+        case 'text_clear': {
+            const clearMsg = this.chatMessages[this.chatAssistantIdx];
+            if (clearMsg) {
+                clearMsg.content = '';
+                clearMsg.renderedContent = '';
+                clearMsg._streamedDeltas = false;
+            }
+            break;
+        }
+        case 'text':
+                if ((event.content || '').trim()) {
+                    const incoming = String(event.content || '').trim();
+                    if (msg._streamedDeltas) {
+                        // 스트리밍 델타로 이미 표시됨 → 최종 버전으로 교체만
+                        msg.content = incoming;
+                        msg.renderedContent = incoming;
+                        msg.typingActive = false;
+                        msg._streamedDeltas = false;
+                    } else {
+                        const previous = String(msg.content || '').trim();
+                        msg.content = previous.length > 0
+                            ? `${previous}\n\n${incoming}`
+                            : incoming;
+                        msg.content = this.enrichFinalAnswerWithPageSummary(msg.content, msg.pageResultCard);
+                        this.queueTypewriterContent(msg, msg.content, previous.length === 0);
+                    }
+                    this.updatePreviewContent(msg, msg.currentDescription, msg.previewContent);
                     msg.answerReady = true;
                     this.revealCard(msg, 'answer', 60);
-                } else if (event.stage === 'preview' && (event.content || '').trim()) {
-                    this.updatePreviewContent(msg, event.content);
-                    msg.content = event.content || '';
-                    this.queueTypewriterContent(msg, msg.content, true);
-                } else {
-                    msg.content += event.content || '';
-                    this.updatePreviewContent(msg, msg.currentDescription, msg.previewContent);
-                    if ((msg.content || '').trim().length > 0 && event.stage !== 'preview') {
-                        msg.answerReady = true;
-                        this.revealCard(msg, 'answer', 60);
-                    }
                 }
-                this.updateTraceStep(msg, 14, 'running', event.stage === 'preview'
-                    ? '중간 결론을 먼저 표시하고, 최종 답변을 이어서 정리하고 있습니다.'
-                    : '도구 결과와 참고 문헌을 바탕으로 최종 답변을 작성하고 있습니다.');
+                this.updateTraceStep(msg, 14, 'running', '도구 결과와 페이지 결과를 바탕으로 최종 답변을 작성하고 있습니다.');
                 break;
             case 'tool_use':
                 msg.toolCalls.push({
@@ -809,6 +903,9 @@ export class Component implements OnInit, OnDestroy {
                 this.markTraceError(msg, event.message || '에이전트 처리 중 오류가 발생했습니다.');
                 break;
         }
+        if (msg.traceSteps?.length > 0 && !msg.traceCompleted && event.type !== 'done') {
+            msg.traceOpen = true;
+        }
         this.syncJourneyReveal(msg);
         this.scrollToBottom();
         this.cdr.detectChanges();
@@ -850,12 +947,8 @@ export class Component implements OnInit, OnDestroy {
         try {
             const data = JSON.parse(event.result);
             if (data.action === 'navigate') {
-                const navigationCollection = this.applyNavigationPayload(msg, data);
+                this.applyNavigationPayload(msg, data);
                 this.cdr.detectChanges();
-                // 카드 렌더 직후 즉시 페이지 이동
-                setTimeout(() => {
-                    this.navigateNow();
-                }, 400);
             }
         } catch (e) { }
     }
@@ -1012,6 +1105,17 @@ export class Component implements OnInit, OnDestroy {
         if (!msg) return;
 
         msg.typingTarget = String(nextContent || '');
+        this.stopTypewriter(msg);
+
+        if (reset || !msg.renderedContent || msg.typingTarget.length < String(msg.renderedContent || '').length) {
+            msg.renderedContent = '';
+        }
+
+        msg.renderedContent = msg.typingTarget;
+        msg.typingActive = false;
+        this.scrollToBottom();
+        this.cdr.detectChanges();
+        return;
 
         if (reset || !msg.renderedContent || msg.typingTarget.length < String(msg.renderedContent || '').length) {
             msg.renderedContent = '';
@@ -1019,6 +1123,17 @@ export class Component implements OnInit, OnDestroy {
 
         if (String(msg.renderedContent || '') === msg.typingTarget) {
             msg.typingActive = false;
+            return;
+        }
+
+        const currentText = String(msg.renderedContent || '');
+        const remainingLength = Math.max(msg.typingTarget.length - currentText.length, 0);
+        if (msg.typingTarget.length >= 480 || remainingLength >= 320) {
+            this.stopTypewriter(msg);
+            msg.renderedContent = msg.typingTarget;
+            msg.typingActive = false;
+            this.scrollToBottom();
+            this.cdr.detectChanges();
             return;
         }
 

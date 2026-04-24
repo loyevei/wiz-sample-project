@@ -1,5 +1,21 @@
 | 날짜 | ID | 작업 내용 | 상세 |
 |------|-----|----------|------|
+| 2026-04-24 | 001 | PDF 임베딩 업로드 경로에 Nougat OCR 래퍼와 `extraction_mode` 옵션을 추가하고 무중단 검증 | [상세](devlog/2026-04-24/001-nougat-wrapper-and-extraction-mode.md) |
+| 2026-04-24 | 002 | Hybrid 본문 추출 파이프라인을 3단계(레이아웃/Nougat/병합)로 분리 | [상세](devlog/2026-04-24/002-hybrid-pipeline-split.md) |
+| 2026-04-24 | 003 | 수식 품질 게이트 및 Gemma 4 Vision rescue 단계 추가 | [상세](devlog/2026-04-24/003-equation-quality-gate-rescue.md) |
+| 2026-04-24 | 004 | Provenance 메타데이터를 structured_content에 저장 | [상세](devlog/2026-04-24/004-provenance-metadata.md) |
+| 2026-04-24 | 005 | 업로드 UI에 추출 모드/Nougat/Gemma rescue 설정 노출 | [상세](devlog/2026-04-24/005-upload-ui-pipeline-settings.md) |
+| 2026-04-24 | 006 | E2E 검증 및 pages_data 미정의 버그 수정 | [상세](devlog/2026-04-24/006-e2e-verification-bugfix.md) |
+| 2026-04-23 | 004 | PDF 임베딩 파이프라인 v2: 페이지 PNG 사전 렌더링·Surya OCR fallback·Vision LaTeX 강화·검색 결과 모달 뷰어 추가 | [상세](devlog/2026-04-23/004-pdf-embedding-pipeline-v2.md) |
+| 2026-04-23 | 003 | 페이지 조회 결과에 LLM 자연어 요약(`✨ AI 요약`) 블록 추가 | [상세](devlog/2026-04-23/003-page-result-llm-synthesis.md) |
+| 2026-04-23 | 002 | 에이전트 챗봇 페이지 조회 결과 요약을 모든 페이지/탭 데이터 구조에 맞게 강화 | [상세](devlog/2026-04-23/002-agent-page-result-summary.md) |
+| 2026-04-23 | 001 | Gemma 4와 GPT-4.1 A/B 벤치마크 경로를 무중단으로 추가하고 실측 비교 수행 | [상세](devlog/2026-04-23/001-gemma-vs-gpt-benchmark-path.md) |
+| 2026-04-14 | 001 | ROCm PyTorch 교체 + Gemma 4 E4B-IT Vision LLM 통합 (PDF 이미지 멀티모달 분석) | [상세](devlog/2026-04-14/001-rocm-gemma4-vision-integration.md) |
+| 2026-04-13 | 001 | 챗봇 SSE가 done 이후 닫히지 않아 로딩이 남는 문제를 /agent, /agent/v2, 플로팅 AI Chat에서 공통 보강 | [상세](devlog/2026-04-13/001-chatbot-stream-done-timeout-fix.md) |
+| 2026-04-10 | 008 | 실제 AI 어시스턴트 페이지(/agent)에서 즉시 페이지 이동을 제거하고 최종답변 SSE 완료 처리를 보강 | [상세](devlog/2026-04-10/008-agent-page-final-answer-retention.md) |
+| 2026-04-10 | 007 | 챗봇 최종답변이 누락되던 SSE 종료 경로를 보강하고 플로팅 handoff 자동이동을 지연 | [상세](devlog/2026-04-10/007-chatbot-final-answer-stream-completion.md) |
+| 2026-04-10 | 006 | 챗봇 최종답변 타자 효과를 제거해 최종 텍스트를 즉시 렌더링하도록 조정 | [상세](devlog/2026-04-10/006-chatbot-instant-final-answer-render.md) |
+| 2026-04-10 | 005 | 챗봇 최종답변에서 임의 외부 링크를 제거하고 실제 handoff 경로만 남기도록 보정 | [상세](devlog/2026-04-10/005-chatbot-final-handoff-link-grounding.md) |
 | 2026-04-08 | 002 | 플로팅 챗봇을 사이드바 패널로 전환 + Claude×Copilot 하이브리드 에이전트 UI | [상세](devlog/2026-04-08/002-sidebar-chat-claude-copilot-hybrid.md) |
 | 2026-04-08 | 001 | 플로팅 챗봇 UI를 VS Code Copilot 스타일로 전면 개편 (Thinking 섹션, 인라인 도구 칩, 미니멀 디자인) | [상세](devlog/2026-04-08/001-copilot-style-chatbot-ui.md) |
 | 2026-03-27 | 004 | 플로팅 챗봇의 카드/프리뷰 상태 갱신 경로를 공용 헬퍼로 정리해 결합도를 낮춤 | [상세](devlog/2026-03-27/004-floating-chat-state-update-helper-refactor.md) |
@@ -100,3 +116,7 @@
 | 2026-03-26 | 018 | Research 특허 검색을 KIPRIS Plus API 기반으로 전환하고 설정형 외부 연동으로 정리 | [상세](devlog/2026-03-26/018-research-patent-kipris-plus-integration.md) |
 | 2026-03-26 | 019 | 플로팅 챗봇 에이전트를 하이브리드/계층형 아키텍처(오케스트레이터 + 5개 서브 에이전트)로 리팩토링 | [상세](devlog/2026-03-26/019-agent-hierarchical-architecture-refactor.md) |
 | 2026-03-27 | 001 | 플로팅 챗봇의 컬렉션 변경 후 페이지 handoff 동기화를 수정하고 상태/네비게이션 로직을 리팩토링 | [상세](devlog/2026-03-27/001-floating-chat-collection-sync-and-refactor.md) |
+| 2026-04-10 | 001 | Angular 번들 빌드 실패 수정: marked 의존성 누락으로 esbuild 컴파일 실패 → 구버전 번들 제공 문제 해결 | [상세](devlog/2026-04-10/001-fix-angular-bundle-marked-dependency.md) |
+| 2026-04-10 | 002 | 챗봇 최종답변 타이핑 애니메이션을 적응형으로 가속해 장문 답변 체감 지연 감소 | [상세](devlog/2026-04-10/002-chatbot-final-answer-speedup.md) |
+| 2026-04-10 | 003 | 챗봇 백엔드를 Claude 분석서형 단일 Tool-Use loop로 재구성하고 페이지 결과·핸드오프를 유지 | [상세](devlog/2026-04-10/003-chatbot-claude-style-single-loop.md) |
+| 2026-04-10 | 004 | 챗봇 프론트 SSE 핸들러를 Claude형 이벤트 흐름으로 단순화하고 다중 text 누적 처리 보정 | [상세](devlog/2026-04-10/004-chatbot-frontend-claude-event-flow.md) |

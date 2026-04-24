@@ -25,9 +25,9 @@ class BaseAgent:
         raise NotImplementedError
 
     def _llm_call(self, messages, max_tokens=1200, tools=None, tool_choice=None):
-        """공통 OpenAI LLM 호출 래퍼."""
+        """공통 LLM 호출 래퍼."""
         client = self.ctx.get("client")
-        model = self.ctx.get("model", "gpt-4o")
+        model = self.ctx.get("model", "google/gemma-4-26B-A4B-it")
         if not client:
             return None
 

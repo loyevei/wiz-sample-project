@@ -58,6 +58,14 @@ export class Component implements OnInit, OnDestroy {
         };
         this.chatMessages.push(assistantMsg);
         const assistantIdx = this.chatMessages.length - 1;
+        let receivedDone = false;
+        let receivedHistory = false;
+
+        const markStreamComplete = () => {
+            if (!this.chatLoading) return;
+            this.chatLoading = false;
+            this.cdr.detectChanges();
+        };
         await this.service.render();
 
         const params = new URLSearchParams();
@@ -70,55 +78,183 @@ export class Component implements OnInit, OnDestroy {
                 { method: 'POST', body: params, signal: this.chatAbortController.signal }
             );
 
-            const reader = response.body!.getReader();
+            if (!response.ok) {
+                let errorMessage = `요청 실패 (${response.status})`;
+                try {
+                    const payload = await response.json();
+                    errorMessage = payload?.data?.message || payload?.message || errorMessage;
+                } catch (e) { }
+                throw new Error(errorMessage);
+            }
+
+            if (!response.body) {
+                throw new Error('응답 스트림을 열지 못했습니다.');
+            }
+
+            const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
+            const completionTimeoutToken = {};
+
+            const flushBuffer = (force: boolean = false) => {
+                const chunks = force ? [buffer] : buffer.split('\n\n');
+                if (!force) {
+                    buffer = chunks.pop() || '';
+                } else {
+                    buffer = '';
+                }
+
+                for (const chunk of chunks) {
+                    const line = chunk.trim();
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const result = this.handleChatEvent(this.chatMessages[assistantIdx], JSON.parse(line.slice(6)));
+                        receivedDone = receivedDone || result.done;
+                        receivedHistory = receivedHistory || result.history;
+                        if (result.done) {
+                            markStreamComplete();
+                        }
+                    } catch (e) { }
+                }
+            };
+
+            const readNextChunk = async () => {
+                const pendingRead = reader.read().catch(() => ({ done: true, value: undefined }));
+                if (!receivedDone) {
+                    return pendingRead;
+                }
+
+                let timeoutHandle: any = null;
+                const timeoutPromise = new Promise<any>((resolve) => {
+                    timeoutHandle = setTimeout(() => resolve(completionTimeoutToken), 400);
+                });
+                const result = await Promise.race([pendingRead, timeoutPromise]);
+                if (timeoutHandle) {
+                    clearTimeout(timeoutHandle);
+                }
+
+                if (result === completionTimeoutToken) {
+                    await reader.cancel().catch(() => { });
+                    return { done: true, value: undefined };
+                }
+
+                return result;
+            };
 
             while (true) {
-                const { done, value } = await reader.read();
+                const { done, value } = await readNextChunk();
                 if (done) break;
 
                 buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n\n');
-                buffer = lines.pop() || '';
+                flushBuffer();
+                this.cdr.detectChanges();
+            }
 
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const event = JSON.parse(line.slice(6));
-                            if (event.type === 'text') {
-                                if (event.stage === 'preview') {
-                                    this.chatMessages[assistantIdx].previewContent = event.content || this.chatMessages[assistantIdx].previewContent;
-                                } else {
-                                    this.chatMessages[assistantIdx].content = event.content || '';
-                                }
-                            }
-                            if (event.type === 'quality') {
-                                this.applyQualityEvent(this.chatMessages[assistantIdx], event);
-                            }
-                            if (event.type === 'tool_result') {
-                                this.applyToolResult(this.chatMessages[assistantIdx], event);
-                            }
-                            if (event.type === 'orchestration') {
-                                this.applyOrchestrationEvent(this.chatMessages[assistantIdx], event);
-                            }
-                            if (event.type === 'pipeline' && event.detail) {
-                                this.chatMessages[assistantIdx].previewContent = event.detail;
-                            }
-                        } catch (e) { }
-                    }
-                }
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+                flushBuffer(true);
             }
         } catch (e: any) {
             if (e.name !== 'AbortError') {
-                this.chatMessages[assistantIdx].content += '\n\n**Error:** 연결이 끊어졌습니다.';
+                this.handleChatEvent(this.chatMessages[assistantIdx], {
+                    type: 'error',
+                    message: e?.message || '연결이 끊어졌습니다.'
+                });
             }
         }
 
+        if (!receivedDone) {
+            this.finalizeAssistantState(this.chatMessages[assistantIdx]);
+        }
+
+        if (!receivedHistory) {
+            const assistantContent = String(this.chatMessages[assistantIdx]?.content || this.chatMessages[assistantIdx]?.previewContent || '').trim();
+            this.chatHistory = [
+                ...this.chatHistory,
+                { role: 'user', content: message },
+                { role: 'assistant', content: assistantContent }
+            ];
+        }
+
+        this.chatAbortController = null;
         this.chatLoading = false;
         this.finalizeAssistantState(this.chatMessages[assistantIdx]);
         await this.service.render();
         this.cdr.detectChanges();
+    }
+
+    private handleChatEvent(msg: any, event: any): { done: boolean, history: boolean } {
+        if (!msg || !event || typeof event !== 'object') {
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'text_delta') {
+            msg.content = (msg.content || '') + (event.content || '');
+            msg._streamedDeltas = true;
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'text_clear') {
+            msg.content = '';
+            msg._streamedDeltas = false;
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'text') {
+            const incoming = String(event.content || '').trim();
+            if (event.stage === 'preview') {
+                msg.previewContent = incoming || msg.previewContent;
+            } else if (incoming) {
+                if (msg._streamedDeltas) {
+                    msg.content = incoming;
+                    msg._streamedDeltas = false;
+                } else {
+                    const previous = String(msg.content || '').trim();
+                    msg.content = previous && previous !== incoming ? `${previous}\n\n${incoming}` : incoming;
+                }
+            }
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'quality') {
+            this.applyQualityEvent(msg, event);
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'tool_result') {
+            this.applyToolResult(msg, event);
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'orchestration') {
+            this.applyOrchestrationEvent(msg, event);
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'pipeline' && event.detail) {
+            msg.previewContent = event.detail;
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'history') {
+            this.chatHistory = Array.isArray(event.messages) ? event.messages : this.chatHistory;
+            return { done: false, history: true };
+        }
+
+        if (event.type === 'error') {
+            const errorMessage = String(event.message || '에이전트 처리 중 오류가 발생했습니다.').trim();
+            const previous = String(msg.content || '').trim();
+            msg.content = previous ? `${previous}\n\n**Error:** ${errorMessage}` : `**Error:** ${errorMessage}`;
+            msg.previewContent = errorMessage;
+            return { done: false, history: false };
+        }
+
+        if (event.type === 'done') {
+            this.finalizeAssistantState(msg);
+            return { done: true, history: false };
+        }
+
+        return { done: false, history: false };
     }
 
     public cancelChat() {
@@ -178,8 +314,16 @@ export class Component implements OnInit, OnDestroy {
 
     private applyToolResult(msg: any, event: any) {
         const name = String(event.name || '').toLowerCase();
+        let result = event.result || {};
+        if (typeof result === 'string') {
+            try {
+                result = JSON.parse(result);
+            } catch (e) {
+                result = { summary: result };
+            }
+        }
+
         if (name === 'read_page_results') {
-            const result = event.result || {};
             msg.pageResultCard = {
                 loading: false,
                 page: result.page || msg.pageResultCard?.page || '-',
@@ -194,7 +338,6 @@ export class Component implements OnInit, OnDestroy {
         }
 
         if (name === 'navigate_to_page') {
-            const result = event.result || {};
             msg.navigationCard = {
                 loading: false,
                 summary: result.summary || `${result.page || '-'}${result.tab ? ` / ${result.tab}` : ''} 페이지로 이어서 볼 수 있습니다.`,
@@ -222,6 +365,20 @@ export class Component implements OnInit, OnDestroy {
         if (msg.pageResultCard?.loading) {
             msg.pageResultCard.loading = false;
             msg.pageResultCard.summary = msg.pageResultCard.summary || '페이지 결과 없이 현재 대화 문맥으로 답변을 정리했습니다.';
+        }
+        if (!String(msg.content || '').trim()) {
+            const fallback = [
+                msg.pageResultCard?.summary,
+                msg.navigationCard?.summary,
+                msg.answerQuality?.detail,
+                msg.previewContent,
+            ].map((item) => String(item || '').trim()).find(Boolean);
+            if (fallback) {
+                msg.content = fallback;
+            }
+        }
+        if (!String(msg.previewContent || '').trim() && String(msg.content || '').trim()) {
+            msg.previewContent = String(msg.content || '').split(/\n+/)[0];
         }
     }
 

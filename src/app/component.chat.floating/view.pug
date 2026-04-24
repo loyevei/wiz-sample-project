@@ -73,7 +73,7 @@ div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all du
                         ng-container(*ngIf="!msg.collapsed")
                             //- Thinking section (Copilot-style)
                             div(*ngIf="msg.traceSteps?.length > 0", class="copilot-thinking")
-                                button((click)="toggleTrace(msg)", class="flex items-center gap-2 w-full py-1 text-left group")
+                                button((click)="msg.traceCompleted && toggleTrace(msg)", class="flex items-center gap-2 w-full py-1 text-left group")
                                     div(*ngIf="!msg.traceCompleted", class="flex-shrink-0")
                                         svg(class="size-4 animate-spin text-violet-500", viewBox="0 0 24 24")
                                             circle(class="opacity-25", cx="12", cy="12", r="10", stroke="currentColor", stroke-width="4", fill="none")
@@ -82,9 +82,9 @@ div(class="fixed bottom-6 right-6 z-[9999] origin-bottom-right transition-all du
                                         path(fill-rule="evenodd", d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z", clip-rule="evenodd")
                                     span(class="text-[12px] font-medium", [ngClass]="msg.traceCompleted ? 'text-slate-500' : 'text-slate-700'") {{msg.traceCompleted ? 'Thinking 완료 · ' + getCompletedTraceCount(msg) + '단계' : 'Thinking...'}}
                                     span(*ngIf="!msg.traceCompleted && getCurrentTraceStep(msg)?.title", class="text-[11px] text-slate-400 truncate hidden sm:inline")  · {{getCurrentTraceStep(msg)?.title}}
-                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3 ml-auto text-slate-400 transition-transform flex-shrink-0 group-hover:text-slate-600", [class.rotate-90]="msg.traceOpen")
+                                    svg(xmlns="http://www.w3.org/2000/svg", fill="none", viewBox="0 0 24 24", stroke-width="2", stroke="currentColor", class="size-3 ml-auto text-slate-400 transition-transform flex-shrink-0 group-hover:text-slate-600", [class.rotate-90]="!msg.traceCompleted || msg.traceOpen")
                                         path(stroke-linecap="round", stroke-linejoin="round", d="m8.25 4.5 7.5 7.5-7.5 7.5")
-                                div(*ngIf="msg.traceOpen", class="mt-1 ml-2 pl-3.5 border-l-2 border-slate-200 space-y-0.5 pb-1")
+                                div(*ngIf="!msg.traceCompleted || msg.traceOpen", class="mt-1 ml-2 pl-3.5 border-l-2 border-slate-200 space-y-0.5 pb-1")
                                     div(*ngFor="let step of msg.traceSteps", class="flex items-start gap-1.5 py-0.5 text-[11px]", [ngClass]="step.status === 'skipped' ? 'opacity-30' : ''")
                                         span(*ngIf="step.status === 'done'", class="mt-px text-emerald-500 flex-shrink-0") ✓
                                         span(*ngIf="step.status === 'running'", class="mt-px text-violet-500 flex-shrink-0") ◔

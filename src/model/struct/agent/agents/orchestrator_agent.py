@@ -58,11 +58,11 @@ class OrchestratorAgent(BaseAgent):
             SSE 이벤트 dict
         """
         client = self.ctx.get("client")
-        model = self.ctx.get("model", "gpt-4o")
+        model = self.ctx.get("model", "google/gemma-4-26B-A4B-it")
         collection = self._current_collection()
 
         if not client:
-            yield {"type": "error", "message": "OpenAI API key가 설정되지 않았습니다."}
+            yield {"type": "error", "message": "LLM 클라이언트가 초기화되지 않았습니다."}
             return
 
         tools = tools or {}
@@ -201,53 +201,60 @@ class OrchestratorAgent(BaseAgent):
             )
 
         # =====================================================================
-        # Phase 5: SynthesizerAgent — LLM 기반 최종 답변 생성
+        # Phase 5: 최종 답변 (Claude-style — draft_answer 직접 사용)
         # =====================================================================
+        # CollectorAgent의 LLM이 도구 결과를 보고 생성한 텍스트를 최종 답변으로 사용
+        # SynthesizerAgent를 거치지 않아 실패 없이 즉시 답변 전달
+        final_answer = (draft_answer or "").strip()
+
+        # draft가 비어있으면 수집된 결과에서 폴백 답변 구성
+        if not final_answer:
+            final_answer = self._build_fallback_answer(
+                message, collected_data, patent_data, language
+            )
+
+        # 근거 데이터 추출
+        evidence_bank = collected_data.get("evidence_bank", [])
+        page_result_bank = collected_data.get("page_result_bank", [])
+        evidence_count = len(evidence_bank)
+
+        # 품질 보고서 (LLM 없이 직접 구성)
+        quality_report = {
+            "stage": "direct",
+            "detail": f"수집된 근거 {evidence_count}건을 기반으로 답변을 생성했습니다." if language == "ko" else f"Answer generated from {evidence_count} evidence items.",
+            "answerStyle": "도구 실행 결과 기반 응답" if language == "ko" else "Tool-result grounded response",
+            "confidence": "high" if evidence_count > 3 else ("medium" if evidence_count > 0 else "low"),
+            "evidenceCount": evidence_count,
+            "llmUsed": False,
+        }
+
+        # evidence_items 구축
+        evidence_items = []
+        for item in evidence_bank[:10]:
+            evidence_items.append({
+                "doc_id": item.get("doc_id", ""),
+                "filename": item.get("filename", ""),
+                "score": item.get("score"),
+                "snippets": [item.get("excerpt", "")][:2] if item.get("excerpt") else [],
+            })
+
         yield self._pipeline_event(
             "orchestrator", "running",
-            "검색 근거와 도구 결과를 조합해 고품질 답변 구조로 재정리하고 있습니다.",
+            "수집된 도구 결과를 최종 답변으로 정리하고 있습니다.",
             category=plan.get("category"), page=plan.get("page"), tab=plan.get("tab"),
-            metaBadges=[plan.get("category"), "답변 재구성"],
+            metaBadges=[plan.get("category"), "답변 정리"],
         )
 
-        yield self._pipeline_event(
-            "memory", "running",
-            "세션 메모리와 검색 근거를 결합해 최종 답변에 반영하고 있습니다.",
-            history_turns=memory_context.get("history_turns", 0),
-            collection=collection or "미선택",
-            metaBadges=[f"이력 {memory_context.get('history_turns', 0)}턴", f"근거 {len(collected_data.get('evidence_bank', []))}건"],
-        )
-
-        synth_result = self.synthesizer_agent.run(
-            message=message,
-            plan=plan,
-            collected_data=collected_data,
-            patent_data=patent_data,
-            draft_answer=draft_answer,
-            language=language,
-        )
-
-        final_answer = synth_result.get("answer", draft_answer)
-        quality_report = synth_result.get("quality_report", {})
-        evidence_items = synth_result.get("evidence_items", [])
-
-        # =====================================================================
         # SSE: 품질 보고서
-        # =====================================================================
-        if quality_report:
-            yield {
-                "type": "quality",
-                "stage": quality_report.get("stage", "verification"),
-                "detail": quality_report.get("detail", ""),
-                "answerStyle": quality_report.get("answerStyle", ""),
-                "confidence": quality_report.get("confidence", ""),
-                "evidenceCount": quality_report.get("evidenceCount", 0),
-                "avgScore": quality_report.get("avgScore"),
-                "synthesisPoints": quality_report.get("synthesisPoints", []),
-                "verificationChecks": quality_report.get("verificationChecks", []),
-                "sources": quality_report.get("sources", []),
-                "llmUsed": quality_report.get("llmUsed", False),
-            }
+        yield {
+            "type": "quality",
+            "stage": quality_report.get("stage", "direct"),
+            "detail": quality_report.get("detail", ""),
+            "answerStyle": quality_report.get("answerStyle", ""),
+            "confidence": quality_report.get("confidence", ""),
+            "evidenceCount": quality_report.get("evidenceCount", 0),
+            "llmUsed": False,
+        }
 
         # SSE: evidence_items (아코디언 UI)
         if evidence_items:
@@ -256,36 +263,34 @@ class OrchestratorAgent(BaseAgent):
                 "items": evidence_items,
             }
 
-        # =====================================================================
         # SSE: 최종 답변
-        # =====================================================================
         yield self._pipeline_event(
             "orchestrator", "done",
-            quality_report.get("detail", "답변 구조 재정리를 완료했습니다."),
+            quality_report.get("detail", "답변 정리를 완료했습니다."),
             category=plan.get("category"), page=plan.get("page"), tab=plan.get("tab"),
-            metaBadges=[plan.get("category"), quality_report.get("answerStyle", "근거 통합 응답")],
+            metaBadges=[plan.get("category"), quality_report.get("answerStyle", "직접 응답")],
         )
 
         yield self._pipeline_event(
             "memory", "done",
-            f"세션 메모리와 검색 근거 {quality_report.get('evidenceCount', 0)}건을 결합해 최종 답변을 정제했습니다.",
+            f"근거 {evidence_count}건 기반으로 답변을 완료했습니다.",
             history_turns=memory_context.get("history_turns", 0),
             collection=self._current_collection() or "미선택",
-            metaBadges=[f"이력 {memory_context.get('history_turns', 0)}턴", f"근거 {quality_report.get('evidenceCount', 0)}건"],
+            metaBadges=[f"근거 {evidence_count}건"],
         )
 
         yield self._pipeline_event(
             "streaming", "running",
-            "근거 조합과 품질 검증을 거친 답변을 스트리밍 UI로 전달하고 있습니다.",
-            transport="SSE", mode="품질 보강 답변", metaBadges=["SSE", "품질 보강"],
+            "답변을 스트리밍 UI로 전달하고 있습니다.",
+            transport="SSE", mode="답변 전달", metaBadges=["SSE", "답변 전달"],
         )
 
-        yield {"type": "text", "stage": "verification", "content": final_answer}
+        yield {"type": "text", "content": final_answer}
 
         yield self._pipeline_event(
             "streaming", "done",
-            "스트리밍 UI에 최종 답변 반영을 완료했습니다.",
-            transport="SSE", mode="완료", metaBadges=["SSE 완료", "최종 답변"],
+            "답변 전달을 완료했습니다.",
+            transport="SSE", mode="완료", metaBadges=["SSE 완료"],
         )
 
         yield {"type": "done", "content": ""}
@@ -308,6 +313,76 @@ class OrchestratorAgent(BaseAgent):
 
     def _current_collection(self):
         return (self.ctx.get("collection", "") or "").strip()
+
+    def _build_fallback_answer(self, message, collected_data, patent_data, language):
+        """draft_answer가 비어있을 때 수집된 결과에서 폴백 답변을 구성."""
+        collected_data = collected_data or {}
+        parts = []
+
+        # 페이지 결과에서 요약 추출
+        page_results = collected_data.get("page_result_bank", [])
+        if page_results:
+            for pr in page_results[:3]:
+                page = pr.get("page", "")
+                tab = pr.get("tab", "")
+                query = pr.get("query", "")
+                total = pr.get("total", pr.get("total_hits", pr.get("total_searched", 0)))
+                if page and tab:
+                    if language == "ko":
+                        parts.append(f"**{page}/{tab}** 페이지에서 '{query}' 검색 결과 **{total}건**을 확인했습니다.")
+                    else:
+                        parts.append(f"Found **{total}** results for '{query}' on **{page}/{tab}**.")
+                # 결과 데이터에서 핵심 정보 추출
+                results = pr.get("results", pr.get("data", []))
+                if isinstance(results, list):
+                    for item in results[:5]:
+                        if isinstance(item, dict):
+                            title = item.get("title", item.get("name", item.get("doc_id", "")))
+                            if title:
+                                parts.append(f"- {title}")
+
+        # 근거에서 정보 추출
+        evidence = collected_data.get("evidence_bank", [])
+        if evidence and not page_results:
+            if language == "ko":
+                parts.append(f"관련 문헌 **{len(evidence)}건**을 검색했습니다.")
+            else:
+                parts.append(f"Found **{len(evidence)}** relevant documents.")
+            for ev in evidence[:5]:
+                excerpt = ev.get("excerpt", "")
+                if excerpt:
+                    parts.append(f"- {excerpt[:200]}")
+
+        # 도구 결과 요약
+        tool_results = collected_data.get("tool_result_bank", [])
+        if tool_results and not parts:
+            for tr in tool_results[:3]:
+                tool_name = tr.get("tool", "")
+                result_text = str(tr.get("result", ""))[:300]
+                if tool_name and result_text:
+                    parts.append(f"**{tool_name}**: {result_text}")
+
+        # 특허 정보
+        if patent_data and isinstance(patent_data, dict):
+            patents = patent_data.get("patents", [])
+            if patents:
+                if language == "ko":
+                    parts.append(f"\n관련 특허 **{len(patents)}건**을 확인했습니다.")
+                else:
+                    parts.append(f"\nFound **{len(patents)}** related patents.")
+                for p in patents[:3]:
+                    title = p.get("title", "")
+                    if title:
+                        parts.append(f"- {title}")
+
+        if parts:
+            header = "질문에 대한 검색 결과를 정리했습니다." if language == "ko" else "Here are the search results for your query."
+            return f"{header}\n\n" + "\n".join(parts)
+
+        # 아무 결과도 없는 경우
+        if language == "ko":
+            return f"'{message}' 에 대해 검색을 수행했으나 충분한 결과를 확보하지 못했습니다. 다른 키워드로 다시 시도해 주세요."
+        return f"The search for '{message}' did not return sufficient results. Please try with different keywords."
 
     def _sanitize_history(self, history):
         """OpenAI 호환 히스토리로 정리."""
@@ -475,7 +550,7 @@ Never dump raw DB chunks. Synthesize evidence into structured findings.
         pipeline_components = [
             {"key": "prompt", "title": "프롬프트", "icon": "🧠", "status": "running",
              "summary": "시스템 프롬프트와 사용자 질문을 결합합니다.",
-             "metaBadges": [language, self.ctx.get("model", "gpt-4o"), collection]},
+             "metaBadges": [language, self.ctx.get("model", "google/gemma-4-26B-A4B-it"), collection]},
             {"key": "orchestrator", "title": "오케스트레이터", "icon": "🗺️", "status": "running",
              "summary": "실행 순서와 도구 계획을 수립합니다.",
              "metaBadges": [category, difficulty], "plan": plan.get("plan", [])},

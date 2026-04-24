@@ -1,0 +1,277 @@
+div(class="page-hypothesis-container")
+    //- ─────────────────────────────────────────────────
+    //- 헤더
+    //- ─────────────────────────────────────────────────
+    div(class="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white")
+        div(class="flex items-center gap-3")
+            div(class="w-9 h-9 rounded-lg bg-teal-100 flex items-center justify-center")
+                i(class="fas fa-flask text-teal-600 text-base")
+            div
+                h1(class="text-lg font-semibold text-zinc-950") 가설 검증
+                p(class="text-xs text-zinc-400 mt-0.5") 논문 기반 가설 수식 검증 시스템
+        div(class="flex items-center gap-2")
+            span(class="text-[13px] text-zinc-500") 컬렉션
+            select(class="text-[13px] border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none",
+                [(ngModel)]="selectedCollection",
+                (ngModelChange)="onCollectionChange()")
+                option(*ngFor="let col of collections", [value]="col.name")
+                    | {{col.name}} ({{col.short_name}}, {{col.total_docs}}docs)
+
+    //- ─────────────────────────────────────────────────
+    //- 탭 네비게이션
+    //- ─────────────────────────────────────────────────
+    div(class="flex gap-1 px-5 pt-3 bg-white border-b border-gray-200")
+        button(class="px-4 py-2 text-[13px] font-medium rounded-t-md transition-colors",
+            (click)="selectTab('input')",
+            [class]="tab === 'input' ? 'bg-teal-50 text-teal-700 border border-teal-200 border-b-transparent -mb-px' : 'text-zinc-500 hover:text-zinc-700 hover:bg-gray-50'")
+            i(class="fas fa-edit mr-1.5")
+            | 가설 입력
+        button(class="px-4 py-2 text-[13px] font-medium rounded-t-md transition-colors",
+            (click)="selectTab('papers')",
+            [class]="tab === 'papers' ? 'bg-teal-50 text-teal-700 border border-teal-200 border-b-transparent -mb-px' : 'text-zinc-500 hover:text-zinc-700 hover:bg-gray-50'")
+            i(class="fas fa-file-alt mr-1.5")
+            | 유사 논문
+            span(*ngIf="papers.length > 0", class="ml-1 px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 text-[10px]") {{papers.length}}
+        button(class="px-4 py-2 text-[13px] font-medium rounded-t-md transition-colors",
+            (click)="selectTab('equations')",
+            [class]="tab === 'equations' ? 'bg-teal-50 text-teal-700 border border-teal-200 border-b-transparent -mb-px' : 'text-zinc-500 hover:text-zinc-700 hover:bg-gray-50'")
+            i(class="fas fa-square-root-alt mr-1.5")
+            | 관련 수식
+            span(*ngIf="equations.length > 0", class="ml-1 px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700 text-[10px]") {{equations.length}}
+        button(class="px-4 py-2 text-[13px] font-medium rounded-t-md transition-colors",
+            (click)="selectTab('result')",
+            [class]="tab === 'result' ? 'bg-teal-50 text-teal-700 border border-teal-200 border-b-transparent -mb-px' : 'text-zinc-500 hover:text-zinc-700 hover:bg-gray-50'")
+            i(class="fas fa-check-double mr-1.5")
+            | 검증 결과
+            span(*ngIf="conclusion", class="ml-1 px-1.5 py-0.5 rounded-full text-[10px]",
+                [ngClass]="{'bg-emerald-100 text-emerald-700': conclusion === 'supported', 'bg-red-100 text-red-700': conclusion === 'contradicted', 'bg-amber-100 text-amber-700': conclusion === 'insufficient'}")
+                | {{conclusionLabel}}
+
+    //- ─────────────────────────────────────────────────
+    //- 콘텐츠 영역
+    //- ─────────────────────────────────────────────────
+    div(class="flex-1 min-h-0 overflow-auto bg-gray-50")
+
+        //- ================================================================
+        //- Tab 1: 가설 입력
+        //- ================================================================
+        div(*ngIf="tab === 'input'", class="p-5 space-y-5")
+            //- 가설 입력 폼
+            div(class="bg-white rounded-lg border border-gray-200 p-5")
+                div(class="text-[15px] font-semibold text-zinc-800 mb-4") 가설 작성
+                div(class="space-y-4")
+                    div
+                        label(class="block text-[13px] font-medium text-zinc-600 mb-1") 가설 제목
+                        input(class="w-full text-[13px] border border-gray-200 rounded-md px-3 py-2 focus:ring-2 focus:ring-teal-500 focus:outline-none",
+                            [(ngModel)]="hypothesisTitle",
+                            placeholder="예: RF 파워와 에칭률의 관계")
+                    div
+                        label(class="block text-[13px] font-medium text-zinc-600 mb-1") 가설 내용
+                        textarea(class="w-full text-[13px] border border-gray-200 rounded-md px-3 py-2 focus:ring-2 focus:ring-teal-500 focus:outline-none resize-none",
+                            [(ngModel)]="hypothesisContent",
+                            rows="4",
+                            placeholder="검증하고자 하는 가설을 구체적으로 기술하세요...")
+                    div(class="flex items-center gap-3")
+                        button(class="px-5 py-2.5 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors shadow-sm",
+                            (click)="runFullPipeline()",
+                            [disabled]="verifying || (!hypothesisTitle && !hypothesisContent) || !selectedCollection")
+                            i(class="fas fa-play mr-1.5")
+                            | 전체 검증 시작
+                        button(class="px-4 py-2.5 bg-white border border-gray-200 rounded-md text-[13px] font-medium text-zinc-600 hover:bg-gray-50 transition-colors",
+                            (click)="searchPapers()",
+                            [disabled]="papersLoading || (!hypothesisTitle && !hypothesisContent) || !selectedCollection")
+                            i(class="fas fa-search mr-1.5")
+                            | 논문만 검색
+
+            //- 예시 템플릿
+            div(class="bg-white rounded-lg border border-gray-200 p-4")
+                div(class="text-[13px] font-semibold text-zinc-700 mb-3") 예시 가설 템플릿
+                div(class="grid grid-cols-2 gap-2")
+                    button(*ngFor="let t of templates",
+                        class="p-3 text-left rounded-md border border-gray-100 hover:border-teal-200 hover:bg-teal-50/30 transition-colors",
+                        (click)="applyTemplate(t)")
+                        div(class="text-[13px] font-medium text-zinc-700") {{t.title}}
+                        div(class="text-xs text-zinc-400 mt-1 line-clamp-2") {{t.content}}
+
+            //- 검증 이력
+            div(*ngIf="history.length > 0", class="bg-white rounded-lg border border-gray-200 p-4")
+                div(class="text-[13px] font-semibold text-zinc-700 mb-3") 최근 검증 이력
+                div(class="space-y-2 max-h-64 overflow-y-auto")
+                    button(*ngFor="let h of history",
+                        class="w-full p-3 text-left rounded-md border border-gray-100 hover:border-teal-200 hover:bg-teal-50/30 transition-colors",
+                        (click)="loadFromHistory(h)")
+                        div(class="flex items-center justify-between")
+                            div(class="flex items-center gap-2")
+                                span(class="text-[13px] font-medium text-zinc-700") {{h.title}}
+                                span(*ngIf="h.conclusion", class="px-1.5 py-0.5 rounded text-[10px] font-medium",
+                                    [ngClass]="{'bg-emerald-100 text-emerald-700': h.conclusion === 'supported', 'bg-red-100 text-red-700': h.conclusion === 'contradicted', 'bg-amber-100 text-amber-700': h.conclusion === 'insufficient'}")
+                                    | {{h.conclusion_label}}
+                            span(class="text-[11px] text-zinc-400") {{formatDate(h.timestamp)}}
+                        div(class="text-xs text-zinc-400 mt-1 truncate") {{h.content}}
+
+        //- ================================================================
+        //- Tab 2: 유사 논문
+        //- ================================================================
+        div(*ngIf="tab === 'papers'", class="p-5 space-y-4")
+            //- 헤더
+            div(class="flex items-center justify-between")
+                div(class="text-[15px] font-semibold text-zinc-800")
+                    | 유사 논문 결과
+                    span(*ngIf="papers.length > 0", class="ml-2 text-zinc-400 font-normal") ({{filteredPapers().length}}건)
+                div(class="flex items-center gap-2")
+                    label(class="flex items-center gap-1.5 text-[13px] text-zinc-500 cursor-pointer")
+                        input(type="checkbox", [(ngModel)]="papersOnlyEquations",
+                            class="w-3.5 h-3.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500")
+                        | 수식 포함만
+                    button(class="px-3 py-1.5 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors",
+                        (click)="extractEquations()",
+                        [disabled]="equationsLoading || papers.length === 0")
+                        i(class="fas fa-arrow-right mr-1")
+                        | 수식 추출
+
+            //- 로딩
+            div(*ngIf="papersLoading", class="flex items-center justify-center py-20")
+                i(class="fas fa-spinner fa-spin text-teal-500 text-xl mr-2")
+                span(class="text-[13px] text-zinc-500") 유사 논문을 검색하고 있습니다...
+
+            //- 빈 상태
+            div(*ngIf="!papersLoading && papers.length === 0", class="text-center py-20")
+                i(class="fas fa-file-alt text-3xl text-zinc-300 mb-3")
+                p(class="text-[13px] text-zinc-400") 가설을 입력하고 검색하면 유사 논문이 표시됩니다.
+
+            //- 논문 카드
+            div(*ngIf="!papersLoading && papers.length > 0", class="space-y-3")
+                div(*ngFor="let paper of filteredPapers(); let i = index",
+                    class="bg-white rounded-lg border border-gray-200 p-4 hover:border-teal-200 transition-colors")
+                    div(class="flex items-start justify-between mb-2")
+                        div(class="flex items-center gap-2")
+                            span(class="text-xs text-zinc-400 w-5") {{i + 1}}
+                            span(class="text-[13px] font-semibold text-zinc-700") {{paper.filename}}
+                            span(*ngIf="paper.has_equation", class="px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 text-[10px] font-medium")
+                                i(class="fas fa-square-root-alt mr-0.5")
+                                | 수식 {{paper.equation_count}}개
+                        div(class="flex items-center gap-2")
+                            div(class="w-24 h-2 bg-gray-100 rounded-full overflow-hidden")
+                                div(class="h-full bg-teal-500 rounded-full",
+                                    [style.width.%]="paper.score * 100")
+                            span(class="text-xs text-zinc-500 w-12 text-right") {{(paper.score * 100).toFixed(1)}}%
+
+                    //- 스니펫
+                    div(*ngIf="paper.snippets?.length > 0", class="space-y-1.5 mt-2")
+                        div(*ngFor="let s of paper.snippets.slice(0, 2)",
+                            class="text-xs text-zinc-500 line-clamp-2 pl-7")
+                            span(*ngIf="s.section", class="font-medium text-zinc-600 mr-1") [{{s.section}}]
+                            | {{s.text}}
+
+        //- ================================================================
+        //- Tab 3: 관련 수식
+        //- ================================================================
+        div(*ngIf="tab === 'equations'", class="p-5 space-y-4")
+            //- 헤더
+            div(class="flex items-center justify-between")
+                div(class="text-[15px] font-semibold text-zinc-800")
+                    | 관련 수식
+                    span(*ngIf="equations.length > 0", class="ml-2 text-zinc-400 font-normal") ({{selectedEquationIds.size}}/{{equations.length}}개 선택)
+                div(class="flex items-center gap-2")
+                    button(class="px-2.5 py-1 text-xs font-medium text-zinc-500 hover:text-teal-600 transition-colors",
+                        (click)="selectAllEquations()") 전체 선택
+                    button(class="px-2.5 py-1 text-xs font-medium text-zinc-500 hover:text-teal-600 transition-colors",
+                        (click)="deselectAllEquations()") 전체 해제
+                    button(class="px-3 py-1.5 bg-teal-600 text-white rounded-md text-[13px] font-medium hover:bg-teal-700 transition-colors",
+                        (click)="startVerification()",
+                        [disabled]="verifying || selectedEquationIds.size === 0")
+                        i(class="fas fa-play mr-1")
+                        | 선택 수식으로 검증
+
+            //- 로딩
+            div(*ngIf="equationsLoading", class="flex items-center justify-center py-20")
+                i(class="fas fa-spinner fa-spin text-teal-500 text-xl mr-2")
+                span(class="text-[13px] text-zinc-500") 수식을 추출하고 있습니다...
+
+            //- 빈 상태
+            div(*ngIf="!equationsLoading && equations.length === 0", class="text-center py-20")
+                i(class="fas fa-square-root-alt text-3xl text-zinc-300 mb-3")
+                p(class="text-[13px] text-zinc-400") 유사 논문에서 수식을 추출하면 여기에 표시됩니다.
+
+            //- 수식 목록
+            div(*ngIf="!equationsLoading && equations.length > 0", class="space-y-3")
+                div(*ngFor="let eq of equations; let i = index",
+                    class="bg-white rounded-lg border p-4 transition-colors cursor-pointer",
+                    [ngClass]="isEquationSelected(eq.id) ? 'border-teal-400 bg-teal-50/30' : 'border-gray-200 hover:border-gray-300'",
+                    (click)="toggleEquation(eq.id)")
+                    div(class="flex items-start gap-3")
+                        input(type="checkbox", [checked]="isEquationSelected(eq.id)",
+                            class="mt-1 w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500")
+                        div(class="flex-1 min-w-0")
+                            div(class="flex items-center gap-2 mb-2")
+                                span(class="text-xs text-zinc-400") {{i + 1}}
+                                span(class="text-[13px] font-medium text-zinc-700") {{eq.source_filename}}
+                                span(*ngIf="eq.type", class="px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 text-[10px]") {{eq.type}}
+                                span(*ngIf="eq.ref", class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px]") {{eq.ref}}
+                            //- LaTeX 수식 (코드로 표시)
+                            div(*ngIf="eq.latex", class="bg-gray-50 rounded-md p-2 mb-2 font-mono text-xs text-zinc-700 break-all")
+                                | $${{eq.latex}}$$
+                            //- 컨텍스트
+                            div(*ngIf="eq.context || eq.surrounding_text", class="text-xs text-zinc-500 line-clamp-2")
+                                | {{eq.context || eq.surrounding_text}}
+
+        //- ================================================================
+        //- Tab 4: 검증 결과
+        //- ================================================================
+        div(*ngIf="tab === 'result'", class="p-5 space-y-5")
+            //- 진행 단계 표시
+            div(*ngIf="verifying", class="bg-white rounded-lg border border-gray-200 p-5")
+                div(class="text-[15px] font-semibold text-zinc-800 mb-4") 검증 진행 중
+                div(class="flex items-center gap-4 mb-4")
+                    div(*ngFor="let step of ['searching', 'extracting', 'verifying']; let si = index",
+                        class="flex items-center gap-2")
+                        div(class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
+                            [ngClass]="getStepIndex(verifyStep) > si ? 'bg-teal-600 text-white' : getStepIndex(verifyStep) === si ? 'bg-teal-100 text-teal-700 ring-2 ring-teal-400' : 'bg-gray-100 text-gray-400'")
+                            | {{si + 1}}
+                        span(class="text-xs",
+                            [ngClass]="getStepIndex(verifyStep) >= si ? 'text-teal-700 font-medium' : 'text-zinc-400'")
+                            | {{step === 'searching' ? '논문 검색' : step === 'extracting' ? '수식 추출' : 'AI 검증'}}
+                        div(*ngIf="si < 2", class="w-8 h-px",
+                            [ngClass]="getStepIndex(verifyStep) > si ? 'bg-teal-400' : 'bg-gray-200'")
+                div(class="flex items-center gap-2 text-[13px] text-zinc-500")
+                    i(class="fas fa-spinner fa-spin text-teal-500")
+                    | {{verifyStepMessage}}
+                button(class="mt-3 px-3 py-1.5 text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors",
+                    (click)="cancelVerification()")
+                    i(class="fas fa-stop mr-1")
+                    | 중단
+
+            //- 결론 배지
+            div(*ngIf="conclusion && !verifying",
+                class="bg-white rounded-lg border p-5",
+                [ngClass]="{'border-emerald-200': conclusion === 'supported', 'border-red-200': conclusion === 'contradicted', 'border-amber-200': conclusion === 'insufficient'}")
+                div(class="flex items-center gap-4")
+                    div(class="w-14 h-14 rounded-full flex items-center justify-center",
+                        [ngClass]="{'bg-emerald-100': conclusion === 'supported', 'bg-red-100': conclusion === 'contradicted', 'bg-amber-100': conclusion === 'insufficient'}")
+                        i(class="fas text-2xl",
+                            [ngClass]="{'fa-check-circle text-emerald-600': conclusion === 'supported', 'fa-times-circle text-red-600': conclusion === 'contradicted', 'fa-question-circle text-amber-600': conclusion === 'insufficient'}")
+                    div(class="flex-1")
+                        div(class="text-lg font-bold",
+                            [ngClass]="{'text-emerald-800': conclusion === 'supported', 'text-red-800': conclusion === 'contradicted', 'text-amber-800': conclusion === 'insufficient'}")
+                            | 검증 결론: {{conclusionLabel}}
+                        div(class="text-xs text-zinc-500 mt-1")
+                            span(class="mr-3")
+                                i(class="fas fa-file-alt mr-1")
+                                | 참고 논문 {{resultPapersCount}}건
+                            span
+                                i(class="fas fa-square-root-alt mr-1")
+                                | 관련 수식 {{resultEquationsCount}}건
+                    button(class="px-3 py-1.5 bg-gray-100 text-zinc-600 rounded-md text-xs font-medium hover:bg-gray-200 transition-colors",
+                        (click)="copyResult()")
+                        i(class="fas fa-copy mr-1")
+                        | 복사
+
+            //- 빈 상태
+            div(*ngIf="!verifying && !resultText", class="text-center py-20")
+                i(class="fas fa-check-double text-3xl text-zinc-300 mb-3")
+                p(class="text-[13px] text-zinc-400") 가설을 입력하고 검증을 시작하면 결과가 여기에 표시됩니다.
+
+            //- 검증 결과 마크다운
+            div(*ngIf="resultText",
+                class="bg-white rounded-lg border border-gray-200 p-5 prose prose-sm max-w-none text-[13px] text-zinc-700",
+                [innerHTML]="resultHtml")

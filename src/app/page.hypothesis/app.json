@@ -1,0 +1,12 @@
+{
+    "id": "page.hypothesis",
+    "mode": "page",
+    "title": "/hypothesis",
+    "namespace": "hypothesis",
+    "category": "hypothesis",
+    "viewuri": "/hypothesis",
+    "preview": "",
+    "controller": "base",
+    "layout": "layout.sidebar",
+    "template": "wiz-page-hypothesis()"
+}

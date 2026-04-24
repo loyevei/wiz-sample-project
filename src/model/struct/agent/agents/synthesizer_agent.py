@@ -39,7 +39,7 @@ class SynthesizerAgent(BaseAgent):
         collected_data = collected_data or {}
         patent_data = patent_data or {}
         client = self.ctx.get("client")
-        model = self.ctx.get("model", "gpt-4o")
+        model = self.ctx.get("model", "google/gemma-4-26B-A4B-it")
 
         evidence_bank = collected_data.get("evidence_bank", [])
         tool_result_bank = collected_data.get("tool_result_bank", [])

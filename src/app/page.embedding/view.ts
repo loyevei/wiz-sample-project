@@ -42,6 +42,15 @@ export class Component implements OnInit, OnDestroy {
     public respectSentences: boolean = true;
     public similarityThreshold: number = 0.5;
 
+    // Vision LLM 옵션
+    public useVision: boolean = false;
+    public visionAvailable: boolean = false;
+
+    // Nougat / Extraction Mode 옵션
+    public extractionMode: string = 'surya';
+    public nougatAvailable: boolean = false;
+    public gemmaRescue: boolean = false;
+
     // 청킹 전략
     public chunkStrategies: any[] = [];
     public selectedStrategy: string = 'semantic_section';
@@ -59,6 +68,22 @@ export class Component implements OnInit, OnDestroy {
     public stats: any = {};
     public statsLoading: boolean = false;
 
+    // 문서 목록
+    public docList: any[] = [];
+    public docListLoading: boolean = false;
+    public expandedDocId: string = '';
+    public deletingDocId: string = '';
+
+    // 청크 브라우저
+    public docChunks: any[] = [];
+    public docChunksLoading: boolean = false;
+    public docChunksPage: number = 1;
+    public docChunksDump: number = 20;
+    public docChunksTotal: number = 0;
+    public docChunksTotalPages: number = 1;
+    public docChunksTypeFilter: string = '';
+    public expandedChunkId: string = '';
+
     constructor(public service: Service) { }
 
     public async ngOnInit() {
@@ -68,6 +93,9 @@ export class Component implements OnInit, OnDestroy {
         await this.loadCollections();
         await this.loadStats();
         await this.loadChunkTypeStats();
+        await this.loadDocuments();
+        await this.checkVisionStatus();
+        await this.checkNougatStatus();
         await this.service.render();
         this.collectionChangeListener = async (event: any) => {
             const nextCollection = String(event?.detail?.collection || '').trim();
@@ -524,6 +552,10 @@ export class Component implements OnInit, OnDestroy {
                 fd.append('respect_sentences', String(this.respectSentences));
                 fd.append('chunk_strategy', this.selectedStrategy);
                 fd.append('similarity_threshold', String(this.similarityThreshold));
+                if (this.useVision) fd.append('use_vision', 'true');
+                fd.append('extraction_mode', this.extractionMode);
+                if (this.extractionMode === 'nougat_hybrid') fd.append('use_nougat', 'true');
+                if (this.gemmaRescue) fd.append('gemma_rescue', 'true');
 
                 const response = await fetch('/wiz/api/page.embedding.v2/upload', {
                     method: 'POST',
@@ -538,6 +570,8 @@ export class Component implements OnInit, OnDestroy {
                     if (data.figures_detected > 0) detail += `, 그림 ${data.figures_detected}개`;
                     if (data.formulas_detected > 0) detail += `, 수식 ${data.formulas_detected}개`;
                     if (data.tables_detected > 0) detail += `, 표 ${data.tables_detected}개`;
+                    if (data.nougat_pages_used > 0) detail += `, Nougat ${data.nougat_pages_used}p`;
+                    if (data.gemma_rescues > 0) detail += `, Gemma rescue ${data.gemma_rescues}건`;
                     this.addLog(`✅ ${file.name}: ${detail} [${data.model_used}]`, 'success');
                     successCount++;
                 } else {
@@ -563,6 +597,7 @@ export class Component implements OnInit, OnDestroy {
         await this.loadCollections();
         await this.loadStats();
         await this.loadChunkTypeStats();
+        await this.loadDocuments();
         await this.service.render();
     }
 
@@ -595,6 +630,8 @@ export class Component implements OnInit, OnDestroy {
 
     public async onCollectionChange(emitEvent: boolean = true) {
         this.applySelectedCollectionSummary();
+        this.expandedDocId = '';
+        this.docChunks = [];
         await this.service.render();
         void this.refreshSelectedCollectionDataInBackground();
         // 컬렉션 변경 시 해당 컬렉션의 모델로 자동 전환
@@ -605,6 +642,7 @@ export class Component implements OnInit, OnDestroy {
         if (emitEvent) {
             this.broadcastCollectionChange(this.selectedCollection);
         }
+        await this.loadDocuments();
         await this.service.render();
     }
 
@@ -676,6 +714,7 @@ export class Component implements OnInit, OnDestroy {
             fd.append('chunk_overlap', String(this.chunkOverlap));
             fd.append('respect_sentences', String(this.respectSentences));
             fd.append('similarity_threshold', String(this.similarityThreshold));
+            if (this.useVision) fd.append('use_vision', 'true');
 
             const { code, data } = await wiz.call("preview_extract", fd, {
                 contentType: false,
@@ -730,6 +769,24 @@ export class Component implements OnInit, OnDestroy {
         await this.service.render();
     }
 
+    public async checkVisionStatus() {
+        try {
+            const { code, data } = await wiz.call("vision_status");
+            if (code === 200) {
+                this.visionAvailable = data.available;
+            }
+        } catch (e) { }
+    }
+
+    public async checkNougatStatus() {
+        try {
+            const { code, data } = await wiz.call("nougat_status");
+            if (code === 200) {
+                this.nougatAvailable = data.available;
+            }
+        } catch (e) { }
+    }
+
     private buildChunkTypeEntries(stats: any, total: number): any[] {
         if (!stats || total === 0) return [];
         const colorMap: any = {
@@ -773,5 +830,143 @@ export class Component implements OnInit, OnDestroy {
             mixed: '복합'
         };
         return labels[type] || type;
+    }
+
+    // =========================================================================
+    // 문서 목록
+    // =========================================================================
+    public async loadDocuments() {
+        if (!this.selectedCollection) {
+            this.docList = [];
+            return;
+        }
+        this.docListLoading = true;
+        await this.service.render();
+
+        try {
+            const { code, data } = await wiz.call("documents", {
+                collection: this.selectedCollection
+            });
+            if (code === 200) {
+                this.docList = data.documents || [];
+            }
+        } catch (e) { }
+
+        this.docListLoading = false;
+        await this.service.render();
+    }
+
+    public getDocTypeEntries(doc: any): any[] {
+        const tc = doc.type_counts || {};
+        const total = Object.values(tc).reduce((a: number, b: any) => a + b, 0) as number;
+        if (total === 0) return [];
+        return Object.entries(tc)
+            .sort(([, a]: any, [, b]: any) => b - a)
+            .map(([type, count]: any) => ({
+                type, count,
+                label: this.getChunkTypeLabel(type),
+                percent: Math.round((count / total) * 100)
+            }));
+    }
+
+    public async toggleDocChunks(docId: string) {
+        if (this.expandedDocId === docId) {
+            this.expandedDocId = '';
+            this.docChunks = [];
+            await this.service.render();
+            return;
+        }
+        this.expandedDocId = docId;
+        this.docChunksPage = 1;
+        this.docChunksTypeFilter = '';
+        this.expandedChunkId = '';
+        await this.loadDocChunks();
+    }
+
+    public async loadDocChunks() {
+        if (!this.expandedDocId || !this.selectedCollection) return;
+        this.docChunksLoading = true;
+        await this.service.render();
+
+        try {
+            const { code, data } = await wiz.call("document_chunks", {
+                collection: this.selectedCollection,
+                doc_id: this.expandedDocId,
+                page: this.docChunksPage,
+                dump: this.docChunksDump,
+                chunk_type: this.docChunksTypeFilter
+            });
+            if (code === 200) {
+                this.docChunks = data.chunks || [];
+                this.docChunksTotal = data.total || 0;
+                this.docChunksTotalPages = data.total_pages || 1;
+            }
+        } catch (e) { }
+
+        this.docChunksLoading = false;
+        await this.service.render();
+    }
+
+    public async onChunkTypeFilterChange(type: string) {
+        this.docChunksTypeFilter = this.docChunksTypeFilter === type ? '' : type;
+        this.docChunksPage = 1;
+        await this.loadDocChunks();
+    }
+
+    public async onChunkPageChange(page: number) {
+        if (page < 1 || page > this.docChunksTotalPages) return;
+        this.docChunksPage = page;
+        await this.loadDocChunks();
+    }
+
+    public toggleChunkDetail(chunkId: string) {
+        this.expandedChunkId = this.expandedChunkId === chunkId ? '' : chunkId;
+        this.service.render();
+    }
+
+    public truncateText(text: string, maxLen: number = 200): string {
+        if (!text) return '';
+        return text.length > maxLen ? text.substring(0, maxLen) + '...' : text;
+    }
+
+    public async deleteDocument(doc: any) {
+        if (this.deletingDocId) return;
+
+        const res = await this.service.modal.show({
+            title: '문서 삭제',
+            message: `'${doc.filename}' 문서를 삭제하시겠습니까?\n\n📊 ${doc.chunk_count}개 청크가 영구 삭제됩니다.\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`,
+            action: '삭제',
+            actionBtn: 'error',
+            status: 'error'
+        });
+        if (!res) return;
+
+        this.deletingDocId = doc.doc_id;
+        await this.service.render();
+
+        try {
+            const { code, data } = await wiz.call("delete_document", {
+                collection: this.selectedCollection,
+                doc_id: doc.doc_id
+            });
+            if (code === 200) {
+                this.addLog(`🗑️ 문서 삭제: ${doc.filename} (${data.deleted_chunks}개 청크)`, 'success');
+                if (this.expandedDocId === doc.doc_id) {
+                    this.expandedDocId = '';
+                    this.docChunks = [];
+                }
+                await this.loadDocuments();
+                await this.loadCollections();
+                await this.loadStats();
+                await this.loadChunkTypeStats();
+            } else {
+                this.addLog(`❌ 문서 삭제 실패: ${data?.message || '알 수 없는 오류'}`, 'error');
+            }
+        } catch (e: any) {
+            this.addLog(`❌ 문서 삭제 오류: ${e.message || '네트워크 오류'}`, 'error');
+        }
+
+        this.deletingDocId = '';
+        await this.service.render();
     }
 }

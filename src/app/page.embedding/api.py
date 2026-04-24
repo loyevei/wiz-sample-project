@@ -29,9 +29,14 @@ except ImportError:
 MILVUS_URI = os.environ.get("MILVUS_URI", "/opt/app/data/milvus.db")
 COLLECTION_META_PATH = "/opt/app/data/collection_meta.json"
 DATA_DIR = "/opt/app/data"
+PAGES_DIR = os.path.join(DATA_DIR, "pages")  # /data/pages/{collection}/{doc_id}/page_NNNN.png
 DEFAULT_COLLECTION = "plasma_papers"
 DEFAULT_CHUNK_SIZE = 500
 DEFAULT_CHUNK_OVERLAP = 100
+
+# 페이지 PNG 렌더링 DPI
+PAGE_RENDER_DPI = 150     # 본문 (모달용)
+THUMB_RENDER_DPI = 75     # 썸네일 (목록용)
 
 # ==============================================================================
 # 모델 레지스트리
@@ -93,34 +98,87 @@ UNICODE_TO_LATEX = {
     'ν': r'\nu', 'ξ': r'\xi', 'π': r'\pi', 'ρ': r'\rho',
     'σ': r'\sigma', 'τ': r'\tau', 'υ': r'\upsilon', 'φ': r'\varphi',
     'χ': r'\chi', 'ψ': r'\psi', 'ω': r'\omega',
+    'ϵ': r'\varepsilon', 'ϑ': r'\vartheta', 'ϕ': r'\phi', 'ϱ': r'\varrho',
+    'ϖ': r'\varpi', 'ϰ': r'\varkappa', 'ϝ': r'\digamma',
     # 그리스 대문자
     'Γ': r'\Gamma', 'Δ': r'\Delta', 'Θ': r'\Theta', 'Λ': r'\Lambda',
     'Ξ': r'\Xi', 'Π': r'\Pi', 'Σ': r'\Sigma', 'Υ': r'\Upsilon',
     'Φ': r'\Phi', 'Ψ': r'\Psi', 'Ω': r'\Omega',
     # 연산자/기호
-    '∫': r'\int', '∑': r'\sum', '∂': r'\partial', '√': r'\sqrt',
-    '∞': r'\infty', '±': r'\pm', '×': r'\times', '÷': r'\div',
+    '∫': r'\int', '∬': r'\iint', '∭': r'\iiint', '∮': r'\oint',
+    '∑': r'\sum', '∏': r'\prod', '∐': r'\coprod',
+    '∂': r'\partial', '√': r'\sqrt', '∛': r'\sqrt[3]', '∜': r'\sqrt[4]',
+    '∞': r'\infty', '±': r'\pm', '∓': r'\mp',
+    '×': r'\times', '÷': r'\div', '⋅': r'\cdot', '∗': r'\ast',
     '≈': r'\approx', '≠': r'\neq', '≤': r'\leq', '≥': r'\geq',
-    '∈': r'\in', '∉': r'\notin', '⊂': r'\subset', '⊃': r'\supset',
-    '∪': r'\cup', '∩': r'\cap', '∀': r'\forall', '∃': r'\exists',
+    '≪': r'\ll', '≫': r'\gg', '≲': r'\lesssim', '≳': r'\gtrsim',
+    '∈': r'\in', '∉': r'\notin', '∋': r'\ni',
+    '⊂': r'\subset', '⊃': r'\supset', '⊆': r'\subseteq', '⊇': r'\supseteq',
+    '∪': r'\cup', '∩': r'\cap', '∀': r'\forall', '∃': r'\exists', '∄': r'\nexists',
     '∅': r'\emptyset', '∇': r'\nabla', '∆': r'\Delta',
-    '∝': r'\propto', '∼': r'\sim', '≡': r'\equiv', '≅': r'\cong',
+    '∝': r'\propto', '∼': r'\sim', '≡': r'\equiv', '≅': r'\cong', '≃': r'\simeq',
     '⊥': r'\perp', '∧': r'\wedge', '∨': r'\vee', '¬': r'\neg',
     '→': r'\rightarrow', '←': r'\leftarrow', '↔': r'\leftrightarrow',
     '⇒': r'\Rightarrow', '⇐': r'\Leftarrow', '⇔': r'\Leftrightarrow',
-    '∘': r'\circ', '·': r'\cdot',
+    '↦': r'\mapsto', '↗': r'\nearrow', '↘': r'\searrow',
+    '↑': r'\uparrow', '↓': r'\downarrow', '⇑': r'\Uparrow', '⇓': r'\Downarrow',
+    '∘': r'\circ', '·': r'\cdot', '†': r'\dagger', '‡': r'\ddagger',
+    '⊗': r'\otimes', '⊕': r'\oplus', '⊖': r'\ominus', '⊘': r'\oslash',
+    '⊙': r'\odot', '⊞': r'\boxplus', '⊠': r'\boxtimes',
+    '⟨': r'\langle', '⟩': r'\rangle', '⌊': r'\lfloor', '⌋': r'\rfloor',
+    '⌈': r'\lceil', '⌉': r'\rceil', '‖': r'\|',
     # 위/아래 첨자 숫자
     '⁰': '^{0}', '¹': '^{1}', '²': '^{2}', '³': '^{3}', '⁴': '^{4}',
     '⁵': '^{5}', '⁶': '^{6}', '⁷': '^{7}', '⁸': '^{8}', '⁹': '^{9}',
     '₀': '_{0}', '₁': '_{1}', '₂': '_{2}', '₃': '_{3}', '₄': '_{4}',
     '₅': '_{5}', '₆': '_{6}', '₇': '_{7}', '₈': '_{8}', '₉': '_{9}',
+    # 위/아래 첨자 문자
+    'ⁱ': '^{i}', 'ⁿ': '^{n}', 'ⁿ': '^{n}', 'ˡ': '^{l}',
+    'ₐ': '_{a}', 'ₑ': '_{e}', 'ₒ': '_{o}', 'ₓ': '_{x}',
+    'ₕ': '_{h}', 'ₖ': '_{k}', 'ₗ': '_{l}', 'ₘ': '_{m}',
+    'ₙ': '_{n}', 'ₚ': '_{p}', 'ₛ': '_{s}', 'ₜ': '_{t}',
+    '⁺': '^{+}', '⁻': '^{-}', '⁼': '^{=}', '⁽': '^{(}', '⁾': '^{)}',
+    '₊': '_{+}', '₋': '_{-}', '₌': '_{=}', '₍': '_{(}', '₎': '_{)}',
+    # 수학 문자 (Mathematical Alphanumeric Symbols)
+    'ℏ': r'\hbar', 'ℓ': r'\ell', 'ℝ': r'\mathbb{R}', 'ℂ': r'\mathbb{C}',
+    'ℤ': r'\mathbb{Z}', 'ℕ': r'\mathbb{N}', 'ℚ': r'\mathbb{Q}',
+    'ℋ': r'\mathcal{H}', 'ℒ': r'\mathcal{L}', 'ℱ': r'\mathcal{F}',
+    '℘': r'\wp', 'ℑ': r'\Im', 'ℜ': r'\Re', 'ℵ': r'\aleph',
+    '⅓': r'\frac{1}{3}', '⅔': r'\frac{2}{3}', '¼': r'\frac{1}{4}',
+    '½': r'\frac{1}{2}', '¾': r'\frac{3}{4}', '⅕': r'\frac{1}{5}',
+    # 그 밖의 수학 심볼
+    '′': "'", '″': "''", '‴': "'''",
+    '°': r'^\circ', '∠': r'\angle', '⊿': r'\triangle',
+    '∥': r'\parallel', 'ℓ': r'\ell',
+    '⋯': r'\cdots', '⋮': r'\vdots', '⋱': r'\ddots', '…': r'\ldots',
 }
 
 # ==============================================================================
 # 수식/그림/표 감지용 상수
 # ==============================================================================
-MATH_FONTS = {"symbol", "cmmi", "cmsy", "cmr", "cmex", "mathjax", "stix", "cambria math", "math"}
-MATH_CHARS = set("∫∑∂√∞±×÷≈≠≤≥∈∉⊂⊃∪∩∀∃∅∇∆αβγδεζηθικλμνξπρστυφχψωΓΔΘΛΞΠΣΥΦΨΩ∝∼≡≅⊥∧∨¬→←↔⇒⇐⇔∘·")
+MATH_FONTS = {
+    "symbol", "cmmi", "cmsy", "cmr", "cmex", "mathjax", "stix", "cambria math", "math",
+    "mathitalic", "mt extra", "euclid",
+    "mathematica", "lucida math", "asana math", "dejavu math", "xits math",
+    "latin modern math", "libertinus math", "fira math", "garamond-math",
+}
+MATH_CHARS = set(
+    "∫∬∭∮∑∏∂√∛∜∞±∓×÷≈≠≤≥≪≫∈∉∋⊂⊃⊆⊇∪∩∀∃∄∅∇∆"
+    "αβγδεζηθικλμνξπρστυφχψωΓΔΘΛΞΠΣΥΦΨΩ"
+    "ϵϑϕϱϖϰ"
+    "∝∼≡≅≃⊥∧∨¬→←↔⇒⇐⇔↦↑↓⇑⇓"
+    "∘·†‡⊗⊕⊖⊘⊙⟨⟩⌊⌋⌈⌉‖"
+    "ℏℓℝℂℤℕℚℋℒℱ℘ℑℜℵ"
+    "⋯⋮⋱′″‴°∠⊿∥"
+)
+# 수식 번호 패턴 (예: "(1)", "(2.3)", "(A.1)")
+EQUATION_NUMBER_PATTERN = re.compile(r'^\s*\((?:\d+\.?\d*|[A-Z]\.?\d*)\)\s*$')
+# 수반 텍스트 없이 수식만 있는 라인 패턴
+EQUATION_LINE_PATTERNS = [
+    re.compile(r'^[^a-zA-Z가-힣]*[=<>≈≡∝∼≤≥≪≫]+[^a-zA-Z가-힣]*$'),  # 등호/부등호만 있는 줄
+    re.compile(r'^\s*[A-Za-z]\s*[=]\s*.+$'),  # "x = ..." 형태
+    re.compile(r'^\s*\\?(?:frac|int|sum|prod|lim|max|min|log|exp|sin|cos|tan)\b'),  # LaTeX 명령
+]
 FIGURE_PATTERNS = re.compile(r'^\s*(Fig\.?|Figure|그림|FIGURE|fig\.?)\s*\.?\s*\d', re.IGNORECASE)
 TABLE_CAPTION_PATTERNS = re.compile(r'^\s*(Table|표|TABLE)\s*\.?\s*\d', re.IGNORECASE)
 SPECIAL_MARKER = re.compile(r'\[(FIGURE|EQUATION|TABLE):\s')
@@ -226,6 +284,7 @@ def _ensure_collection(collection_name, model_name=None, client=None):
             FieldSchema(name="chunk_index", dtype=DataType.INT64),
             FieldSchema(name="chunk_type", dtype=DataType.VARCHAR, max_length=32),
             FieldSchema(name="page_num", dtype=DataType.INT64),
+            FieldSchema(name="bbox", dtype=DataType.VARCHAR, max_length=128),
             FieldSchema(name="section_title", dtype=DataType.VARCHAR, max_length=512),
             FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=8192),
             FieldSchema(name="content_elements", dtype=DataType.VARCHAR, max_length=1024),
@@ -255,17 +314,125 @@ def _ensure_collection(collection_name, model_name=None, client=None):
     return client
 
 # ==============================================================================
-# 유니코드 → LaTeX 변환
+# 유니코드 → LaTeX 변환 (구조적 재구성 포함)
 # ==============================================================================
+_SUPERSCRIPT_MAP = {
+    '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+    '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+    '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')',
+    'ⁱ': 'i', 'ⁿ': 'n', 'ˡ': 'l',
+}
+_SUBSCRIPT_MAP = {
+    '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
+    '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+    '₊': '+', '₋': '-', '₌': '=', '₍': '(', '₎': ')',
+    'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x',
+    'ₕ': 'h', 'ₖ': 'k', 'ₗ': 'l', 'ₘ': 'm',
+    'ₙ': 'n', 'ₚ': 'p', 'ₛ': 's', 'ₜ': 't',
+}
+
 def _unicode_to_latex(text):
-    """유니코드 수학 기호를 LaTeX 명령어로 근사 변환"""
+    """유니코드 수학 기호를 LaTeX 명령어로 변환 — 구조적 위/아래 첨자 그룹핑 포함"""
     result = []
-    for ch in text:
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+
+        # 연속 위 첨자를 ^{...}로 그룹핑
+        if ch in _SUPERSCRIPT_MAP:
+            group = []
+            while i < n and text[i] in _SUPERSCRIPT_MAP:
+                group.append(_SUPERSCRIPT_MAP[text[i]])
+                i += 1
+            result.append('^{' + ''.join(group) + '}')
+            continue
+
+        # 연속 아래 첨자를 _{...}로 그룹핑
+        if ch in _SUBSCRIPT_MAP:
+            group = []
+            while i < n and text[i] in _SUBSCRIPT_MAP:
+                group.append(_SUBSCRIPT_MAP[text[i]])
+                i += 1
+            result.append('_{' + ''.join(group) + '}')
+            continue
+
+        # 일반 매핑
         if ch in UNICODE_TO_LATEX:
             result.append(UNICODE_TO_LATEX[ch])
         else:
             result.append(ch)
-    return ''.join(result)
+        i += 1
+
+    latex = ''.join(result)
+
+    # 후처리: 분수 패턴 인식 (a/b → \frac{a}{b} for simple cases)
+    # 단, 이미 \frac가 있거나 URL 같은 패턴은 건드리지 않음
+    if r'\frac' not in latex and '/' in latex:
+        latex = re.sub(
+            r'(?<![a-zA-Z/\\])([a-zA-Z0-9\\]+(?:\{[^}]*\})?)\s*/\s*([a-zA-Z0-9\\]+(?:\{[^}]*\})?)',
+            r'\\frac{\1}{\2}',
+            latex
+        )
+
+    return latex
+
+
+def _build_structured_latex(lines):
+    """블록 내 span들의 폰트 크기/위치 정보를 활용하여 구조적 LaTeX를 재구성한다.
+    PyMuPDF의 span 위치(origin, bbox)에서 위/아래 첨자 관계를 추론한다."""
+    if not lines:
+        return ""
+
+    # 전체 span에서 기준(base) 폰트 크기 결정
+    all_spans = []
+    for line in lines:
+        for span in line.get("spans", []):
+            text = span.get("text", "").strip()
+            if text:
+                all_spans.append(span)
+
+    if not all_spans:
+        return ""
+
+    sizes = [s.get("size", 12) for s in all_spans]
+    base_size = max(set(sizes), key=sizes.count)  # 최빈값
+
+    latex_parts = []
+    for line in lines:
+        spans = line.get("spans", [])
+        line_parts = []
+        for span in spans:
+            text = span.get("text", "").strip()
+            if not text:
+                continue
+            size = span.get("size", 12)
+            origin_y = span.get("origin", [0, 0])[1] if "origin" in span else None
+            flags = span.get("flags", 0)
+
+            # 유니코드→LaTeX 기본 변환
+            latex_text = _unicode_to_latex(text)
+
+            # 폰트 크기가 base보다 확연히 작으면 위/아래 첨자 후보
+            if size < base_size * 0.75 and origin_y is not None and len(line_parts) > 0:
+                # span의 origin.y와 이전 span 대비 위치로 위/아래 구분
+                prev_span = None
+                for s in reversed(all_spans):
+                    if s is not span and "origin" in s and s.get("size", 12) >= base_size * 0.75:
+                        prev_span = s
+                        break
+                if prev_span and "origin" in prev_span:
+                    prev_y = prev_span["origin"][1]
+                    if origin_y < prev_y - 2:  # 위쪽
+                        latex_text = '^{' + latex_text + '}'
+                    elif origin_y > prev_y + 2:  # 아래쪽
+                        latex_text = '_{' + latex_text + '}'
+
+            line_parts.append(latex_text)
+        if line_parts:
+            latex_parts.append(' '.join(line_parts))
+
+    return ' '.join(latex_parts)
 
 # ==============================================================================
 # 이미지 OCR 추출
@@ -334,15 +501,25 @@ def _table_to_markdown(table):
 # 수식 감지 및 LaTeX 변환
 # ==============================================================================
 def _is_math_span(span):
-    """span이 수식인지 판별"""
+    """span이 수식인지 판별 — 폰트명, 유니코드 문자 비율, 위/아래 첨자 문자 기반."""
     font = span.get("font", "").lower()
     text = span.get("text", "")
+    # 1. 수식 전용 폰트
     for mf in MATH_FONTS:
         if mf in font:
             return True
-    if len(text) > 0:
-        math_ratio = sum(1 for c in text if c in MATH_CHARS) / len(text)
-        if math_ratio > 0.3:
+    if len(text) == 0:
+        return False
+    # 2. 유니코드 수학 문자 비율
+    math_count = sum(1 for c in text if c in MATH_CHARS)
+    sub_sup_count = sum(1 for c in text if c in _SUPERSCRIPT_MAP or c in _SUBSCRIPT_MAP)
+    special_count = math_count + sub_sup_count
+    if special_count > 0 and special_count / len(text) > 0.25:
+        return True
+    # 3. 등호가 있고 짧은 텍스트 (변수 = 값 패턴)
+    if '=' in text and len(text) < 50 and any(c in MATH_CHARS or c.isdigit() for c in text):
+        alpha_count = sum(1 for c in text if c.isalpha() and c not in MATH_CHARS)
+        if alpha_count < len(text) * 0.5:
             return True
     return False
 
@@ -448,8 +625,198 @@ def _find_table_caption(blocks, table_bbox):
 # ==============================================================================
 # 스마트 PDF 텍스트 추출 (강화 버전)
 # ==============================================================================
-def _extract_text_from_pdf(pdf_path):
-    """PyMuPDF dict 모드로 구조화 추출 — 이미지 OCR, 표 마크다운, 수식 LaTeX"""
+# ==============================================================================
+# 페이지 PNG 사전 렌더링 (PyMuPDF) — 검색 결과 모달 뷰어용
+# ==============================================================================
+def _page_dir(collection_name, doc_id):
+    return os.path.join(PAGES_DIR, collection_name, doc_id)
+
+
+def _render_pdf_pages(pdf_path, collection_name, doc_id):
+    """PDF 모든 페이지를 PNG로 사전 렌더링.
+    - {PAGES_DIR}/{collection}/{doc_id}/page_NNNN.png  (PAGE_RENDER_DPI)
+    - {PAGES_DIR}/{collection}/{doc_id}/thumb_NNNN.png (THUMB_RENDER_DPI)
+    이미 디렉토리가 존재하면 스킵 (idempotent).
+    Returns: {"page_count": int, "page_size": {page_num: [w, h]}, "skipped": bool}
+    """
+    out_dir = _page_dir(collection_name, doc_id)
+    page_size = {}
+
+    # idempotent: 디렉토리에 page_*.png가 이미 있으면 스킵
+    if os.path.isdir(out_dir):
+        existing = [f for f in os.listdir(out_dir) if f.startswith("page_") and f.endswith(".png")]
+        if existing:
+            try:
+                doc = fitz.open(pdf_path)
+                for i in range(len(doc)):
+                    page = doc.load_page(i)
+                    rect = page.rect
+                    page_size[i + 1] = [rect.width, rect.height]
+                doc.close()
+            except Exception:
+                pass
+            return {"page_count": len(existing), "page_size": page_size, "skipped": True}
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    doc = fitz.open(pdf_path)
+    page_count = len(doc)
+    page_zoom = PAGE_RENDER_DPI / 72.0
+    thumb_zoom = THUMB_RENDER_DPI / 72.0
+    page_mat = fitz.Matrix(page_zoom, page_zoom)
+    thumb_mat = fitz.Matrix(thumb_zoom, thumb_zoom)
+
+    for i in range(page_count):
+        page = doc.load_page(i)
+        rect = page.rect
+        page_size[i + 1] = [rect.width, rect.height]
+        page_no = i + 1
+        try:
+            pix = page.get_pixmap(matrix=page_mat, alpha=False)
+            pix.save(os.path.join(out_dir, f"page_{page_no:04d}.png"))
+        except Exception:
+            pass
+        try:
+            tpix = page.get_pixmap(matrix=thumb_mat, alpha=False)
+            tpix.save(os.path.join(out_dir, f"thumb_{page_no:04d}.png"))
+        except Exception:
+            pass
+    doc.close()
+
+    # 페이지 크기 메타도 같이 저장 (bbox 좌표 변환용)
+    try:
+        with open(os.path.join(out_dir, "_pages.json"), "w", encoding="utf-8") as f:
+            json.dump({
+                "page_count": page_count,
+                "page_size": page_size,
+                "render_dpi": PAGE_RENDER_DPI,
+                "thumb_dpi": THUMB_RENDER_DPI,
+                "pdf_dpi": 72,
+            }, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+    return {"page_count": page_count, "page_size": page_size, "skipped": False}
+
+
+# ==============================================================================
+# Surya OCR (텍스트 레이어 부실 페이지 fallback) — 동적 로드
+# ==============================================================================
+_SURYA_PREDICTOR = None
+_SURYA_CHECKED = False
+_SURYA_AVAILABLE = False
+
+
+def _resolve_extraction_mode(extraction_mode="", use_nougat=False, use_ocr=True):
+    mode = (extraction_mode or "").strip().lower()
+    if mode not in ("native", "surya", "nougat_hybrid"):
+        if use_nougat:
+            mode = "nougat_hybrid"
+        elif use_ocr:
+            mode = "surya"
+        else:
+            mode = "native"
+    return mode
+
+
+def _page_text_from_blocks(page_blocks):
+    parts = []
+    for block in page_blocks:
+        content = (block.get("content") or "").strip()
+        if content:
+            parts.append(content)
+    return "\n\n".join(parts).strip()
+
+
+def _preferred_page_text(page_data, nougat_text=""):
+    nougat_text = (nougat_text or "").strip()
+    if nougat_text:
+        extras = []
+        for block in page_data.get("blocks", []):
+            if block.get("type") not in ("header", "figure", "table", "table_caption", "formula", "equation_number"):
+                continue
+            content = (block.get("content") or "").strip()
+            if content and content not in nougat_text:
+                extras.append(content)
+        parts = [nougat_text] + extras
+        return "\n\n".join(part for part in parts if part).strip(), "nougat"
+    return _page_text_from_blocks(page_data.get("blocks", [])), page_data.get("text_source", "native")
+
+
+def _get_surya():
+    """surya-ocr이 설치되어 있으면 단일 predictor 인스턴스 반환, 아니면 None."""
+    global _SURYA_PREDICTOR, _SURYA_CHECKED, _SURYA_AVAILABLE
+    if _SURYA_CHECKED:
+        return _SURYA_PREDICTOR if _SURYA_AVAILABLE else None
+    _SURYA_CHECKED = True
+    try:
+        # surya-ocr v0.6+ 새 API
+        from surya.foundation import FoundationPredictor  # noqa: F401
+        from surya.recognition import RecognitionPredictor
+        from surya.detection import DetectionPredictor
+        rec = RecognitionPredictor()
+        det = DetectionPredictor()
+        _SURYA_PREDICTOR = {"rec": rec, "det": det}
+        _SURYA_AVAILABLE = True
+    except Exception:
+        try:
+            # 구 API
+            from surya.ocr import run_ocr  # noqa: F401
+            from surya.model.detection.model import load_model as load_det
+            from surya.model.detection.model import load_processor as load_det_proc
+            from surya.model.recognition.model import load_model as load_rec
+            from surya.model.recognition.processor import load_processor as load_rec_proc
+            _SURYA_PREDICTOR = {
+                "legacy": True,
+                "det_model": load_det(),
+                "det_proc": load_det_proc(),
+                "rec_model": load_rec(),
+                "rec_proc": load_rec_proc(),
+            }
+            _SURYA_AVAILABLE = True
+        except Exception:
+            _SURYA_PREDICTOR = None
+            _SURYA_AVAILABLE = False
+    return _SURYA_PREDICTOR if _SURYA_AVAILABLE else None
+
+
+def _surya_ocr_page(page, langs=None):
+    """Surya OCR로 PDF 페이지 텍스트 추출. 실패 시 빈 문자열 반환."""
+    pred = _get_surya()
+    if pred is None:
+        return ""
+    if langs is None:
+        langs = ["en", "ko"]
+    try:
+        # 페이지 → PIL 이미지 (200 DPI)
+        from PIL import Image as PILImage
+        mat = fitz.Matrix(200 / 72.0, 200 / 72.0)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        img = PILImage.open(io.BytesIO(pix.tobytes("png")))
+
+        if "legacy" in pred:
+            from surya.ocr import run_ocr
+            preds = run_ocr(
+                [img], [langs],
+                pred["det_model"], pred["det_proc"],
+                pred["rec_model"], pred["rec_proc"]
+            )
+        else:
+            preds = pred["rec"]([img], [langs], det_predictor=pred["det"])
+
+        if not preds:
+            return ""
+        page_pred = preds[0]
+        lines = getattr(page_pred, "text_lines", None) or []
+        return "\n".join(getattr(line, "text", "") for line in lines if getattr(line, "text", ""))
+    except Exception:
+        return ""
+
+
+def _extract_layout_from_pdf(pdf_path, use_vision=False, use_ocr=True):
+    """Phase 1: PyMuPDF 레이아웃 추출 — 블록/bbox/헤더/표/수식/이미지 감지.
+    텍스트 소스 결정은 하지 않고, 구조 데이터만 반환한다.
+    """
     doc = fitz.open(pdf_path)
     pages_data = []
     all_text_parts = []
@@ -474,13 +841,46 @@ def _extract_text_from_pdf(pdf_path):
     table_count = 0
     ocr_count = 0
 
+    # Vision LLM 로드 (use_vision=True일 때)
+    vision_llm = None
+    if use_vision:
+        try:
+            _vlm = wiz.model("vision_llm")
+            if _vlm.available():
+                vision_llm = _vlm
+        except Exception:
+            pass
+
     # 2패스: 구조화 추출
     current_section = ""
+    ocr_pages_used = 0  # Surya OCR로 fallback된 페이지 수
     for page_num in range(len(doc)):
         page = doc.load_page(page_num)
+        page_rect = page.rect
         page_dict = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
         page_blocks = []
         blocks = page_dict.get("blocks", [])
+        page_used_surya = False
+
+        # Surya OCR fallback: 텍스트 레이어가 부실(50자 미만)하면 OCR 결과를 단일 텍스트 블록으로 추가
+        if use_ocr:
+            plain_text = page.get_text("text") or ""
+            if len(plain_text.strip()) < 50:
+                ocr_text = _surya_ocr_page(page)
+                if ocr_text and ocr_text.strip():
+                    rect = page.rect
+                    blocks.append({
+                        "type": 0,
+                        "bbox": [rect.x0, rect.y0, rect.x1, rect.y1],
+                        "lines": [{
+                            "spans": [{
+                                "text": line, "size": 12, "flags": 0,
+                                "bbox": [rect.x0, rect.y0 + i * 14, rect.x1, rect.y0 + (i + 1) * 14]
+                            }]
+                        } for i, line in enumerate(ocr_text.split("\n")) if line.strip()]
+                    })
+                    ocr_pages_used += 1
+                    page_used_surya = True
 
         # 표 추출 (마크다운 변환)
         tables_on_page = []
@@ -506,29 +906,50 @@ def _extract_text_from_pdf(pdf_path):
         for block in blocks:
             bbox = block.get("bbox", [0, 0, 0, 0])
 
-            # 이미지 블록 → OCR + 캡션
+            # 이미지 블록 → Vision LLM 분석 또는 OCR + 캡션
             if block.get("type", 0) == 1:
                 width = bbox[2] - bbox[0]
                 height = bbox[3] - bbox[1]
                 caption = _find_figure_caption(blocks, bbox)
 
-                # OCR로 이미지 내 텍스트 추출
-                ocr_text = ""
-                if width >= 50 and height >= 50:
-                    ocr_text = _extract_image_ocr(page, block)
-                    if ocr_text:
-                        ocr_count += 1
+                marker = None
 
-                if caption and ocr_text:
-                    marker = f"[FIGURE: {caption} | OCR: {ocr_text}]"
-                elif caption:
-                    marker = f"[FIGURE: {caption}]"
-                elif ocr_text:
-                    marker = f"[FIGURE: (이미지) | OCR: {ocr_text}]"
-                else:
-                    if width < 30 or height < 30:
-                        continue  # 너무 작은 이미지 스킵
-                    marker = "[FIGURE: (이미지)]"
+                # Vision LLM 분석 (use_vision=True이고 충분한 크기의 이미지)
+                if vision_llm is not None and width >= 80 and height >= 80:
+                    try:
+                        clip = fitz.Rect(bbox)
+                        mat = fitz.Matrix(2, 2)
+                        pix = page.get_pixmap(matrix=mat, clip=clip)
+                        img_bytes = pix.tobytes("png")
+                        from PIL import Image as PILImage
+                        pil_img = PILImage.open(io.BytesIO(img_bytes))
+
+                        result = vision_llm.analyze(pil_img)
+                        marker = result.get("marker", "")
+                        if result.get("type") == "equation":
+                            formula_count += 1
+                        ocr_count += 1
+                    except Exception:
+                        marker = None
+
+                # Vision LLM 실패 또는 미사용 시 기존 OCR 폴백
+                if marker is None:
+                    ocr_text = ""
+                    if width >= 50 and height >= 50:
+                        ocr_text = _extract_image_ocr(page, block)
+                        if ocr_text:
+                            ocr_count += 1
+
+                    if caption and ocr_text:
+                        marker = f"[FIGURE: {caption} | OCR: {ocr_text}]"
+                    elif caption:
+                        marker = f"[FIGURE: {caption}]"
+                    elif ocr_text:
+                        marker = f"[FIGURE: (이미지) | OCR: {ocr_text}]"
+                    else:
+                        if width < 30 or height < 30:
+                            continue  # 너무 작은 이미지 스킵
+                        marker = "[FIGURE: (이미지)]"
 
                 figure_count += 1
                 page_blocks.append({
@@ -569,6 +990,8 @@ def _extract_text_from_pdf(pdf_path):
             block_text = ""
             has_math = False
             math_spans_text = []
+            math_spans_count = 0
+            total_spans_count = 0
             context_before = ""
             context_after = ""
             lines = block.get("lines", [])
@@ -577,14 +1000,25 @@ def _extract_text_from_pdf(pdf_path):
                 line_text = ""
                 for span in line.get("spans", []):
                     span_text = span.get("text", "")
+                    total_spans_count += 1
                     if _is_math_span(span):
                         has_math = True
                         math_spans_text.append(span_text)
+                        math_spans_count += 1
                     line_text += span_text
                 block_text += line_text
 
             block_text = block_text.strip()
             if not block_text:
+                continue
+
+            # 수식 번호만 있는 블록 감지 (예: "(1)", "(2.3)")
+            if EQUATION_NUMBER_PATTERN.match(block_text):
+                # 수식 번호는 이전 수식 블록에 연결 — 별도 블록으로 기록
+                page_blocks.append({
+                    "type": "equation_number", "content": block_text.strip(),
+                    "bbox": list(bbox), "page_num": page_num + 1
+                })
                 continue
 
             # 캡션 패턴 감지
@@ -605,16 +1039,28 @@ def _extract_text_from_pdf(pdf_path):
                 })
                 all_text_parts.append(marker)
             elif has_math:
-                # 수식 강화: LaTeX 변환 + 인라인/디스플레이 구분
+                # 수식 강화: 구조적 LaTeX 재구성 + 인라인/디스플레이 구분
                 equation_counter[0] += 1
                 eq_idx = equation_counter[0]
                 eq_type = _classify_equation_type(block, lines)
-                latex_text = _unicode_to_latex(block_text)
+
+                # 구조적 LaTeX 재구성 시도 (span 위치 정보 활용)
+                structured_latex = _build_structured_latex(lines)
+                # 기본 유니코드 변환도 병행
                 raw_math = "".join(math_spans_text)
-                latex_math = _unicode_to_latex(raw_math) if raw_math else latex_text
+                simple_latex = _unicode_to_latex(raw_math) if raw_math else _unicode_to_latex(block_text)
+                # 구조적 결과가 더 풍부하면 우선 사용
+                latex_math = structured_latex if len(structured_latex) >= len(simple_latex) else simple_latex
+
+                # 수식 번호가 다음 블록에 있을 수 있으므로 eq_ref 추출
+                eq_ref = ""
+                eq_num_match = re.search(r'\((\d+\.?\d*|[A-Z]\.?\d*)\)\s*$', block_text)
+                if eq_num_match:
+                    eq_ref = eq_num_match.group(1)
 
                 if eq_type == "display":
-                    marker = f"[EQUATION: eq_{eq_idx} | type=display | $${latex_math}$$ | context: {block_text}]"
+                    ref_part = f" | ref=({eq_ref})" if eq_ref else ""
+                    marker = f"[EQUATION: eq_{eq_idx} | type=display{ref_part} | $${latex_math}$$ | context: {block_text}]"
                 else:
                     marker = f"[EQUATION: eq_{eq_idx} | type=inline | ${latex_math}$ | context: {block_text}]"
 
@@ -646,20 +1092,227 @@ def _extract_text_from_pdf(pdf_path):
         pages_data.append({
             "page_num": page_num + 1,
             "blocks": page_blocks,
-            "section": current_section
+            "section": current_section,
+            "text_source": "surya" if page_used_surya else "native",
+            "page_bbox": [page_rect.x0, page_rect.y0, page_rect.x1, page_rect.y1],
         })
 
     doc.close()
-    full_text = "\n\n".join(all_text_parts)
+
     return {
-        "full_text": full_text,
         "pages": pages_data,
+        "all_text_parts": all_text_parts,
         "stats": {
             "figures": figure_count,
             "formulas": formula_count,
             "tables": table_count,
             "ocr_extractions": ocr_count,
-            "total_equations": equation_counter[0]
+            "ocr_pages_used": ocr_pages_used,
+            "surya_available": _SURYA_AVAILABLE,
+            "total_equations": equation_counter[0],
+        }
+    }
+
+
+def _run_nougat_extraction(pdf_path):
+    """Phase 2: Nougat OCR로 페이지별 텍스트 추출. 실패 시 빈 dict 반환."""
+    nougat_map = {}
+    nougat_available = False
+    try:
+        nougat_model = wiz.model("nougat_ocr")
+        nougat_available = nougat_model.available()
+        if nougat_available:
+            nougat_result = nougat_model.extract_document(pdf_path, dpi=PAGE_RENDER_DPI, batch_size=2)
+            for page_info in nougat_result.get("pages", []):
+                page_no = int(page_info.get("page_num", 0) or 0)
+                if page_no > 0:
+                    nougat_map[page_no] = (page_info.get("text") or "").strip()
+    except Exception:
+        traceback.print_exc()
+        nougat_available = False
+    return nougat_map, nougat_available
+
+
+def _merge_page_texts(pages_data, all_text_parts, nougat_map=None):
+    """Phase 3: 소스 우선순위 병합 — Nougat → native/surya text.
+    각 페이지에 preferred_text와 preferred_text_source를 기록하고
+    full_text를 반환한다.
+    """
+    if nougat_map is None:
+        nougat_map = {}
+
+    nougat_pages_used = 0
+    native_pages_used = 0
+    failed_pages = []
+    page_texts = []
+
+    for page in pages_data:
+        preferred_text, source = _preferred_page_text(
+            page, nougat_map.get(page.get("page_num", 0), "")
+        )
+        if not preferred_text:
+            failed_pages.append(page.get("page_num", 0))
+            continue
+        page["preferred_text"] = preferred_text
+        page["preferred_text_source"] = source
+        page_texts.append(preferred_text)
+        if source == "nougat":
+            nougat_pages_used += 1
+        else:
+            native_pages_used += 1
+
+    full_text = "\n\n".join(page_texts if page_texts else all_text_parts)
+    return {
+        "full_text": full_text,
+        "nougat_pages_used": nougat_pages_used,
+        "native_pages_used": native_pages_used,
+        "failed_pages": failed_pages,
+    }
+
+
+def _is_equation_quality_ok(latex):
+    """수식 LaTeX 문자열의 품질을 판정한다. True면 양호, False면 rescue 대상."""
+    latex = (latex or "").strip()
+    if not latex:
+        return False
+    # 1. 달러/중괄호 짝 불일치
+    if latex.count("{") != latex.count("}"):
+        return False
+    dollar_count = latex.count("$") - latex.count("\\$")
+    if dollar_count % 2 != 0:
+        return False
+    # 2. 수학 기호가 전혀 없는 경우 (자연어만)
+    if not re.search(r"[\\$\^_{}=+\-*/\d]", latex):
+        return False
+    # 3. 특수문자 노이즈 비율 과다 (제어문자·대체문자)
+    noise = sum(1 for ch in latex if ord(ch) < 32 or ch == '\ufffd')
+    if len(latex) > 5 and noise / len(latex) > 0.3:
+        return False
+    # 4. 너무 짧은 수식 (단일 문자)
+    stripped = re.sub(r"[\s${}\\]", "", latex)
+    if len(stripped) < 2:
+        return False
+    return True
+
+
+def _run_gemma_equation_rescue(pdf_path, pages_data):
+    """Phase 2.5: 품질 미달 수식 블록만 Gemma 4 Vision으로 재추출.
+    pages_data의 formula 블록을 in-place로 갱신한다.
+    """
+    stats = {"gemma_rescues": 0, "rescue_skipped": 0, "rescue_failed": 0}
+    # Gemma Vision LLM 로드
+    vision_llm = None
+    try:
+        _vlm = wiz.model("vision_llm")
+        if _vlm.available():
+            vision_llm = _vlm
+    except Exception:
+        pass
+    if vision_llm is None:
+        return stats
+
+    doc = None
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception:
+        return stats
+
+    try:
+        for page_data in pages_data:
+            page_num_1 = page_data.get("page_num", 0)
+            if page_num_1 < 1 or page_num_1 > len(doc):
+                continue
+            page = doc.load_page(page_num_1 - 1)
+
+            for block in page_data.get("blocks", []):
+                if block.get("type") != "formula":
+                    continue
+                latex = block.get("latex", "")
+                if _is_equation_quality_ok(latex):
+                    stats["rescue_skipped"] += 1
+                    continue
+
+                # bbox crop → Gemma 재추출
+                bbox = block.get("bbox")
+                if not bbox or len(bbox) < 4:
+                    stats["rescue_skipped"] += 1
+                    continue
+
+                try:
+                    from PIL import Image as PILImage
+                    clip = fitz.Rect(bbox)
+                    # 약간의 패딩 추가
+                    clip.x0 = max(0, clip.x0 - 5)
+                    clip.y0 = max(0, clip.y0 - 5)
+                    clip.x1 = min(page.rect.x1, clip.x1 + 5)
+                    clip.y1 = min(page.rect.y1, clip.y1 + 5)
+                    mat = fitz.Matrix(3, 3)  # 고해상도 crop
+                    pix = page.get_pixmap(matrix=mat, clip=clip, alpha=False)
+                    pil_img = PILImage.open(io.BytesIO(pix.tobytes("png")))
+
+                    result = vision_llm.equation(pil_img)
+                    new_latex = (result.get("latex") or "").strip()
+                    if new_latex and _is_equation_quality_ok(new_latex):
+                        eq_idx = block.get("eq_index", 0)
+                        eq_type = block.get("eq_type", "display")
+                        desc = (result.get("description") or "").strip()
+                        if eq_type == "display":
+                            body = f"$${new_latex}$$"
+                        else:
+                            body = f"${new_latex}$"
+                        ctx_part = f" | context: {desc}" if desc else ""
+                        new_marker = f"[EQUATION: eq_{eq_idx} | type={eq_type} | {body}{ctx_part} | source=gemma_rescue]"
+                        block["content"] = new_marker
+                        block["latex"] = new_latex
+                        block["rescue_source"] = "gemma"
+                        stats["gemma_rescues"] += 1
+                    else:
+                        stats["rescue_failed"] += 1
+                except Exception:
+                    stats["rescue_failed"] += 1
+    finally:
+        doc.close()
+
+    return stats
+
+
+def _extract_text_from_pdf(pdf_path, use_vision=False, use_ocr=True, use_nougat=False,
+                           gemma_rescue=False, extraction_mode="surya"):
+    """오케스트레이터: 레이아웃 추출 → (선택) Nougat 추출 → 수식 rescue → 소스 병합."""
+    # Phase 1: PyMuPDF 레이아웃
+    layout = _extract_layout_from_pdf(pdf_path, use_vision=use_vision, use_ocr=use_ocr)
+    pages_data = layout["pages"]
+    all_text_parts = layout["all_text_parts"]
+    layout_stats = layout["stats"]
+
+    # Phase 2: Nougat (선택)
+    nougat_map = {}
+    nougat_available = False
+    if use_nougat:
+        nougat_map, nougat_available = _run_nougat_extraction(pdf_path)
+
+    # Phase 2.5: 수식 품질 게이트 + Gemma rescue (선택)
+    rescue_stats = {"gemma_rescues": 0, "rescue_skipped": 0, "rescue_failed": 0}
+    if gemma_rescue:
+        rescue_stats = _run_gemma_equation_rescue(pdf_path, pages_data)
+
+    # Phase 3: 소스 병합
+    merge = _merge_page_texts(pages_data, all_text_parts, nougat_map)
+
+    return {
+        "full_text": merge["full_text"],
+        "pages": pages_data,
+        "stats": {
+            **layout_stats,
+            "nougat_available": nougat_available,
+            "nougat_pages_used": merge["nougat_pages_used"],
+            "native_pages_used": merge["native_pages_used"],
+            "failed_pages": merge["failed_pages"],
+            "extraction_mode": _resolve_extraction_mode(extraction_mode, use_nougat=use_nougat, use_ocr=use_ocr),
+            "gemma_rescue_requested": gemma_rescue,
+            "gemma_rescues": rescue_stats.get("gemma_rescues", 0),
+            "rescue_skipped": rescue_stats.get("rescue_skipped", 0),
+            "rescue_failed": rescue_stats.get("rescue_failed", 0),
         }
     }
 
@@ -834,6 +1487,40 @@ def _extract_structured_content(text):
     if not structured:
         return ""
     return json.dumps(structured, ensure_ascii=False)[:8000]
+
+# ==============================================================================
+# 수식 청크 임베딩 텍스트 보강
+# ==============================================================================
+def _enhance_equation_text_for_embedding(text):
+    """수식 마커가 포함된 청크에서 검색 친화적 텍스트를 생성한다.
+    LaTeX 수식은 벡터 임베딩에 잘 반영되지 않으므로,
+    수식의 context 텍스트 + 섹션 제목 + 변수 명칭을 보강하여 검색 정확도를 높인다."""
+    enhanced_parts = [text]
+
+    # [EQUATION: ... | context: 원본텍스트] 에서 context 추출
+    for m in re.finditer(r'\[EQUATION:\s*eq_\d+\s*\|[^|]*\|[^|]*\|\s*context:\s*([^\]]+)\]', text):
+        context = m.group(1).strip()
+        if context and context not in text[:text.find('[EQUATION:')]:
+            enhanced_parts.append(context)
+
+    # LaTeX 명령어에서 의미 있는 용어 추출 (그리스 문자를 자연어로)
+    latex_terms = []
+    latex_to_term = {
+        r'\alpha': 'alpha', r'\beta': 'beta', r'\gamma': 'gamma',
+        r'\delta': 'delta', r'\epsilon': 'epsilon', r'\theta': 'theta',
+        r'\lambda': 'lambda', r'\mu': 'mu', r'\sigma': 'sigma',
+        r'\omega': 'omega', r'\phi': 'phi', r'\psi': 'psi',
+        r'\nabla': 'gradient', r'\partial': 'partial derivative',
+        r'\int': 'integral', r'\sum': 'summation',
+        r'\frac': 'fraction', r'\sqrt': 'square root',
+    }
+    for cmd, term in latex_to_term.items():
+        if cmd in text:
+            latex_terms.append(term)
+    if latex_terms:
+        enhanced_parts.append("Mathematical terms: " + ", ".join(set(latex_terms)))
+
+    return "\n".join(enhanced_parts)
 
 # ==============================================================================
 # 청킹 전략 구현
@@ -1323,23 +2010,33 @@ def _split_large_special(text, chunks, sec_title, chunk_size):
 
 
 def _assign_page_numbers(chunks, pages_data):
-    """청크 텍스트를 pages_data와 매칭하여 page_num 할당"""
-    # 각 페이지의 텍스트 조각과 페이지 번호 매핑
+    """청크 텍스트를 pages_data와 매칭하여 page_num + bbox 할당.
+    bbox는 청크 내 첫 매칭 블록의 bbox를 사용 (검색 결과 → 페이지 PNG 위 하이라이트 오버레이용).
+    """
+    # 각 페이지의 텍스트 조각과 (페이지 번호, bbox) 매핑
     text_page_map = []
     for page in pages_data:
         for block in page.get("blocks", []):
             content = block.get("content", "")
             if content and len(content) > 10:
-                text_page_map.append((content[:100], block.get("page_num", 0)))
+                text_page_map.append((
+                    content[:100],
+                    block.get("page_num", 0),
+                    block.get("bbox", None),
+                ))
 
     for chunk in chunks:
         chunk_text = chunk.get("text", "")
         best_page = 0
-        for snippet, pnum in text_page_map:
+        best_bbox = None
+        for snippet, pnum, bbox in text_page_map:
             if snippet[:50] in chunk_text:
                 best_page = pnum
+                best_bbox = bbox
                 break
         chunk["page_num"] = best_page
+        if best_bbox is not None:
+            chunk["bbox"] = best_bbox
 
 # ==============================================================================
 # API 엔드포인트
@@ -1356,6 +2053,58 @@ def models():
             "custom": info.get("custom", False)
         })
     wiz.response.status(200, models=model_list, default=DEFAULT_MODEL)
+
+
+def vision_status():
+    """Vision LLM (Gemma 4) 사용 가능 여부 확인"""
+    available = False
+    try:
+        _vlm = wiz.model("vision_llm")
+        available = _vlm.available()
+    except Exception:
+        pass
+    wiz.response.status(200, available=available, model="google/gemma-4-E4B-it" if available else "")
+
+
+def nougat_status():
+    """Nougat OCR 사용 가능 여부 확인"""
+    available = False
+    status = {
+        "model": "",
+        "runtime": "",
+        "loaded": False,
+    }
+    try:
+        nougat = wiz.model("nougat_ocr")
+        available = nougat.available()
+        if hasattr(nougat, "status"):
+            status = nougat.status()
+    except Exception:
+        pass
+    wiz.response.status(
+        200,
+        available=available,
+        model=status.get("model", "") if available else "",
+        runtime=status.get("runtime", ""),
+        loaded=bool(status.get("loaded", False)),
+    )
+
+
+def nougat_load():
+    """Nougat 모델을 GPU 메모리에 로드"""
+    nougat = wiz.model("nougat_ocr")
+    if not nougat.available():
+        wiz.response.status(400, message="Nougat 의존성이 설치되지 않았습니다.")
+    nougat.load()
+    status = nougat.status()
+    wiz.response.status(200, loaded=status.get("loaded", False), model=status.get("model", ""))
+
+
+def nougat_unload():
+    """Nougat 모델을 GPU 메모리에서 해제"""
+    nougat = wiz.model("nougat_ocr")
+    nougat.unload()
+    wiz.response.status(200, loaded=False)
 
 
 def add_custom_model():
@@ -1603,6 +2352,11 @@ def delete_collection():
         if os.path.isdir(pdf_dir):
             shutil.rmtree(pdf_dir, ignore_errors=True)
 
+        # 페이지 PNG 디렉토리도 함께 정리
+        pages_dir = os.path.join(PAGES_DIR, collection_name)
+        if os.path.isdir(pages_dir):
+            shutil.rmtree(pages_dir, ignore_errors=True)
+
         wiz.response.status(200,
             collection_name=collection_name,
             message=f"'{collection_name}' 컬렉션이 삭제되었습니다.")
@@ -1631,13 +2385,14 @@ def preview_extract():
         chunk_overlap = int(wiz.request.query("chunk_overlap", str(DEFAULT_CHUNK_OVERLAP)))
         respect_sentences = wiz.request.query("respect_sentences", "true").lower() == "true"
         similarity_threshold = float(wiz.request.query("similarity_threshold", "0.5"))
+        use_vision = wiz.request.query("use_vision", "false").lower() == "true"
 
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             file.save(tmp.name)
             tmp_path = tmp.name
 
         # 추출
-        extract_result = _extract_text_from_pdf(tmp_path)
+        extract_result = _extract_text_from_pdf(tmp_path, use_vision=use_vision)
         full_text = extract_result["full_text"]
         if not full_text.strip():
             wiz.response.status(400, message="PDF에서 텍스트를 추출할 수 없습니다.")
@@ -1727,6 +2482,16 @@ def upload():
         respect_sentences = wiz.request.query("respect_sentences", "true").lower() == "true"
         strategy = wiz.request.query("chunk_strategy", "semantic_section").strip()
         similarity_threshold = float(wiz.request.query("similarity_threshold", "0.5"))
+        use_vision = wiz.request.query("use_vision", "false").lower() == "true"
+        use_nougat = wiz.request.query("use_nougat", "false").lower() == "true"
+        gemma_rescue = wiz.request.query("gemma_rescue", "false").lower() == "true"
+        extraction_mode = _resolve_extraction_mode(
+            wiz.request.query("extraction_mode", "surya"),
+            use_nougat=use_nougat,
+            use_ocr=True,
+        )
+        use_ocr = extraction_mode in ("surya", "nougat_hybrid")
+        use_nougat = extraction_mode == "nougat_hybrid" or use_nougat
 
         if not model_name:
             model_name = _get_collection_model(collection_name)
@@ -1738,7 +2503,14 @@ def upload():
             tmp_path = tmp.name
 
         # 1. 스마트 텍스트 추출
-        extract_result = _extract_text_from_pdf(tmp_path)
+        extract_result = _extract_text_from_pdf(
+            tmp_path,
+            use_vision=use_vision,
+            use_ocr=use_ocr,
+            use_nougat=use_nougat,
+            gemma_rescue=gemma_rescue,
+            extraction_mode=extraction_mode,
+        )
         full_text = extract_result["full_text"]
         if not full_text.strip():
             wiz.response.status(400, message="PDF에서 텍스트를 추출할 수 없습니다.")
@@ -1756,9 +2528,18 @@ def upload():
         if not chunks:
             wiz.response.status(400, message="유효한 텍스트 청크가 없습니다.")
 
-        # 3. 임베딩
+        # 3. 임베딩 — 수식 청크에 검색 친화적 텍스트 보강
         model = _get_model(model_name)
-        texts_to_embed = [c["text"] for c in chunks]
+        texts_to_embed = []
+        for c in chunks:
+            t = c["text"]
+            ct = c.get("chunk_type", "text")
+            if ct in ("formula", "mixed"):
+                # 수식 마커에서 LaTeX와 context를 추출하여 검색용 텍스트 보강
+                enhanced = _enhance_equation_text_for_embedding(t)
+                texts_to_embed.append(enhanced)
+            else:
+                texts_to_embed.append(t)
         embeddings = model.encode(texts_to_embed, show_progress_bar=False, normalize_embeddings=True)
 
         # 4. Milvus 저장
@@ -1773,25 +2554,48 @@ def upload():
         import shutil
         shutil.copy2(tmp_path, pdf_dest)
 
+        # 4-2. 페이지 PNG 사전 렌더링 (모달 뷰어 / 썸네일용)
+        try:
+            render_info = _render_pdf_pages(pdf_dest, collection_name, doc_id)
+        except Exception:
+            traceback.print_exc()
+            render_info = {"page_count": 0, "skipped": False}
+
         # 스키마 필드 존재 여부 확인 (하위 호환)
         has_extended_fields = True
+        has_bbox_field = False
         try:
             col_info = client.describe_collection(collection_name)
             field_names = [f.get("name", "") for f in col_info.get("fields", [])]
             if "content_elements" not in field_names:
                 has_extended_fields = False
+            has_bbox_field = "bbox" in field_names
         except Exception:
             has_extended_fields = False
 
         data = []
+        # 페이지별 provenance 맵 구축
+        page_source_map = {}
+        for pg in extract_result["pages"]:
+            pn = pg.get("page_num", 0)
+            page_source_map[pn] = {
+                "text_source": pg.get("preferred_text_source", pg.get("text_source", "native")),
+                "has_rescue": any(
+                    b.get("rescue_source") for b in pg.get("blocks", []) if b.get("type") == "formula"
+                ),
+            }
+
         for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
+            page_num = chunk.get("page_num", 0)
+            prov = page_source_map.get(page_num, {})
+
             record = {
                 "id": f"{doc_id}_{i:04d}",
                 "doc_id": doc_id,
                 "filename": filename,
                 "chunk_index": i,
                 "chunk_type": chunk.get("chunk_type", "text"),
-                "page_num": chunk.get("page_num", 0),
+                "page_num": page_num,
                 "section_title": chunk.get("section_title", "")[:500],
                 "text": chunk["text"][:8000],
                 "embedding": emb.tolist()
@@ -1799,7 +2603,26 @@ def upload():
             if has_extended_fields:
                 elements = _detect_content_elements(chunk["text"])
                 record["content_elements"] = json.dumps(elements, ensure_ascii=False)[:1000]
-                record["structured_content"] = _extract_structured_content(chunk["text"])[:8000]
+                base_sc = _extract_structured_content(chunk["text"])
+                # provenance를 structured_content 끝에 JSON 블록으로 추가
+                provenance = {
+                    "source_text": prov.get("text_source", "native"),
+                    "source_layout": "pymupdf",
+                    "extraction_mode": extraction_mode,
+                }
+                if prov.get("has_rescue"):
+                    provenance["rescue_applied"] = True
+                prov_json = json.dumps({"_provenance": provenance}, ensure_ascii=False)
+                record["structured_content"] = (base_sc + "\n" + prov_json)[:8000]
+            if has_bbox_field:
+                bbox = chunk.get("bbox")
+                if bbox:
+                    try:
+                        record["bbox"] = json.dumps([round(float(v), 2) for v in bbox])[:128]
+                    except Exception:
+                        record["bbox"] = ""
+                else:
+                    record["bbox"] = ""
 
             data.append(record)
 
@@ -1825,12 +2648,25 @@ def upload():
         wiz.response.status(200,
             filename=filename, doc_id=doc_id,
             total_pages=page_count,
+            extraction_mode=extraction_mode,
+            use_nougat=use_nougat,
+            gemma_rescue_requested=gemma_rescue,
             chunks_count=len(chunks),
             vectors_stored=len(data),
             figures_detected=ext_stats["figures"],
             formulas_detected=ext_stats["formulas"],
             tables_detected=ext_stats["tables"],
             ocr_extractions=ext_stats["ocr_extractions"],
+            ocr_pages_used=ext_stats.get("ocr_pages_used", 0),
+            surya_available=ext_stats.get("surya_available", False),
+            nougat_available=ext_stats.get("nougat_available", False),
+            nougat_pages_used=ext_stats.get("nougat_pages_used", 0),
+            native_pages_used=ext_stats.get("native_pages_used", 0),
+            failed_pages=ext_stats.get("failed_pages", []),
+            gemma_rescues=ext_stats.get("gemma_rescues", 0),
+            rescue_skipped=ext_stats.get("rescue_skipped", 0),
+            rescue_failed=ext_stats.get("rescue_failed", 0),
+            pages_rendered=render_info.get("page_count", 0),
             model_used=MODEL_REGISTRY.get(model_name, {}).get("short_name", model_name),
             collection=collection_name,
             strategy_used=strategy,
@@ -1967,3 +2803,355 @@ def chunk_type_stats():
     except Exception as e:
         traceback.print_exc()
         wiz.response.status(500, message=str(e))
+
+
+def documents():
+    """컬렉션 내 문서 목록 조회 (doc_id 기준 그룹핑)"""
+    BATCH_SIZE = 16000
+    try:
+        collection_name = wiz.request.query("collection", "").strip()
+        if not collection_name:
+            wiz.response.status(400, message="컬렉션 이름이 필요합니다.")
+
+        client = _get_client()
+        if not client.has_collection(collection_name):
+            wiz.response.status(200, documents=[], collection=collection_name)
+
+        schema_fields = _get_collection_fields(client, collection_name)
+        output_fields = ["doc_id", "filename", "chunk_index", "page_num"]
+        has_chunk_type = "chunk_type" in schema_fields
+        if has_chunk_type:
+            output_fields.append("chunk_type")
+
+        doc_map = {}
+        offset = 0
+
+        while True:
+            results = client.query(
+                collection_name=collection_name,
+                filter="chunk_index >= 0",
+                output_fields=output_fields,
+                limit=BATCH_SIZE,
+                offset=offset
+            )
+
+            for r in results:
+                did = r.get("doc_id", "unknown")
+                if did not in doc_map:
+                    doc_map[did] = {
+                        "doc_id": did,
+                        "filename": r.get("filename", ""),
+                        "chunk_count": 0,
+                        "pages": set(),
+                        "type_counts": {}
+                    }
+                doc = doc_map[did]
+                doc["chunk_count"] += 1
+                pn = r.get("page_num", 0)
+                if pn > 0:
+                    doc["pages"].add(pn)
+                ct = r.get("chunk_type", "text") or "text"
+                doc["type_counts"][ct] = doc["type_counts"].get(ct, 0) + 1
+
+            if len(results) < BATCH_SIZE:
+                break
+            offset += len(results)
+
+        doc_list = []
+        for did, doc in doc_map.items():
+            pdf_path = os.path.join(DATA_DIR, "pdfs", collection_name, f"{did}.pdf")
+            doc_list.append({
+                "doc_id": did,
+                "filename": doc["filename"],
+                "chunk_count": doc["chunk_count"],
+                "page_count": len(doc["pages"]),
+                "type_counts": doc["type_counts"],
+                "has_pdf": os.path.isfile(pdf_path)
+            })
+        doc_list.sort(key=lambda x: x["filename"])
+
+        wiz.response.status(200, documents=doc_list, collection=collection_name)
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))
+
+
+def document_chunks():
+    """특정 문서의 청크 목록 (페이징, 필터)"""
+    try:
+        collection_name = wiz.request.query("collection", "").strip()
+        doc_id = wiz.request.query("doc_id", "").strip()
+        page = int(wiz.request.query("page", 1))
+        dump = int(wiz.request.query("dump", 20))
+        chunk_type_filter = wiz.request.query("chunk_type", "").strip()
+
+        if not collection_name or not doc_id:
+            wiz.response.status(400, message="collection과 doc_id가 필요합니다.")
+
+        client = _get_client()
+        if not client.has_collection(collection_name):
+            wiz.response.status(404, message="컬렉션을 찾을 수 없습니다.")
+
+        schema_fields = _get_collection_fields(client, collection_name)
+        output_fields = ["id", "doc_id", "filename", "chunk_index", "page_num",
+                         "section_title", "text"]
+        if "chunk_type" in schema_fields:
+            output_fields.append("chunk_type")
+        if "content_elements" in schema_fields:
+            output_fields.append("content_elements")
+        if "structured_content" in schema_fields:
+            output_fields.append("structured_content")
+
+        filter_expr = f'doc_id == "{doc_id}"'
+        if chunk_type_filter:
+            filter_expr += f' and chunk_type == "{chunk_type_filter}"'
+
+        # 전체 카운트 (필터 적용)
+        count_results = client.query(
+            collection_name=collection_name,
+            filter=filter_expr,
+            output_fields=["chunk_index"],
+            limit=16000
+        )
+        total = len(count_results)
+
+        # 페이징으로 가져오기 (chunk_index 정렬은 클라이언트 사이드)
+        all_results = client.query(
+            collection_name=collection_name,
+            filter=filter_expr,
+            output_fields=output_fields,
+            limit=16000
+        )
+        all_results.sort(key=lambda x: x.get("chunk_index", 0))
+
+        start = (page - 1) * dump
+        end = start + dump
+        page_results = all_results[start:end]
+
+        chunks = []
+        for r in page_results:
+            chunk = {
+                "id": r.get("id", ""),
+                "chunk_index": r.get("chunk_index", 0),
+                "chunk_type": r.get("chunk_type", "text") or "text",
+                "page_num": r.get("page_num", 0),
+                "section_title": r.get("section_title", ""),
+                "text": r.get("text", ""),
+                "text_length": len(r.get("text", "")),
+                "content_elements": r.get("content_elements", ""),
+                "structured_content": r.get("structured_content", "")
+            }
+            chunks.append(chunk)
+
+        wiz.response.status(200,
+            chunks=chunks,
+            total=total,
+            page=page,
+            dump=dump,
+            total_pages=(total + dump - 1) // dump if dump > 0 else 1,
+            collection=collection_name,
+            doc_id=doc_id
+        )
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))
+
+
+def delete_document():
+    """특정 문서의 모든 청크 삭제 + PDF 원본 삭제"""
+    try:
+        collection_name = wiz.request.query("collection", "").strip()
+        doc_id = wiz.request.query("doc_id", "").strip()
+
+        if not collection_name or not doc_id:
+            wiz.response.status(400, message="collection과 doc_id가 필요합니다.")
+
+        client = _get_client()
+        if not client.has_collection(collection_name):
+            wiz.response.status(404, message="컬렉션을 찾을 수 없습니다.")
+
+        # 해당 doc_id의 청크 ID 조회
+        results = client.query(
+            collection_name=collection_name,
+            filter=f'doc_id == "{doc_id}"',
+            output_fields=["id"],
+            limit=16000
+        )
+        chunk_ids = [r["id"] for r in results]
+        deleted_count = len(chunk_ids)
+
+        if chunk_ids:
+            client.delete(
+                collection_name=collection_name,
+                filter=f'doc_id == "{doc_id}"'
+            )
+
+        # PDF 원본 삭제
+        pdf_path = os.path.join(DATA_DIR, "pdfs", collection_name, f"{doc_id}.pdf")
+        pdf_deleted = False
+        if os.path.isfile(pdf_path):
+            os.remove(pdf_path)
+            pdf_deleted = True
+
+        # 페이지 PNG 디렉토리 삭제
+        pages_doc_dir = _page_dir(collection_name, doc_id)
+        if os.path.isdir(pages_doc_dir):
+            shutil.rmtree(pages_doc_dir, ignore_errors=True)
+
+        # 메타데이터 갱신
+        meta = _load_collection_meta()
+        col_meta = meta.get(collection_name, {})
+        if "total_chunks" in col_meta:
+            col_meta["total_chunks"] = max(0, col_meta.get("total_chunks", 0) - deleted_count)
+        if "total_docs" in col_meta:
+            col_meta["total_docs"] = _count_collection_pdfs(collection_name)
+        meta[collection_name] = col_meta
+        _save_collection_meta(meta)
+
+        wiz.response.status(200,
+            doc_id=doc_id,
+            deleted_chunks=deleted_count,
+            pdf_deleted=pdf_deleted,
+            collection=collection_name,
+            message=f"문서 '{doc_id}' 삭제 완료 ({deleted_count}개 청크)"
+        )
+
+    except season.lib.exception.ResponseException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        wiz.response.status(500, message=str(e))
+
+
+# ==============================================================================
+# 페이지 이미지 서빙 (모달 뷰어 / 썸네일)
+# ==============================================================================
+def _safe_collection_doc(collection, doc_id):
+    if not collection or not doc_id:
+        wiz.response.status(400, message="collection, doc_id가 필요합니다.")
+    if "/" in collection or ".." in collection:
+        wiz.response.status(400, message="잘못된 collection")
+    if "/" in doc_id or ".." in doc_id:
+        wiz.response.status(400, message="잘못된 doc_id")
+
+
+def _ensure_page_rendered(collection, doc_id, page_no):
+    """요청된 페이지가 PNG로 없으면 PDF에서 lazy 렌더링 (마이그레이션 케이스)."""
+    out_dir = _page_dir(collection, doc_id)
+    page_path = os.path.join(out_dir, f"page_{page_no:04d}.png")
+    if os.path.isfile(page_path):
+        return page_path
+    pdf_path = os.path.join(DATA_DIR, "pdfs", collection, f"{doc_id}.pdf")
+    if not os.path.isfile(pdf_path):
+        return None
+    try:
+        _render_pdf_pages(pdf_path, collection, doc_id)
+    except Exception:
+        traceback.print_exc()
+        return None
+    return page_path if os.path.isfile(page_path) else None
+
+
+def page_image():
+    """페이지 PNG 본문 이미지 반환. ?collection=...&doc_id=...&page=N"""
+    collection = wiz.request.query("collection", "").strip()
+    doc_id = wiz.request.query("doc_id", "").strip()
+    try:
+        page_no = int(wiz.request.query("page", "1"))
+    except Exception:
+        page_no = 1
+    _safe_collection_doc(collection, doc_id)
+    if page_no < 1:
+        wiz.response.status(400, message="잘못된 page")
+
+    img_path = _ensure_page_rendered(collection, doc_id, page_no)
+    if img_path is None:
+        wiz.response.status(404, message="페이지 이미지를 찾을 수 없습니다.")
+
+    flask = wiz.response._flask
+    with open(img_path, "rb") as f:
+        body = f.read()
+    resp = flask.Response(body, mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    wiz.response.response(resp)
+
+
+def thumb():
+    """썸네일 PNG 반환. ?collection=...&doc_id=...&page=N"""
+    collection = wiz.request.query("collection", "").strip()
+    doc_id = wiz.request.query("doc_id", "").strip()
+    try:
+        page_no = int(wiz.request.query("page", "1"))
+    except Exception:
+        page_no = 1
+    _safe_collection_doc(collection, doc_id)
+    if page_no < 1:
+        wiz.response.status(400, message="잘못된 page")
+
+    out_dir = _page_dir(collection, doc_id)
+    thumb_path = os.path.join(out_dir, f"thumb_{page_no:04d}.png")
+    if not os.path.isfile(thumb_path):
+        # 본문 PNG 렌더링 시 썸네일도 같이 생성됨 → trigger
+        _ensure_page_rendered(collection, doc_id, page_no)
+    if not os.path.isfile(thumb_path):
+        # 페이지 PNG가 있으면 그걸 그대로 반환 (fallback)
+        page_path = os.path.join(out_dir, f"page_{page_no:04d}.png")
+        if os.path.isfile(page_path):
+            thumb_path = page_path
+        else:
+            wiz.response.status(404, message="썸네일을 찾을 수 없습니다.")
+
+    flask = wiz.response._flask
+    with open(thumb_path, "rb") as f:
+        body = f.read()
+    resp = flask.Response(body, mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    wiz.response.response(resp)
+
+
+def page_meta():
+    """페이지 메타(크기, DPI) 반환 — bbox 좌표 변환에 사용. ?collection=...&doc_id=..."""
+    collection = wiz.request.query("collection", "").strip()
+    doc_id = wiz.request.query("doc_id", "").strip()
+    _safe_collection_doc(collection, doc_id)
+
+    meta_path = os.path.join(_page_dir(collection, doc_id), "_pages.json")
+    if not os.path.isfile(meta_path):
+        # PDF가 있으면 즉석 렌더링
+        pdf_path = os.path.join(DATA_DIR, "pdfs", collection, f"{doc_id}.pdf")
+        if os.path.isfile(pdf_path):
+            try:
+                _render_pdf_pages(pdf_path, collection, doc_id)
+            except Exception:
+                traceback.print_exc()
+    if not os.path.isfile(meta_path):
+        wiz.response.status(404, message="페이지 메타를 찾을 수 없습니다.")
+    with open(meta_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    wiz.response.status(200, **data)
+
+
+def render_pages():
+    """기존 문서를 다시 렌더링 (마이그레이션용). ?collection=...&doc_id=..."""
+    collection = wiz.request.query("collection", "").strip()
+    doc_id = wiz.request.query("doc_id", "").strip()
+    _safe_collection_doc(collection, doc_id)
+
+    pdf_path = os.path.join(DATA_DIR, "pdfs", collection, f"{doc_id}.pdf")
+    if not os.path.isfile(pdf_path):
+        wiz.response.status(404, message="PDF 원본을 찾을 수 없습니다.")
+
+    # 기존 디렉토리 비우고 재렌더링
+    out_dir = _page_dir(collection, doc_id)
+    if os.path.isdir(out_dir):
+        shutil.rmtree(out_dir, ignore_errors=True)
+    info = _render_pdf_pages(pdf_path, collection, doc_id)
+    wiz.response.status(200,
+        collection=collection, doc_id=doc_id,
+        pages_rendered=info.get("page_count", 0))
